@@ -1,9 +1,9 @@
 import customtkinter as ctk
 from core.domains.robot.communication.client_manager import robot_manager
 from .editors.motion_editors import JogController, MoveEditor, MoveByEditor, MoveCEditor, MoveHomeEditor, ForceEditor
-from .editors.logic_editors import MathEditor, CallEditor, IfEditor, WaitEditor, WaitDIEditor, WaitAIEditor, CommentEditor, StopEditor, SwitchEditor, FolderEditor
+from .editors.logic_editors import LoopEditor, MathEditor, CallEditor, IfEditor, WaitEditor, WaitDIEditor, WaitAIEditor, CommentEditor, StopEditor, SwitchEditor, FolderEditor
 from .editors.process_editors import PickPlaceEditor, VisionEditor, SyncEditor, SetAOEditor
-
+from presentation.ui.theme import Theme
 import tkinter as tk
 
 import tkinter.ttk as ttk
@@ -119,13 +119,54 @@ class ProgramTreeEditor:
                     elif "Comment" in node_name: n.type = 99
                     elif "Stop" in node_name: n.type = 10
                     
+                    # Conty 호환 __raw__ 기본 템플릿 생성
+                    _ref = {"type": 1, "tref": [0,0,0,0,0,0]}
+                    _tcp = [0,0,0,0,0,0]
+                    raw_templates = {
+                        100: {"enable": True, "type": 100, "pId": p_id},  # Move (generic)
+                        103: {"wpList": [], "enable": True, "type": 103, "pId": p_id},  # Move J
+                        104: {"wpList": [], "enable": True, "type": 104, "pId": p_id},  # Move L
+                        105: {"wpList": [], "enable": True, "type": 105, "pId": p_id},  # Move C
+                        106: {"wpList": [], "enable": True, "type": 106, "pId": p_id},  # Move B
+                        110: {"enable": True, "type": 110, "pId": p_id, "offset": {"dx": 0, "dy": 0, "dz": 0}},
+                        102: {"enable": True, "type": 102, "pId": p_id},  # Move Home
+                        20:  {"count": -1, "enable": True, "type": 20, "pId": p_id},  # Loop
+                        28:  {"endtoolDiList": [], "type": 28, "time": 1, "enable": True, "diList": [], "pId": p_id},
+                        29:  {"endtoolDiList": [], "type": 29, "enable": True, "diList": [], "pId": p_id},
+                        30:  {"enable": True, "type": 30, "pId": p_id},
+                        22:  {"time": 0, "enable": True, "type": 22, "pId": p_id},
+                        25:  {"doList": [], "enable": True, "type": 4, "pId": p_id},  # Set DO → Conty type=4
+                        26:  {"enable": True, "type": 5, "aoList": [], "pId": p_id},  # Set AO → Conty type=5
+                        21:  {"enable": True, "type": 21, "pId": p_id},
+                        31:  {"varList": [], "enable": True, "type": 3, "pId": p_id},  # Switch → Conty type=3
+                        40:  {"enable": True, "type": 40, "toolCmd": {"cmdId": -1, "toolId": -1}, "pId": p_id},
+                        41:  {"type": 41, "toolCmd": {"cmdId": -1, "toolId": -1}, "enable": True, "sensName": "", "pId": p_id},
+                        201: {"enable": True, "type": 201, "pId": p_id, "toolId": 1, "sensName": "",
+                              "approach": {"direction": 0, "boundary": {"velLevel": 5, "accLevel": 5}, "distance": 0.1, "waitTime": 0, "waitFor": {"type": 0, "time": 0}},
+                              "retract": {"direction": 1, "boundary": {"velLevel": 5, "accLevel": 5}, "distance": 0.1, "waitTime": 0, "waitFor": {"type": 0, "time": 0}},
+                              "target": {"type": 0, "boundary": {"velLevel": 5, "accLevel": 5}, "pallet": {},
+                                         "point": {"q": [], "p": []}, "refFrame": _ref, "tcp": _tcp}},
+                        202: {"enable": True, "type": 202, "pId": p_id, "toolId": 1, "sensName": "",
+                              "approach": {"direction": 0, "boundary": {"velLevel": 5, "accLevel": 5}, "distance": 0.1, "waitTime": 0, "waitFor": {"type": 0, "time": 0}},
+                              "retract": {"direction": 1, "boundary": {"velLevel": 5, "accLevel": 5}, "distance": 0.1, "waitTime": 0, "waitFor": {"type": 0, "time": 0}},
+                              "target": {"type": 0, "boundary": {"velLevel": 5, "accLevel": 5}, "pallet": {},
+                                         "point": {"q": [], "p": []}, "refFrame": _ref, "tcp": _tcp}},
+                        203: {"enable": True, "type": 203, "pId": p_id},
+                        10:  {"enable": True, "type": 1, "pId": p_id},  # Stop → Conty type=1
+                        98:  {"groupName": "", "enable": True, "type": 200, "pId": p_id},  # Folder → Conty type=200
+                        99:  {"enable": True, "type": 99, "pId": p_id},
+                        60:  {"enable": True, "type": 60, "pId": p_id},
+                    }
+                    
                     if child in self.node_data:
                         d = self.node_data[child]
-                        if not hasattr(n, "__raw__"): n.__raw__ = {}
+                        # 기본 템플릿에서 시작하고, 기존 __raw__와 node_data를 덮어씌움
+                        base_raw = raw_templates.get(n.type, {"enable": True, "type": n.type, "pId": p_id})
+                        n.__raw__ = base_raw.copy()
                         n.__raw__.update(d)
                         if d.get("q") is not None:
                             from core.domains.teaching_management.entities import WaypointVO
-                            wp = WaypointVO(q=d["q"], p=d.get("p", [0]*6))
+                            wp = WaypointVO(j_pos=d["q"], t_pos=d.get("p", [0]*6))
                             n.waypoints = {0: wp}
                         if n.type in [201, 202]: # Pick / Place
                             try:
@@ -358,7 +399,7 @@ class ProgramTreeEditor:
             info_str = f"파일: {os.path.basename(path)} | 크기: {size_kb:.1f} KB | 수정됨: {mod_time}"
             self.info_label.configure(text=info_str, text_color="#00FF41")
         else:
-            self.info_label.configure(text=f"저장된 프로그램이 없습니다. (경로: {path})", text_color="#8B8B96")
+            self.info_label.configure(text=f"저장된 프로그램이 없습니다. (경로: {path})", text_color=Theme.TEXT_SECONDARY)
             
     def play_simulation(self):
         # 가상 시뮬레이션 창 띄우기 (요구사항 4)
@@ -367,7 +408,7 @@ class ProgramTreeEditor:
         sim_win.geometry("700x800")
         sim_win.attributes('-topmost', True)
         
-        ctk.CTkLabel(sim_win, text="🖥️ VIRTUAL EXECUTION MODE", font=ctk.CTkFont(size=18, weight="bold"), text_color="#F57C00").pack(pady=10)
+        ctk.CTkLabel(sim_win, text="🖥️ VIRTUAL EXECUTION MODE", font=Theme.font(size=18, weight="bold"), text_color="#F57C00").pack(pady=10)
         
         # 3D 뷰어 컨테이너 (상단)
         viewer_container = ctk.CTkFrame(sim_win, height=350, fg_color="black")
@@ -379,13 +420,13 @@ class ProgramTreeEditor:
         import numpy as np
         import random
         
-        fig = plt.Figure(figsize=(6, 4), facecolor="#121215")
+        fig = plt.Figure(figsize=(6, 4), facecolor=Theme.BG_BASE)
         fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
         ax = fig.add_subplot(111, projection='3d')
-        ax.set_facecolor("#121215")
+        ax.set_facecolor(Theme.BG_BASE)
         for pane in (ax.xaxis, ax.yaxis, ax.zaxis): pane.set_pane_color((0.09, 0.09, 0.11, 1.0))
         ax.grid(color='#2A2A35', linestyle=':', linewidth=0.5)
-        ax.tick_params(colors="#8B8B96", labelsize=8)
+        ax.tick_params(colors=Theme.TEXT_SECONDARY, labelsize=8)
         ax.set_xlim([-0.8, 0.8]); ax.set_ylim([-0.8, 0.8]); ax.set_zlim([0, 1.2])
         ax.view_init(elev=20, azim=45)
         
@@ -446,7 +487,7 @@ class ProgramTreeEditor:
         _draw_robot(current_j)
 
         # 텍스트 로그 (하단)
-        log_box = ctk.CTkTextbox(sim_win, fg_color="#121215", text_color="#00E5FF", font=ctk.CTkFont(family="Consolas"))
+        log_box = ctk.CTkTextbox(sim_win, fg_color=Theme.BG_BASE, text_color="#00E5FF", font=ctk.CTkFont(family="Consolas"))
         log_box.pack(fill="both", expand=True, padx=10, pady=10)
         
         nodes = []
@@ -492,7 +533,7 @@ class ProgramTreeEditor:
                         
                         tool_color = "#00FF41"
                         if "Pick" in n: tool_color = "#FF1744"
-                        elif "Place" in n: tool_color = "#00BCD4"
+                        elif "Place" in n: tool_color = Theme.INFO
                         
                         _draw_robot(interp_j, tool_color=tool_color)
                         time.sleep(0.05)
@@ -501,7 +542,7 @@ class ProgramTreeEditor:
                     _draw_robot(current_j, tool_color="#FF1744") # 빨간색
                     time.sleep(0.5)
                 elif "Place" in n:
-                    _draw_robot(current_j, tool_color="#00BCD4") # 파란색
+                    _draw_robot(current_j, tool_color=Theme.INFO) # 파란색
                     time.sleep(0.5)
                 else:
                     _draw_robot(current_j, tool_color="#00FF41") # 기본색
@@ -517,66 +558,139 @@ class ProgramTreeEditor:
     def render(self):
         for w in self.parent.winfo_children(): w.destroy()
         
-        self.parent.grid_columnconfigure(0, weight=0, minsize=200) # Palette
-        self.parent.grid_columnconfigure(1, weight=1) # Tree
-        self.parent.grid_columnconfigure(2, weight=1) # Jog + PickPlace
+        self.parent.grid_columnconfigure(0, weight=0, minsize=140) # Palette (고정)
+        self.parent.grid_columnconfigure(1, weight=1) # Tree (가운데)
+        self.parent.grid_columnconfigure(2, weight=2, minsize=420) # Jog + 설정 (넓게)
         self.parent.grid_rowconfigure(0, weight=1)
+        Theme.apply_window_style(self.parent)
         
         # Left Palette
-        left = ctk.CTkScrollableFrame(self.parent, fg_color="#18181B", width=160, corner_radius=0)
+        left = ctk.CTkScrollableFrame(self.parent, fg_color=Theme.BG_BASE, width=160, corner_radius=0)
         left.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
-        ctk.CTkLabel(left, text="🛠 COMMANDS", font=ctk.CTkFont(weight="bold"), text_color="#00E5FF").pack(pady=10)
+        ctk.CTkLabel(left, text="🛠 COMMANDS", font=Theme.font(size=14, weight="bold", role="display"), text_color=Theme.TEXT_PRIMARY).pack(pady=10)
         
-        cmds = [("Folder", "#FF9800"), ("Move Home", "#1976D2"), ("Move J", "#1976D2"), ("Move L", "#2E7D32"), ("Move B", "#F57C00"), 
-                ("Move By", "#8E24AA"), ("Move C", "#009688"), ("Force", "#795548"),
-                ("Set DO", "#9C27B0"), ("Set AO", "#CDDC39"), ("Wait", "#607D8B"), ("Wait DI", "#607D8B"), ("Wait AI", "#607D8B"),
-                ("Loop", "#D32F2F"), ("Switch", "#E91E63"), ("If (DI)", "#E91E63"), ("Math", "#FF5722"), 
-                ("Vision", "#00BCD4"), ("Sync", "#FFEB3B"), ("Pick", "#00BCD4"), ("Place", "#009688"), 
-                ("Call", "#455A64"), ("Comment", "#9E9E9E"), ("Stop", "#F44336")]
-                
-        for cmd, col in cmds:
-            btn = ctk.CTkButton(left, text=f"+ {cmd}", fg_color=col, command=lambda c=cmd: self.add_node(c))
-            btn.pack(fill="x", padx=10, pady=2)
+        # ─── APK 기능 (Conty 호환) ───
+        ctk.CTkLabel(left, text="📱 APK 기능", font=Theme.font(size=11, weight="bold"), 
+                     text_color=Theme.SUCCESS).pack(anchor="w", padx=10, pady=(5, 2))
+        apk_cmds = [
+            ("Folder", Theme.WARNING), ("Move Home", Theme.INFO), ("Joint Move", Theme.INFO), 
+            ("Frame Move", Theme.SUCCESS), ("Move B", "#F57C00"), ("Move C", "#009688"),
+            ("Pick", Theme.INFO), ("Place", "#009688"), ("DO", "#9C27B0"), 
+            ("Wait", "#607D8B"), ("Wait DI", "#607D8B"), ("Loop", Theme.DANGER), 
+            ("If (DI)", "#E91E63"), ("Math", "#FF5722"), ("Comment", "#9E9E9E"), 
+            ("Stop", Theme.DANGER), ("Call", Theme.BG_SURFACE),
+        ]
+        for cmd, col in apk_cmds:
+            btn = ctk.CTkButton(left, text=f"+ {cmd}", fg_color=col, height=26,
+                                font=Theme.font(size=11),
+                                command=lambda c=cmd: self.add_node(c))
+            btn.pack(fill="x", padx=10, pady=1)
+        
+        # ─── PC 제어 기능 (HMI 전용) ───
+        ctk.CTkLabel(left, text="💻 PC 제어", font=Theme.font(size=11, weight="bold"), 
+                     text_color=Theme.INFO).pack(anchor="w", padx=10, pady=(8, 2))
+        pc_cmds = [
+            ("Move By", "#8E24AA"), ("AO", "#CDDC39"), ("Wait AI", "#607D8B"),
+            ("Switch", "#E91E63"), ("Force", "#795548"),
+        ]
+        for cmd, col in pc_cmds:
+            btn = ctk.CTkButton(left, text=f"+ {cmd}", fg_color=col, height=26,
+                                font=Theme.font(size=11),
+                                command=lambda c=cmd: self.add_node(c))
+            btn.pack(fill="x", padx=10, pady=1)
+        
+        # ─── 추가 기능 (APK에 없음 ⚡) ───
+        ctk.CTkLabel(left, text="⚡ 추가 기능", font=Theme.font(size=11, weight="bold"), 
+                     text_color=Theme.WARNING).pack(anchor="w", padx=10, pady=(8, 2))
+        extra_cmds = [
+            ("Vision", Theme.INFO), ("Sync", "#FFEB3B"),
+            ("Stack Search", "#E040FB"), ("Spiral Search", "#7C4DFF"),
+        ]
+        for cmd, col in extra_cmds:
+            btn = ctk.CTkButton(left, text=f"+ {cmd} ⚡", fg_color=col, height=26,
+                                font=Theme.font(size=11),
+                                command=lambda c=cmd: self.add_node(c))
+            btn.pack(fill="x", padx=10, pady=1)
+        
+        # ─── 도구 (Tools) ───
+        ctk.CTkLabel(left, text="🔧 도구", font=Theme.font(size=11, weight="bold"), 
+                     text_color=Theme.TEXT_SECONDARY).pack(anchor="w", padx=10, pady=(8, 2))
+        
+        ctk.CTkButton(left, text="📈 오실로스코프", height=26, font=Theme.font(size=11),
+                       command=self._open_oscilloscope, **Theme.get_button_style("secondary")).pack(fill="x", padx=10, pady=1)
+        ctk.CTkButton(left, text="🧱 팔레타이징 마법사", height=26, font=Theme.font(size=11),
+                       command=self._open_palletizing_wizard, **Theme.get_button_style("secondary")).pack(fill="x", padx=10, pady=1)
+        ctk.CTkButton(left, text="⚖️ 페이로드 자동측정", height=26, font=Theme.font(size=11),
+                       command=self._open_auto_payload, **Theme.get_button_style("secondary")).pack(fill="x", padx=10, pady=1)
             
         # Center Tree
-        center = ctk.CTkFrame(self.parent, fg_color="#121215")
+        center = ctk.CTkFrame(self.parent, fg_color=Theme.BG_SURFACE)
         center.grid(row=0, column=1, sticky="nsew", padx=2, pady=2)
         
         h = ctk.CTkFrame(center, fg_color="transparent")
         h.pack(fill="x", padx=10, pady=5)
         
-        self.robot_sel = ctk.CTkOptionMenu(h, values=["Robot A", "Robot B", "Robot C"], width=100, command=self._on_robot_changed)
+        self.robot_sel = ctk.CTkOptionMenu(h, values=["Robot A", "Robot B", "Robot C"], width=100, command=self._on_robot_changed,
+                                            fg_color=Theme.BG_BASE, button_color=Theme.ACCENT_PRIMARY)
         self.robot_sel.pack(side="left", padx=5)
         
-        ctk.CTkButton(h, text="🔄", width=30, fg_color="#607D8B", command=self.refresh_info).pack(side="left", padx=(0,5))
+        ctk.CTkButton(h, text="🔄", width=30, command=self.refresh_info, **Theme.get_button_style("secondary")).pack(side="left", padx=(0,5))
         
-        ctk.CTkButton(h, text="불러오기", width=60, fg_color="#F57C00", command=self.load_program).pack(side="left", padx=5)
-        ctk.CTkButton(h, text="저장", width=60, fg_color="#1976D2", command=self.save_program).pack(side="left", padx=5)
-        ctk.CTkButton(h, text="▶ Play (가상)", width=80, fg_color="#2E7D32", command=self.play_simulation).pack(side="right", padx=5)
+        ctk.CTkButton(h, text="불러오기", width=60, font=Theme.font(size=12), command=self.load_program, **Theme.get_button_style("secondary")).pack(side="left", padx=5)
+        ctk.CTkButton(h, text="저장", width=60, font=Theme.font(size=12), command=self.save_program, **Theme.get_button_style("primary")).pack(side="left", padx=5)
+        ctk.CTkButton(h, text="삭제", width=50, font=Theme.font(size=12), command=self.delete_node, **Theme.get_button_style("danger")).pack(side="left", padx=2)
+        ctk.CTkButton(h, text="▲", width=30, command=self._move_node_up, **Theme.get_button_style("secondary")).pack(side="left", padx=1)
+        ctk.CTkButton(h, text="▼", width=30, command=self._move_node_down, **Theme.get_button_style("secondary")).pack(side="left", padx=1)
+        ctk.CTkButton(h, text="복사", width=40, font=Theme.font(size=12), command=self._copy_node, **Theme.get_button_style("secondary")).pack(side="left", padx=2)
+        ctk.CTkButton(h, text="▶ Play (가상)", width=80, font=Theme.font(size=12), command=self.play_simulation, **Theme.get_button_style("success")).pack(side="right", padx=5)
         
-        self.info_label = ctk.CTkLabel(center, text="준비됨", text_color="#8B8B96", font=ctk.CTkFont(size=11))
+        self._exec_stop = False
+        self.stop_btn = ctk.CTkButton(h, text="⏹ 정지", width=60, font=Theme.font(size=12), command=self._stop_execution, **Theme.get_button_style("danger"))
+        self.stop_btn.pack(side="right", padx=2)
+        self.exec_btn = ctk.CTkButton(h, text="▶ 실행", width=60, font=Theme.font(size=12), command=self._run_program, **Theme.get_button_style("success"))
+        self.exec_btn.pack(side="right", padx=2)
+        
+        ctk.CTkButton(h, text="⚙️ 설정", width=60, font=Theme.font(size=12), command=self._open_config_dialog, **Theme.get_button_style("secondary")).pack(side="right", padx=2)
+        
+        self.info_label = ctk.CTkLabel(center, text="준비됨", text_color=Theme.TEXT_SECONDARY, font=Theme.font(size=11))
         self.info_label.pack(fill="x", padx=15, pady=2)
         
         style = ttk.Style()
         style.theme_use("default")
-        style.configure("Treeview", background="#18181B", foreground="white", fieldbackground="#18181B", borderwidth=0)
+        style.configure("Treeview", background=Theme.BG_BASE, foreground=Theme.TEXT_PRIMARY, fieldbackground=Theme.BG_BASE, borderwidth=0, font=("Inter", 11))
+        style.configure("Treeview.Heading", background=Theme.BG_SURFACE, foreground=Theme.TEXT_PRIMARY, font=("Urbanist", 12, "bold"))
+        style.map("Treeview", background=[("selected", Theme.ACCENT_PRIMARY)])
         
         self.tree = ttk.Treeview(center, show="tree")
         self.tree.pack(fill="both", expand=True, padx=10, pady=5)
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
-        self.tree.insert("", "end", text=" Main Program", open=True)
+        
+        # 뷰를 열 때 기존 저장된 파일을 자동으로 불러오도록 수정
+        path = self.get_current_program_path(self.current_robot)
+        if os.path.exists(path):
+            self._load_from_path(path)
+        else:
+            self.tree.insert("", "end", text=" Main Program", open=True)
         
         self.refresh_info()
         
-        # Right (Jog & PickPlace 통합)
-        right = ctk.CTkFrame(self.parent, fg_color="transparent")
-        right.grid(row=0, column=2, sticky="nsew", padx=2, pady=2)
-        right.grid_columnconfigure(0, weight=1)
-        right.grid_rowconfigure(0, weight=1)
-        right.grid_rowconfigure(1, weight=0)
+        # Right (Jog & PickPlace 통합) - 화면 크기 문제를 해결하기 위해 전체를 ScrollableFrame으로 감쌈
+        right_container = ctk.CTkFrame(self.parent, fg_color="transparent")
+        right_container.grid(row=0, column=2, sticky="nsew", padx=2, pady=2)
+        right_container.grid_columnconfigure(0, weight=1)
+        right_container.grid_rowconfigure(0, weight=1)
         
-        self.pp_frame = ctk.CTkScrollableFrame(right, corner_radius=0)
-        self.pp_frame.grid(row=0, column=0, sticky="nsew", pady=2)
+        right_scroll = ctk.CTkScrollableFrame(right_container, corner_radius=0)
+        right_scroll.grid(row=0, column=0, sticky="nsew", pady=2)
+        
+        self.pp_frame = ctk.CTkFrame(right_scroll, fg_color="transparent")
+        self.pp_frame.pack(fill="x", pady=2)
+        
+        self.apply_btn = ctk.CTkButton(right_scroll, text="💾 우측 설정창 값들 적용하기 (Apply)", fg_color=Theme.WARNING, hover_color="#F57C00", text_color="black", font=Theme.font(weight="bold", size=15), height=45, command=self.apply_current_editor)
+        self.apply_btn.pack(fill="x", pady=5, padx=10)
+        
+        self.jog_frame = ctk.CTkFrame(right_scroll, fg_color="transparent")
+        self.jog_frame.pack(fill="x", pady=2)
         
         self.pp_editor = PickPlaceEditor(self.pp_frame)
         self.move_editor = MoveEditor(self.pp_frame)
@@ -597,14 +711,15 @@ class ProgramTreeEditor:
         self.stop_editor = StopEditor(self.pp_frame)
         self.folder_editor = FolderEditor(self.pp_frame)
         self.switch_editor = SwitchEditor(self.pp_frame)
+        self.loop_editor = LoopEditor(self.pp_frame)
         
         self.pp_editor.render()
+        self.current_editor = self.pp_editor
         
-        jg = ctk.CTkFrame(right, corner_radius=0)
-        jg.grid(row=1, column=0, sticky="nsew", pady=2)
-        self.jog_controller = JogController(jg)
+        self.jog_controller = JogController(self.jog_frame)
         self.jog_controller.render()
-        
+        if hasattr(self.jog_controller, "move_btn"):
+            self.jog_controller.move_btn.configure(command=self._on_move_btn_clicked)
         def _on_node_selected(q, p, t_type, item_text, p_name=None, p_data=None, all_pallets=None, b_radius=0.0, app_data=None, ret_data=None, d=None):
             if d is None: d = {}
             # 조그 패널에 현재 타겟 좌표 표시
@@ -618,8 +733,18 @@ class ProgramTreeEditor:
                 self.mb_editor.update_ui(item_text, 0, 0, 0)
             elif "Move C" in item_text:
                 for w in self.pp_frame.winfo_children(): w.destroy()
+                self.current_editor = self.move_c_editor
                 self.move_c_editor.render()
                 self.move_c_editor.update_ui(item_text, b_radius)
+                
+                # 기본 버튼 바인딩 (MoveEditor 상속받음)
+                self.move_c_editor.teach_btn.configure(command=self._on_teach_btn_clicked)
+                self.move_c_editor.load_btn.configure(command=self._on_load_btn_clicked)
+                self.move_c_editor.move_btn.configure(command=self._on_move_btn_clicked)
+                
+                # 경유점 버튼 바인딩
+                if hasattr(self.move_c_editor, 'via_teach_btn'):
+                    self.move_c_editor.via_teach_btn.configure(command=self._on_via_teach_btn_clicked)
             elif "Move Home" in item_text:
                 for w in self.pp_frame.winfo_children(): w.destroy()
                 self.move_home_editor.render()
@@ -653,6 +778,11 @@ class ProgramTreeEditor:
                 for w in self.pp_frame.winfo_children(): w.destroy()
                 self.folder_editor.render()
                 self.folder_editor.update_ui(item_text)
+            elif "Loop" in item_text:
+                for w in self.pp_frame.winfo_children(): w.destroy()
+                self.current_editor = self.loop_editor
+                self.loop_editor.render()
+                self.loop_editor.update_ui(item_text, d.get("count", None))
             elif "Force" in item_text:
                 for w in self.pp_frame.winfo_children(): w.destroy()
                 self.force_editor.render()
@@ -757,10 +887,17 @@ class ProgramTreeEditor:
         selected = self.tree.selection()
         if not selected: return
         item = selected[0]
+        item_text = self.tree.item(item, "text").strip()
+        
+        if "Move Home" in item_text:
+            print(">> [로봇 이동] 지정된 홈(Home) 위치로 기동합니다.")
+            RobotControlUseCase.move_to_joint([0.0, 0.0, -90.0, 0.0, -90.0, 0.0])
+            return
+            
         if item in self.node_data:
             d = self.node_data[item]
             q = d.get("q", [0.0]*6)
-            print(f">> [로봇 이동] 로봇을 '{self.tree.item(item, 'text').strip()}'의 저장된 관절 좌표 {q}로 기동합니다.")
+            print(f">> [로봇 이동] 로봇을 '{item_text}'의 저장된 관절 좌표 {q}로 기동합니다.")
             self.jog_controller.update_coordinates(q, d.get("p", [0.0]*6)) # 기동 시 조그도 동기화
             
             # 실제 로봇 기동 명령 전송 (UseCase 사용)
@@ -768,11 +905,433 @@ class ProgramTreeEditor:
         else:
             print(">> [오류] 이 노드에 저장된 좌표가 없습니다.")
         
-    def add_node(self, cmd_name):
+    def apply_current_editor(self):
         selected = self.tree.selection()
         if not selected:
-            new_item = self.tree.insert("", "end", text=f" {cmd_name} Node", open=True)
-            self._auto_teach(new_item, cmd_name)
+            print(">> [오류] 먼저 좌측 트리에서 노드를 선택하세요.")
+            return
+        item = selected[0]
+        if hasattr(self, 'current_editor') and self.current_editor and hasattr(self.current_editor, 'apply_changes'):
+            if item not in self.node_data:
+                self.node_data[item] = {}
+            try:
+                # 픽앤플레이스 등의 경우 P1,P2 값 등이 내부적으로 갱신될 수 있도록 apply 호출
+                self.current_editor.apply_changes(self.node_data[item])
+                node_name = self.tree.item(item, 'text').strip()
+                print(f">> [적용] '{node_name}' 노드의 설정값이 성공적으로 적용되었습니다.")
+                from tkinter import messagebox
+                messagebox.showinfo("설정 적용", f"'{node_name}'의 설정이 성공적으로 반영되었습니다.\n(파일에 저장하려면 '저장' 버튼을 누르세요)")
+            except Exception as e:
+                print(f">> [오류] 설정 적용 실패: {e}")
+
+    def _stop_execution(self):
+        """Stop the running program execution."""
+        self._exec_stop = True
+        try:
+            RobotControlUseCase.stop_robot()
+        except:
+            pass
+        print(">> ⏹ [정지] 프로그램 실행이 중단되었습니다.")
+
+    def _open_config_dialog(self):
+        """로봇 설정 다이얼로그 열기."""
+        from presentation.ui.robot_hmi.editors.config_dialog import RobotConfigDialog
+        RobotConfigDialog(self.parent)
+
+    def _open_oscilloscope(self):
+        """오실로스코프 (실시간 데이터 로거) 열기."""
+        from presentation.ui.robot_hmi.tools.oscilloscope import OscilloscopeDialog
+        OscilloscopeDialog(self.parent)
+
+    def _open_palletizing_wizard(self):
+        """비주얼 팔레타이징 마법사 열기."""
+        from presentation.ui.robot_hmi.tools.palletizing_wizard import PalletizingWizardDialog
+        PalletizingWizardDialog(self.parent)
+
+    def _open_auto_payload(self):
+        """페이로드 자동 추정 마법사 열기."""
+        from presentation.ui.robot_hmi.tools.auto_payload import AutoPayloadDialog
+        AutoPayloadDialog(self.parent)
+
+    def _run_program(self):
+        """Execute the entire program tree on the real robot."""
+        self._exec_stop = False
+        
+        # 트리에서 모든 노드를 재귀적으로 수집
+        def _collect_nodes(parent_item):
+            nodes = []
+            for child in self.tree.get_children(parent_item):
+                text = self.tree.item(child, "text").strip()
+                data = self.node_data.get(child, {})
+                children = _collect_nodes(child)
+                nodes.append({"id": child, "text": text, "data": data, "children": children})
+            return nodes
+        
+        all_nodes = _collect_nodes("")
+        if not all_nodes:
+            print(">> [오류] 프로그램 트리가 비어있습니다.")
+            return
+        
+        def _highlight(item_id):
+            """실행 중인 노드를 트리에서 하이라이트"""
+            try:
+                self.tree.selection_set(item_id)
+                self.tree.see(item_id)
+                self.tree.item(item_id, tags=("executing",))
+                self.tree.tag_configure("executing", background=Theme.SUCCESS, foreground=Theme.TEXT_PRIMARY)
+            except: pass
+        
+        def _unhighlight(item_id):
+            try:
+                self.tree.item(item_id, tags=())
+            except: pass
+        
+        def _execute_node_list(node_list):
+            for node in node_list:
+                if self._exec_stop:
+                    return
+                
+                text = node["text"]
+                data = node["data"]
+                item_id = node["id"]
+                q = data.get("q", [0.0]*6)
+                
+                _highlight(item_id)
+                print(f"\n>> ▶ 실행: {text}")
+                
+                if "Main Program" in text:
+                    _execute_node_list(node["children"])
+                    
+                elif "Loop" in text:
+                    count = data.get("count", None)
+                    iteration = 0
+                    while not self._exec_stop:
+                        iteration += 1
+                        if count is not None and iteration > count:
+                            break
+                        print(f">> 🔄 Loop 반복 #{iteration}" + (f"/{count}" if count else " (무한)"))
+                        _execute_node_list(node["children"])
+                        
+                elif "Move Home" in text:
+                    print(f">>   → Home 이동: [0, 0, -90, 0, -90, 0]")
+                    RobotControlUseCase.move_to_joint([0.0, 0.0, -90.0, 0.0, -90.0, 0.0])
+                    RobotControlUseCase.wait_for_move_finish(30.0)
+                    
+                elif "Move J" in text or "Move L" in text or "Move B" in text:
+                    if q and not all(v == 0.0 for v in q):
+                        print(f">>   → Joint 이동: {[f'{v:.1f}' for v in q]}")
+                        RobotControlUseCase.move_to_joint(q)
+                        RobotControlUseCase.wait_for_move_finish(30.0)
+                        
+                elif "Pick" in text or "Place" in text:
+                    is_pick = "Pick" in text
+                    p = data.get("p", [0.0]*6)
+                    app_data = data.get("approach", {})
+                    ret_data = data.get("retract", {})
+                    app_dist = app_data.get("distance", 0.0) / 1000.0
+                    ret_dist = ret_data.get("distance", 0.0) / 1000.0
+                    app_dir = app_data.get("direction", 0)
+                    ret_dir = ret_data.get("direction", 0)
+                    
+                    # direction: 0=Z, 1=-Z, 2=X, 3=-X, 4=Y, 5=-Y
+                    def _offset(base, direction, dist):
+                        pos = list(base)
+                        if direction == 0: pos[2] += dist
+                        elif direction == 1: pos[2] -= dist
+                        elif direction == 2: pos[0] += dist
+                        elif direction == 3: pos[0] -= dist
+                        elif direction == 4: pos[1] += dist
+                        elif direction == 5: pos[1] -= dist
+                        return pos
+                    
+                    # 팔레타이징 체크
+                    target_type = data.get("target_type", 0)
+                    p_data = data.get("p_data", None)
+                    
+                    if target_type == 1 and p_data and isinstance(p_data, dict):
+                        # 팔레타이징 모드
+                        from core.domains.robot.use_cases.motion_math import MotionMath
+                        size = p_data.get("size", [1,1,1])
+                        m, n, l_val = size[0], size[1], size[2] if len(size) > 2 else 1
+                        pts = p_data.get("points", [])
+                        p1 = pts[0]["p"] if len(pts) > 0 else p
+                        p2 = pts[1]["p"] if len(pts) > 1 else p1
+                        p3 = pts[2]["p"] if len(pts) > 2 else p1
+                        p4 = pts[3]["p"] if len(pts) > 3 else None
+                        
+                        total = m * n * l_val
+                        count = 0
+                        for layer in range(l_val):
+                            for row in range(m):
+                                for col in range(n):
+                                    if self._exec_stop: return
+                                    count += 1
+                                    cur_target = MotionMath.compute_pallet_point(
+                                        p1, p2, p3, m, n, row, col,
+                                        p4=p4, size_l=l_val, current_l=layer
+                                    )
+                                    cur_app = _offset(cur_target, app_dir, app_dist)
+                                    cur_ret = _offset(cur_target, ret_dir, ret_dist)
+                                    
+                                    print(f">>   📦 [{count}/{total}] {'Place' if not is_pick else 'Pick'} L{layer+1} R{row+1} C{col+1}")
+                                    
+                                    from core.domains.robot.communication.client_manager import robot_manager
+                                    inst = robot_manager.get_active_instance()
+                                    if not inst: return
+                                    
+                                    inst.task_move_to(cur_app)
+                                    RobotControlUseCase.wait_for_move_finish(30.0)
+                                    inst.task_move_to(cur_target)
+                                    RobotControlUseCase.wait_for_move_finish(30.0)
+                                    
+                                    # 툴 동작
+                                    if is_pick:
+                                        RobotControlUseCase.set_do(1, 1)
+                                    else:
+                                        RobotControlUseCase.set_do(1, 0)
+                                    time.sleep(0.3)
+                                    
+                                    inst.task_move_to(cur_ret)
+                                    RobotControlUseCase.wait_for_move_finish(30.0)
+                    else:
+                        # 단일 위치 모드
+                        from core.domains.robot.communication.client_manager import robot_manager
+                        inst = robot_manager.get_active_instance()
+                        if not inst: return
+                        
+                        target_p = p if p else [0.0]*6
+                        app_p = _offset(target_p, app_dir, app_dist)
+                        ret_p = _offset(target_p, ret_dir, ret_dist)
+                        
+                        inst.task_move_to(app_p)
+                        RobotControlUseCase.wait_for_move_finish(30.0)
+                        inst.task_move_to(target_p)
+                        RobotControlUseCase.wait_for_move_finish(30.0)
+                        
+                        if is_pick:
+                            RobotControlUseCase.set_do(1, 1)
+                        else:
+                            RobotControlUseCase.set_do(1, 0)
+                        time.sleep(0.3)
+                        
+                        inst.task_move_to(ret_p)
+                        RobotControlUseCase.wait_for_move_finish(30.0)
+                        
+                elif "Wait" in text:
+                    wait_time = data.get("time", 1.0)
+                    print(f">>   ⏳ 대기: {wait_time}초")
+                    time.sleep(wait_time)
+                    
+                elif "Set DO" in text:
+                    do_list = data.get("doList", data.get("diList", []))
+                    for do in do_list:
+                        pin = do.get("idx", do.get("pin", 0))
+                        val = do.get("value", do.get("val", 0))
+                        RobotControlUseCase.set_do(pin, val)
+                        print(f">>   DO {pin} = {val}")
+                
+                elif "Set AO" in text:
+                    ao_list = data.get("aoList", [])
+                    for ao in ao_list:
+                        port = ao.get("idx", ao.get("port", 0))
+                        voltage = ao.get("value", ao.get("voltage", 0))
+                        RobotControlUseCase.set_ao(port, voltage)
+                        print(f">>   AO {port} = {voltage}")
+                
+                elif "Move C" in text:
+                    via_p = data.get("via_p", [0.0]*6)
+                    target_p = data.get("p", [0.0]*6)
+                    if via_p and target_p:
+                        RobotControlUseCase.move_c(via_p, target_p)
+                        RobotControlUseCase.wait_for_move_finish(30.0)
+                
+                elif "Move By" in text:
+                    offset = data.get("offset", {})
+                    dx = offset.get("dx", 0.0)
+                    dy = offset.get("dy", 0.0)
+                    dz = offset.get("dz", 0.0)
+                    print(f">>   → 상대 이동: dx={dx}, dy={dy}, dz={dz}")
+                    RobotControlUseCase.move_by_task([dx, dy, dz, 0, 0, 0])
+                    RobotControlUseCase.wait_for_move_finish(30.0)
+                
+                elif "Math" in text:
+                    var_name = data.get("mathVar", "var1")
+                    op = data.get("mathOp", "=")
+                    val = data.get("mathVal", 0.0)
+                    RobotControlUseCase.math_operation(var_name, op, val)
+                
+                elif "If" in text:
+                    cond = data.get("cond", {})
+                    left = cond.get("left", {})
+                    right = cond.get("right", {})
+                    op_val = cond.get("op", 0)
+                    op_map = {0: "==", 1: "!=", 2: ">", 3: "<", 4: ">=", 5: "<="}
+                    op_str = op_map.get(op_val, "==")
+                    var_name = left.get("value", "var1") if left.get("type", -1) == 10 else "var1"
+                    compare_val = right.get("value", 0) if right.get("type", -1) != -1 else 0
+                    
+                    result = RobotControlUseCase.eval_condition(str(var_name), op_str, float(compare_val or 0))
+                    print(f">>   🔀 If {var_name} {op_str} {compare_val} → {'TRUE' if result else 'FALSE'}")
+                    if result:
+                        _execute_node_list(node["children"])
+                
+                elif "Call" in text:
+                    sub_path = data.get("sub_program", "")
+                    if sub_path:
+                        print(f">>   📞 서브프로그램 호출: {sub_path}")
+                        RobotControlUseCase.call_sub_program(sub_path)
+                        RobotControlUseCase.wait_for_move_finish(60.0)
+                
+                elif "Force" in text:
+                    print(f">>   💪 힘 제어 노드 (설정된 파라미터로 실행)")
+                    # Force control is typically configured via impedance parameters
+                
+                elif "Stack Search" in text:
+                    axis = data.get("axis", 2)
+                    direction = data.get("direction", -1)
+                    threshold = data.get("force_threshold", 10.0)
+                    step = data.get("step_mm", 1.0)
+                    print(f">>   🔍 스택 탐색: 축={['X','Y','Z'][axis]}, 방향={'↓' if direction<0 else '↑'}, 임계값={threshold}N")
+                    found_pos = RobotControlUseCase.stack_search(axis, direction, threshold, step)
+                    if found_pos:
+                        RobotControlUseCase.set_variable("stack_z", found_pos[2])
+                        print(f">>   ✅ 접촉 위치 변수 저장: stack_z={found_pos[2]:.4f}")
+                
+                elif "Spiral Search" in text:
+                    z_force = data.get("z_force", 10.0)
+                    radius = data.get("radius_mm", 5.0)
+                    print(f">>   🌀 나선형 탐색: 가압력={z_force}N, 반경={radius}mm")
+                    found_pos = RobotControlUseCase.spiral_search(z_force=z_force, radius_mm=radius)
+                    if found_pos:
+                        print(f">>   ✅ 삽입 성공 위치: {[f'{v:.4f}' for v in found_pos[:3]]}")
+                    
+                elif "Folder" in text:
+                    _execute_node_list(node["children"])
+                    
+                else:
+                    print(f">>   (스킵: {text})")
+        
+        def _clear_all_highlights():
+            """모든 노드의 하이라이트 제거"""
+            def _clear(parent):
+                for child in self.tree.get_children(parent):
+                    try: self.tree.item(child, tags=())
+                    except: pass
+                    _clear(child)
+            try: _clear("")
+            except: pass
+        
+        def _run():
+            print("\n>> ═══════════════════════════════════")
+            print(">> 🚀 프로그램 실행을 시작합니다!")
+            print(">> ═══════════════════════════════════")
+            try:
+                _execute_node_list(all_nodes)
+            except Exception as e:
+                print(f">> [실행 에러] {e}")
+            
+            _clear_all_highlights()
+            if self._exec_stop:
+                print(">> ⏹ 사용자에 의해 프로그램이 중단되었습니다.")
+            else:
+                print(">> ✅ 프로그램 실행 완료!")
+        
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _move_node_up(self):
+        """선택한 노드를 한 칸 위로 이동."""
+        selected = self.tree.selection()
+        if not selected: return
+        item = selected[0]
+        if "Main Program" in self.tree.item(item, "text"): return
+        parent = self.tree.parent(item)
+        idx = self.tree.index(item)
+        if idx == 0: return
+        self.tree.move(item, parent, idx - 1)
+        self.tree.selection_set(item)
+        print(f">> [순서] '{self.tree.item(item, 'text').strip()}' ▲ 위로 이동")
+    
+    def _move_node_down(self):
+        """선택한 노드를 한 칸 아래로 이동."""
+        selected = self.tree.selection()
+        if not selected: return
+        item = selected[0]
+        if "Main Program" in self.tree.item(item, "text"): return
+        parent = self.tree.parent(item)
+        siblings = self.tree.get_children(parent)
+        idx = self.tree.index(item)
+        if idx >= len(siblings) - 1: return
+        self.tree.move(item, parent, idx + 1)
+        self.tree.selection_set(item)
+        print(f">> [순서] '{self.tree.item(item, 'text').strip()}' ▼ 아래로 이동")
+    
+    def _copy_node(self):
+        """선택한 노드를 복사하여 바로 아래에 붙여넣기."""
+        import copy
+        selected = self.tree.selection()
+        if not selected: return
+        item = selected[0]
+        item_text = self.tree.item(item, "text")
+        if "Main Program" in item_text:
+            print(">> [오류] Main Program은 복사할 수 없습니다.")
+            return
+        parent = self.tree.parent(item)
+        idx = self.tree.index(item)
+        new_item = self.tree.insert(parent, idx + 1, text=item_text, open=True)
+        if item in self.node_data:
+            self.node_data[new_item] = copy.deepcopy(self.node_data[item])
+        def _copy_children(src, dst):
+            for child in self.tree.get_children(src):
+                child_text = self.tree.item(child, "text")
+                new_child = self.tree.insert(dst, "end", text=child_text, open=True)
+                if child in self.node_data:
+                    self.node_data[new_child] = copy.deepcopy(self.node_data[child])
+                _copy_children(child, new_child)
+        _copy_children(item, new_item)
+        self.tree.selection_set(new_item)
+        print(f">> [복사] '{item_text.strip()}' 노드가 복사되었습니다.")
+
+    def delete_node(self):
+        selected = self.tree.selection()
+        if not selected: return
+        item = selected[0]
+        
+        if self.tree.item(item, "text").strip() == "Main Program":
+            print(">> [오류] 최상위 Main Program 노드는 삭제할 수 없습니다.")
+            return
+            
+        def _get_all_descendants(node):
+            desc = []
+            for child in self.tree.get_children(node):
+                desc.append(child)
+                desc.extend(_get_all_descendants(child))
+            return desc
+            
+        to_delete = [item] + _get_all_descendants(item)
+        
+        self.tree.delete(item)
+        
+        for d_item in to_delete:
+            if d_item in self.node_data:
+                del self.node_data[d_item]
+                
+        for w in self.pp_frame.winfo_children(): w.destroy()
+        print(">> [삭제] 선택한 노드가 삭제되었습니다.")
+
+    def add_node(self, cmd_name):
+        # 표시 이름을 내부 이름으로 변환
+        display_to_internal = {
+            "Joint Move": "Move J",
+            "Frame Move": "Move L",
+            "DO": "Set DO",
+            "AO": "Set AO",
+        }
+        internal_name = display_to_internal.get(cmd_name, cmd_name)
+        
+        selected = self.tree.selection()
+        if not selected:
+            new_item = self.tree.insert("", "end", text=f" {internal_name} Node", open=True)
+            self._auto_teach(new_item, internal_name)
             return
             
         target = selected[0]
@@ -780,15 +1339,15 @@ class ProgramTreeEditor:
         
         # Loop문(반복문)이나 If문(조건문), Main Program인 경우에만 하위(자식)로 삽입
         if "Loop" in target_text or "If" in target_text or "Main Program" in target_text or "Folder" in target_text:
-            new_item = self.tree.insert(target, "end", text=f" {cmd_name} Node", open=True)
+            new_item = self.tree.insert(target, "end", text=f" {internal_name} Node", open=True)
             self.tree.item(target, open=True) # 자동으로 하위 펼치기
         else:
             # 일반 명령어(Move, Pick 등)는 하위가 아니라 같은 레벨(형제)로 바로 밑에 삽입
             parent = self.tree.parent(target)
             idx = self.tree.index(target)
-            new_item = self.tree.insert(parent, idx + 1, text=f" {cmd_name} Node", open=True)
+            new_item = self.tree.insert(parent, idx + 1, text=f" {internal_name} Node", open=True)
             
-        self._auto_teach(new_item, cmd_name)
+        self._auto_teach(new_item, internal_name)
         
     def _auto_teach(self, new_item, cmd_name):
         if not hasattr(self, 'node_data'): self.node_data = {}
@@ -824,17 +1383,17 @@ class RobotSettingsEditor:
     def render(self):
         for w in self.parent.winfo_children(): w.destroy()
         
-        f = ctk.CTkFrame(self.parent, fg_color="#18181B", corner_radius=12)
+        f = ctk.CTkFrame(self.parent, fg_color=Theme.BG_BASE, corner_radius=12)
         f.pack(expand=True, padx=40, pady=40, fill="both")
         
         header = ctk.CTkFrame(f, fg_color="transparent")
         header.pack(fill="x", padx=20, pady=20)
-        ctk.CTkLabel(header, text="🌐 NETWORK & IP CONFIG", font=ctk.CTkFont(size=18, weight="bold")).pack(side="left")
+        ctk.CTkLabel(header, text="🌐 NETWORK & IP CONFIG", font=Theme.font(size=18, weight="bold")).pack(side="left")
         
-        ctk.CTkButton(header, text="🔌 선택 로봇 연결", fg_color="#00BCD4", text_color="black", width=120, command=self.connect_selected).pack(side="right", padx=5)
-        ctk.CTkButton(header, text="➕ 새 로봇 추가", fg_color="#1976D2", width=120, command=self.add_new_robot_row).pack(side="right", padx=5)
+        ctk.CTkButton(header, text="🔌 선택 로봇 연결", fg_color=Theme.INFO, text_color="black", width=120, command=self.connect_selected).pack(side="right", padx=5)
+        ctk.CTkButton(header, text="➕ 새 로봇 추가", fg_color=Theme.INFO, width=120, command=self.add_new_robot_row).pack(side="right", padx=5)
         
-        self.list_frame = ctk.CTkScrollableFrame(f, fg_color="#121215", corner_radius=8)
+        self.list_frame = ctk.CTkScrollableFrame(f, fg_color=Theme.BG_BASE, corner_radius=8)
         self.list_frame.pack(fill="both", expand=True, padx=20, pady=10)
         
         self.status_labels = {}
@@ -861,7 +1420,7 @@ class RobotSettingsEditor:
         inst = info.get("instance")
         state = "연결됨" if inst is not None else "대기중"
         
-        row = ctk.CTkFrame(self.list_frame, fg_color="#2A2D35", height=50)
+        row = ctk.CTkFrame(self.list_frame, fg_color=Theme.BG_SURFACE, height=50)
         row.pack(fill="x", pady=5, padx=10)
         
         chk_var = ctk.StringVar(value="on")
@@ -881,25 +1440,30 @@ class RobotSettingsEditor:
         entry_plc.insert(0, plc_ip)
         entry_plc.pack(side="left", padx=5)
         
-        status_col = "#00FF41" if state == "연결됨" else "#8B8B96"
+        status_col = "#00FF41" if state == "연결됨" else Theme.TEXT_SECONDARY
         lbl = ctk.CTkLabel(row, text=f"상태: {state}", text_color=status_col, width=80)
         lbl.pack(side="left", padx=15)
         self.status_labels[name] = lbl
         
-        # 버튼들
+        # 버튼들 (오른쪽에서 왼쪽 순서)
         ctk.CTkButton(row, text="💾 저장", width=60, fg_color="#F57C00", command=lambda n=name, ei=entry_ip, ep=entry_plc: self.save_ip(n, ei, ep)).pack(side="right", padx=5, pady=10)
         
         # 로봇 연결 버튼
-        btn_text = "🔗 로봇 연결" if state != "연결됨" else "✓ 연결됨"
-        btn_color = "#2E7D32" if state != "연결됨" else "#555555"
-        btn_state = "normal" if state != "연결됨" else "disabled"
+        btn_text = "🔗 로봇 연결" if state != "연결됨" else "🔌 연결 해제"
+        btn_color = Theme.SUCCESS if state != "연결됨" else Theme.DANGER
         
-        conn_btn = ctk.CTkButton(row, text=btn_text, width=90, fg_color=btn_color, state=btn_state, command=lambda n=name: self.connect_robot(n))
+        conn_btn = ctk.CTkButton(row, text=btn_text, width=90, fg_color=btn_color, command=lambda n=name: self.connect_robot(n))
         conn_btn.pack(side="right", padx=5)
         self.connect_buttons[name] = conn_btn
         
         # PLC 연결 버튼
         ctk.CTkButton(row, text="⚙️ PLC 연결", width=90, fg_color="#009688", command=lambda n=name: self.connect_plc(n)).pack(side="right", padx=5)
+        
+        # ── 실시간 동기화 / 수동 Teaching 버튼 ──
+        ctk.CTkButton(row, text="🎓 수동 Teaching", width=110, fg_color="#7B1FA2", hover_color="#6A1B9A",
+                      command=lambda n=name: self._activate_teaching(n)).pack(side="right", padx=3)
+        ctk.CTkButton(row, text="📡 실시간 동기화", width=110, fg_color="#1565C0", hover_color="#0D47A1",
+                      command=lambda n=name: self._activate_sync(n)).pack(side="right", padx=3)
 
     def save_ip(self, name, entry_ip, entry_plc):
         new_ip = entry_ip.get()
@@ -916,19 +1480,71 @@ class RobotSettingsEditor:
         
     def connect_robot(self, name):
         def _c():
-            print(f">> [통신] {name} 단일 연결 시도...")
-            if robot_manager.connect(name):
-                print(f">> [성공] {name} 연결 완료!")
-                self.parent.after(0, lambda: self._update_btn_success(name))
+            info = robot_manager.get_robot_info(name)
+            is_connected = info and info.get("instance") is not None
+            
+            if is_connected:
+                print(f">> [통신] {name} 단일 연결 해제 시도...")
+                robot_manager.disconnect(name)
+                print(f">> [성공] {name} 연결 해제 완료!")
+                self.parent.after(0, lambda: self._update_btn_success(name, connected=False))
             else:
-                print(f">> [실패] {name} 연결할 수 없습니다.")
+                print(f">> [통신] {name} 단일 연결 시도...")
+                if robot_manager.connect(name):
+                    print(f">> [성공] {name} 연결 완료!")
+                    self.parent.after(0, lambda: self._update_btn_success(name, connected=True))
+                else:
+                    print(f">> [실패] {name} 연결할 수 없습니다.")
         threading.Thread(target=_c, daemon=True).start()
         
-    def _update_btn_success(self, name):
+    def _update_btn_success(self, name, connected=True):
         if name in self.status_labels:
-            self.status_labels[name].configure(text="상태: 연결됨", text_color="#00FF41")
+            self.status_labels[name].configure(
+                text="상태: 연결됨" if connected else "상태: 대기중", 
+                text_color="#00FF41" if connected else Theme.TEXT_SECONDARY
+            )
         if name in self.connect_buttons:
-            self.connect_buttons[name].configure(text="✓ 연결됨", fg_color="#555555", state="disabled")
+            self.connect_buttons[name].configure(
+                text="🔌 연결 해제" if connected else "🔗 로봇 연결", 
+                fg_color=Theme.DANGER if connected else Theme.SUCCESS, 
+                state="normal"
+            )
+        
+    def _activate_sync(self, name):
+        """해당 로봇을 실시간 동기화 모드로 선택 (Page1 디지털트윈 + 옵션 I/O 연동)"""
+        info = robot_manager.get_robot_info(name)
+        if not info or info.get("instance") is None:
+            print(f">> [경고] {name}이(가) 먼저 연결되어 있어야 합니다.")
+            return
+        robot_manager.set_active_robot(name)
+        print(f">> 📡 [{name}] 실시간 동기화 모드로 선택됨! (Page1 디지털트윈 + 옵션 I/O 연동)")
+        # 상태 라벨 갱신
+        for rn, lbl in self.status_labels.items():
+            if rn == name:
+                self.parent.after(0, lambda l=lbl: _safe_configure(l, text="상태: 📡 동기화 중", text_color=Theme.INFO))
+            else:
+                inst = robot_manager.get_robot_info(rn)
+                is_conn = inst and inst.get("instance") is not None
+                if is_conn:
+                    self.parent.after(0, lambda l=lbl: _safe_configure(l, text="상태: 연결됨", text_color="#00FF41"))
+    
+    def _activate_teaching(self, name):
+        """해당 로봇을 수동 Teaching 모드로 선택 (JOG + 프로세스 에디터 연동)"""
+        info = robot_manager.get_robot_info(name)
+        if not info or info.get("instance") is None:
+            print(f">> [경고] {name}이(가) 먼저 연결되어 있어야 합니다.")
+            return
+        robot_manager.set_active_robot(name)
+        print(f">> 🎓 [{name}] 수동 Teaching 모드로 선택됨! (JOG + 프로세스 에디터 연동)")
+        # 상태 라벨 갱신
+        for rn, lbl in self.status_labels.items():
+            if rn == name:
+                self.parent.after(0, lambda l=lbl: _safe_configure(l, text="상태: 🎓 Teaching 중", text_color="#CE93D8"))
+            else:
+                inst = robot_manager.get_robot_info(rn)
+                is_conn = inst and inst.get("instance") is not None
+                if is_conn:
+                    self.parent.after(0, lambda l=lbl: _safe_configure(l, text="상태: 연결됨", text_color="#00FF41"))
         
     def connect_selected(self):
         def _ca():
@@ -937,7 +1553,7 @@ class RobotSettingsEditor:
                     print(f">> [통신] 선택된 {name} 연결 시도...")
                     if robot_manager.connect(name):
                         print(f">> [성공] {name} 연결 완료!")
-                        self.parent.after(0, lambda n=name: self._update_btn_success(n))
+                        self.parent.after(0, lambda n=name: self._update_btn_success(n, connected=True))
         threading.Thread(target=_ca, daemon=True).start()
 
 class OptionsEditor:
@@ -949,10 +1565,10 @@ class OptionsEditor:
         for w in self.parent.winfo_children(): w.destroy()
         self.polling = True
         
-        f = ctk.CTkFrame(self.parent, fg_color="#18181B", corner_radius=12)
+        f = ctk.CTkFrame(self.parent, fg_color=Theme.BG_BASE, corner_radius=12)
         f.pack(expand=True, padx=20, pady=20, fill="both")
         
-        ctk.CTkLabel(f, text="🔌 System Options & I/O Monitoring", font=ctk.CTkFont(size=24, weight="bold"), text_color="#F57C00").pack(pady=(15, 10))
+        ctk.CTkLabel(f, text="🔌 System Options & I/O Monitoring", font=Theme.font(size=24, weight="bold"), text_color="#F57C00").pack(pady=(15, 10))
         
         main_grid = ctk.CTkFrame(f, fg_color="transparent")
         main_grid.pack(fill="both", expand=True, padx=10, pady=10)
@@ -966,29 +1582,31 @@ class OptionsEditor:
         io_col = ctk.CTkFrame(main_grid, fg_color="transparent")
         io_col.grid(row=0, column=0, sticky="nsew", padx=10)
         
-        di_frame = ctk.CTkFrame(io_col, fg_color="#2A2D35", corner_radius=8)
+        di_frame = ctk.CTkFrame(io_col, fg_color=Theme.BG_SURFACE, corner_radius=8)
         di_frame.pack(fill="x", pady=(0, 15))
-        ctk.CTkLabel(di_frame, text="📥 Digital Input (D.I)", font=ctk.CTkFont(weight="bold", size=18), text_color="#00E5FF").pack(pady=(15,5))
+        self.di_title = ctk.CTkLabel(di_frame, text="📥 Digital Input (D.I) - 연결 안됨", font=ctk.CTkFont(weight="bold", size=18), text_color="#00E5FF")
+        self.di_title.pack(pady=(15,5))
         
         self.di_labels = []
         di_grid = ctk.CTkFrame(di_frame, fg_color="transparent")
         di_grid.pack(padx=10, pady=10)
         for i in range(16):
             r, c = divmod(i, 4)
-            lbl = ctk.CTkLabel(di_grid, text=f" DI {i:02d} ", corner_radius=6, fg_color="#555555", text_color="white", width=70, height=35, font=ctk.CTkFont(size=14, weight="bold"))
+            lbl = ctk.CTkLabel(di_grid, text=f" DI {i:02d} ", corner_radius=6, fg_color="#555555", text_color=Theme.TEXT_PRIMARY, width=70, height=35, font=Theme.font(size=14, weight="bold"))
             lbl.grid(row=r, column=c, padx=5, pady=5)
             self.di_labels.append(lbl)
             
-        do_frame = ctk.CTkFrame(io_col, fg_color="#2A2D35", corner_radius=8)
+        do_frame = ctk.CTkFrame(io_col, fg_color=Theme.BG_SURFACE, corner_radius=8)
         do_frame.pack(fill="x")
-        ctk.CTkLabel(do_frame, text="📤 Digital Output (D.O)", font=ctk.CTkFont(weight="bold", size=18), text_color="#00FF41").pack(pady=(15,5))
+        self.do_title = ctk.CTkLabel(do_frame, text="📤 Digital Output (D.O) - 연결 안됨", font=ctk.CTkFont(weight="bold", size=18), text_color="#00FF41")
+        self.do_title.pack(pady=(15,5))
         
         self.do_buttons = []
         do_grid = ctk.CTkFrame(do_frame, fg_color="transparent")
         do_grid.pack(padx=10, pady=10)
         for i in range(16):
             r, c = divmod(i, 4)
-            btn = ctk.CTkButton(do_grid, text=f" DO {i:02d} ", corner_radius=6, fg_color="#555555", text_color="white", width=70, height=35, font=ctk.CTkFont(size=14, weight="bold"), hover_color="#2E7D32")
+            btn = ctk.CTkButton(do_grid, text=f" DO {i:02d} ", corner_radius=6, fg_color="#555555", text_color=Theme.TEXT_PRIMARY, width=70, height=35, font=Theme.font(size=14, weight="bold"), hover_color=Theme.SUCCESS)
             btn.grid(row=r, column=c, padx=5, pady=5)
             btn.configure(command=lambda idx=i, b=btn: self.toggle_do(idx, b))
             self.do_buttons.append(btn)
@@ -997,7 +1615,7 @@ class OptionsEditor:
         tcp_col = ctk.CTkFrame(main_grid, fg_color="transparent")
         tcp_col.grid(row=0, column=1, sticky="nsew", padx=10)
         
-        tcp_frame = ctk.CTkFrame(tcp_col, fg_color="#2A2D35", corner_radius=8)
+        tcp_frame = ctk.CTkFrame(tcp_col, fg_color=Theme.BG_SURFACE, corner_radius=8)
         tcp_frame.pack(fill="both", expand=True)
         ctk.CTkLabel(tcp_frame, text="🎯 TCP Settings", font=ctk.CTkFont(weight="bold", size=18), text_color="#FF1744").pack(pady=(20, 15))
         
@@ -1007,57 +1625,57 @@ class OptionsEditor:
         self.tcp_entries = {}
         for i, label in enumerate(["X (mm)", "Y (mm)", "Z (mm)", "Rx (deg)", "Ry (deg)", "Rz (deg)"]):
             r = i
-            ctk.CTkLabel(tcp_grid, text=label, width=80, anchor="e", font=ctk.CTkFont(size=15, weight="bold")).grid(row=r, column=0, padx=10, pady=12)
-            ent = ctk.CTkEntry(tcp_grid, width=140, height=35, justify="center", font=ctk.CTkFont(size=15))
+            ctk.CTkLabel(tcp_grid, text=label, width=80, anchor="e", font=Theme.font(size=15, weight="bold")).grid(row=r, column=0, padx=10, pady=12)
+            ent = ctk.CTkEntry(tcp_grid, width=140, height=35, justify="center", font=Theme.font(size=15))
             ent.grid(row=r, column=1, padx=10, pady=12)
             ent.insert(0, "0.0")
             self.tcp_entries[label] = ent
             
-        ctk.CTkButton(tcp_frame, text="💾 TCP 로봇 적용", fg_color="#D32F2F", hover_color="#B71C1C", height=45, font=ctk.CTkFont(size=16, weight="bold"), command=self.apply_tcp).pack(pady=20, padx=20, fill="x")
+        ctk.CTkButton(tcp_frame, text="💾 TCP 로봇 적용", fg_color=Theme.DANGER, hover_color=Theme.DANGER, height=45, font=Theme.font(size=16, weight="bold"), command=self.apply_tcp).pack(pady=20, padx=20, fill="x")
         
         # === Column 2: Gripper Mapping ===
         grip_col = ctk.CTkFrame(main_grid, fg_color="transparent")
         grip_col.grid(row=0, column=2, sticky="nsew", padx=10)
         
-        tool_frame = ctk.CTkFrame(grip_col, fg_color="#2A2D35", corner_radius=8)
+        tool_frame = ctk.CTkFrame(grip_col, fg_color=Theme.BG_SURFACE, corner_radius=8)
         tool_frame.pack(fill="both", expand=True)
         ctk.CTkLabel(tool_frame, text="🔧 Tool / Gripper Settings", font=ctk.CTkFont(weight="bold", size=18), text_color="#F57C00").pack(pady=(20, 10))
         
         # 흡착(Suction) vs 일반(Gripper) 선택
         self.tool_type_var = ctk.StringVar(value="Gripper")
-        type_seg = ctk.CTkSegmentedButton(tool_frame, values=["Gripper", "Suction (흡착)"], variable=self.tool_type_var, font=ctk.CTkFont(size=14, weight="bold"), command=self._on_tool_type_change)
+        type_seg = ctk.CTkSegmentedButton(tool_frame, values=["Gripper", "Suction (흡착)"], variable=self.tool_type_var, font=Theme.font(size=14, weight="bold"), command=self._on_tool_type_change)
         type_seg.pack(padx=20, pady=10, fill="x")
         
         self.tool_grid = ctk.CTkFrame(tool_frame, fg_color="transparent")
         self.tool_grid.pack(padx=15, pady=15)
         
         # Grip/Hold 핀
-        self.lbl_grip = ctk.CTkLabel(self.tool_grid, text="Grip DO Pin:", font=ctk.CTkFont(size=15, weight="bold"))
+        self.lbl_grip = ctk.CTkLabel(self.tool_grid, text="Grip DO Pin:", font=Theme.font(size=15, weight="bold"))
         self.lbl_grip.grid(row=0, column=0, padx=10, pady=10, sticky="e")
-        self.grip_pin_entry = ctk.CTkEntry(self.tool_grid, width=100, height=35, justify="center", font=ctk.CTkFont(size=15))
+        self.grip_pin_entry = ctk.CTkEntry(self.tool_grid, width=100, height=35, justify="center", font=Theme.font(size=15))
         self.grip_pin_entry.grid(row=0, column=1, padx=10, pady=10)
         self.grip_pin_entry.insert(0, "0")
         
         # Release 핀 (Suction일 땐 숨김)
-        self.lbl_release = ctk.CTkLabel(self.tool_grid, text="Release DO Pin:", font=ctk.CTkFont(size=15, weight="bold"))
+        self.lbl_release = ctk.CTkLabel(self.tool_grid, text="Release DO Pin:", font=Theme.font(size=15, weight="bold"))
         self.lbl_release.grid(row=1, column=0, padx=10, pady=10, sticky="e")
-        self.release_pin_entry = ctk.CTkEntry(self.tool_grid, width=100, height=35, justify="center", font=ctk.CTkFont(size=15))
+        self.release_pin_entry = ctk.CTkEntry(self.tool_grid, width=100, height=35, justify="center", font=Theme.font(size=15))
         self.release_pin_entry.grid(row=1, column=1, padx=10, pady=10)
         self.release_pin_entry.insert(0, "1")
         
         # Sensor 핀
-        ctk.CTkLabel(self.tool_grid, text="Sensor DI Pin:", font=ctk.CTkFont(size=15, weight="bold")).grid(row=2, column=0, padx=10, pady=10, sticky="e")
-        self.sensor_pin_entry = ctk.CTkEntry(self.tool_grid, width=100, height=35, justify="center", font=ctk.CTkFont(size=15))
+        ctk.CTkLabel(self.tool_grid, text="Sensor DI Pin:", font=Theme.font(size=15, weight="bold")).grid(row=2, column=0, padx=10, pady=10, sticky="e")
+        self.sensor_pin_entry = ctk.CTkEntry(self.tool_grid, width=100, height=35, justify="center", font=Theme.font(size=15))
         self.sensor_pin_entry.grid(row=2, column=1, padx=10, pady=10)
         self.sensor_pin_entry.insert(0, "0")
         
-        ctk.CTkButton(tool_frame, text="💾 툴 매핑 저장", fg_color="#F57C00", hover_color="#E65100", height=45, font=ctk.CTkFont(size=16, weight="bold"), command=self.apply_tool_mapping).pack(pady=10, padx=20, fill="x")
+        ctk.CTkButton(tool_frame, text="💾 툴 매핑 저장", fg_color="#F57C00", hover_color=Theme.WARNING, height=45, font=Theme.font(size=16, weight="bold"), command=self.apply_tool_mapping).pack(pady=10, padx=20, fill="x")
         
         test_frame = ctk.CTkFrame(tool_frame, fg_color="transparent")
         test_frame.pack(fill="x", padx=20, pady=15)
-        self.btn_test_grip = ctk.CTkButton(test_frame, text="테스트 Grip / Hold", fg_color="#1976D2", height=40, font=ctk.CTkFont(size=14, weight="bold"), command=lambda: self._test_grip("grip"))
+        self.btn_test_grip = ctk.CTkButton(test_frame, text="테스트 Grip / Hold", fg_color=Theme.INFO, height=40, font=Theme.font(size=14, weight="bold"), command=lambda: self._test_grip("grip"))
         self.btn_test_grip.pack(side="left", expand=True, padx=5)
-        self.btn_test_release = ctk.CTkButton(test_frame, text="테스트 Release", fg_color="#009688", height=40, font=ctk.CTkFont(size=14, weight="bold"), command=lambda: self._test_grip("release"))
+        self.btn_test_release = ctk.CTkButton(test_frame, text="테스트 Release", fg_color="#009688", height=40, font=Theme.font(size=14, weight="bold"), command=lambda: self._test_grip("release"))
         self.btn_test_release.pack(side="right", expand=True, padx=5)
 
         # UI 파괴될 때 폴링 종료
@@ -1095,26 +1713,22 @@ class OptionsEditor:
         current_color = btn.cget("fg_color")
         new_val = 0 if current_color == "#00FF41" else 1
         
-        def _bg():
-            try:
-                with robot_manager.get_lock():
-                    if hasattr(inst, 'set_do'):
-                        inst.set_do(idx, new_val)
-                        print(f">> [D.O 제어] DO 핀 {idx}을(를) {new_val} 상태로 변경했습니다.")
-                    else:
-                        print(f">> [경고] 로봇 인스턴스에 set_do 메서드가 없습니다.")
-            except Exception as e:
-                print(f"❌ [에러] DO 제어 실패: {e}")
-        threading.Thread(target=_bg, daemon=True).start()
+        from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
+        RobotControlUseCase.set_do(idx, new_val)
+        print(f">> [D.O 제어] DO 핀 {idx}을(를) {new_val} 상태로 변경했습니다.")
 
     def poll_io(self):
         while self.polling:
             inst = robot_manager.get_active_instance()
-            if inst:
+            name = robot_manager.get_active_robot_name()
+            if inst and name:
                 try:
-                    with robot_manager.get_lock():
-                        di_state = inst.get_di() if hasattr(inst, 'get_di') else None
-                        do_state = inst.get_do() if hasattr(inst, 'get_do') else None
+                    # 타이틀 업데이트
+                    self.parent.after(0, lambda n=name: _safe_configure(self.di_title, text=f"📥 Digital Input (D.I) - {n}"))
+                    self.parent.after(0, lambda n=name: _safe_configure(self.do_title, text=f"📤 Digital Output (D.O) - {n}"))
+                    
+                    di_state = inst.get_di() if hasattr(inst, 'get_di') else None
+                    do_state = inst.get_do() if hasattr(inst, 'get_do') else None
                         
                     if di_state is not None:
                         for i in range(16):
@@ -1129,9 +1743,13 @@ class OptionsEditor:
                             self.parent.after(0, lambda btn=self.do_buttons[i], c=color: _safe_configure(btn, fg_color=c))
                             
                 except Exception as e:
-
-                    pass
-            time.sleep(0.2)
+                    print(f">> [폴링 에러] {e}")
+            else:
+                try:
+                    self.parent.after(0, lambda: _safe_configure(self.di_title, text="📥 Digital Input (D.I) - 연결 안됨"))
+                    self.parent.after(0, lambda: _safe_configure(self.do_title, text="📤 Digital Output (D.O) - 연결 안됨"))
+                except: pass
+            time.sleep(0.5)
 
     def apply_tcp(self):
         inst = robot_manager.get_active_instance()
@@ -1145,14 +1763,9 @@ class OptionsEditor:
                 val = float(self.tcp_entries[label].get())
                 tcp_vals.append(val)
                 
-            def _bg():
-                with robot_manager.get_lock():
-                    if hasattr(inst, 'set_tcp'):
-                        inst.set_tcp(tcp_vals)
-                        print(f">> [TCP 설정] {tcp_vals} 값이 적용되었습니다.")
-                    else:
-                        print(">> [경고] 로봇 통신 드라이버에 set_tcp 메서드가 없습니다.")
-            threading.Thread(target=_bg, daemon=True).start()
+            from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
+            RobotControlUseCase.set_tcp(tcp_vals)
+            print(f">> [TCP 설정] {tcp_vals} 값이 적용되었습니다.")
         except ValueError:
             print(">> [에러] TCP 입력란에는 숫자만 입력해주세요.")
 
@@ -1193,27 +1806,26 @@ class OptionsEditor:
                 r_pin = int(self.release_pin_entry.get())
             
             def _bg():
-                with robot_manager.get_lock():
-                    if not hasattr(inst, 'set_do'): return
-                    
-                    if is_suction:
-                        if action == "grip":
-                            print(f">> [흡착 테스트] 진공 ON (DO {g_pin} ON)")
-                            inst.set_do(g_pin, 1)
-                        else:
-                            print(f">> [흡착 테스트] 진공 OFF (DO {g_pin} OFF)")
-                            inst.set_do(g_pin, 0)
+                if not hasattr(inst, 'set_do'): return
+                
+                if is_suction:
+                    if action == "grip":
+                        print(f">> [흡착 테스트] 진공 ON (DO {g_pin} ON)")
+                        inst.set_do(g_pin, 1)
                     else:
-                        if action == "grip":
-                            print(f">> [그리퍼 테스트] Grip 작동 (DO {g_pin} ON, DO {r_pin} OFF)")
-                            inst.set_do(r_pin, 0)
-                            time.sleep(0.1)
-                            inst.set_do(g_pin, 1)
-                        else:
-                            print(f">> [그리퍼 테스트] Release 작동 (DO {g_pin} OFF, DO {r_pin} ON)")
-                            inst.set_do(g_pin, 0)
-                            time.sleep(0.1)
-                            inst.set_do(r_pin, 1)
+                        print(f">> [흡착 테스트] 진공 OFF (DO {g_pin} OFF)")
+                        inst.set_do(g_pin, 0)
+                else:
+                    if action == "grip":
+                        print(f">> [그리퍼 테스트] Grip 작동 (DO {g_pin} ON, DO {r_pin} OFF)")
+                        inst.set_do(r_pin, 0)
+                        time.sleep(0.1)
+                        inst.set_do(g_pin, 1)
+                    else:
+                        print(f">> [그리퍼 테스트] Release 작동 (DO {g_pin} OFF, DO {r_pin} ON)")
+                        inst.set_do(g_pin, 0)
+                        time.sleep(0.1)
+                        inst.set_do(r_pin, 1)
             threading.Thread(target=_bg, daemon=True).start()
         except ValueError:
             print(">> [에러] 올바른 핀 번호를 먼저 입력해주세요.")
@@ -1224,18 +1836,19 @@ class LogViewer:
     def render(self):
         for w in self.parent.winfo_children(): w.destroy()
         
-        f = ctk.CTkFrame(self.parent, fg_color="#18181B", corner_radius=12)
+        f = ctk.CTkFrame(self.parent, fg_color=Theme.BG_BASE, corner_radius=12)
         f.pack(expand=True, padx=40, pady=40, fill="both")
         
-        ctk.CTkLabel(f, text="📋 SYSTEM LOGS", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=20)
+        ctk.CTkLabel(f, text="📋 SYSTEM LOGS", font=Theme.font(size=18, weight="bold")).pack(pady=20)
         
-        self.textbox = ctk.CTkTextbox(f, fg_color="#121215", text_color="#00FF41", font=ctk.CTkFont(family="Consolas"))
+        self.textbox = ctk.CTkTextbox(f, fg_color=Theme.BG_BASE, text_color="#00FF41", font=ctk.CTkFont(family="Consolas"))
         self.textbox.pack(fill="both", expand=True, padx=20, pady=20)
         self.textbox.insert("end", "[SYS] Log Viewer Initialized.\n[SYS] Ready to display events.\n")
 
 class RobotHmiView:
-    def __init__(self, parent_tab):
+    def __init__(self, parent_tab, on_back=None):
         self.parent = parent_tab
+        self.on_back = on_back
         self.parent.grid_columnconfigure(0, weight=1)
         self.parent.grid_rowconfigure(0, weight=0)
         self.parent.grid_rowconfigure(1, weight=1)
@@ -1246,21 +1859,25 @@ class RobotHmiView:
         self.content_frame.grid_columnconfigure(0, weight=1)
         self.content_frame.grid_rowconfigure(0, weight=1)
         
-        self.switch_view("로봇설정")
+        self.switch_view("프로그램")
         
     def setup_navbar(self):
-        nav_bar = ctk.CTkFrame(self.parent, fg_color="#18181B", height=45)
+        nav_bar = ctk.CTkFrame(self.parent, fg_color=Theme.BG_BASE, height=45)
         nav_bar.grid(row=0, column=0, sticky="ew")
         nav_container = ctk.CTkFrame(nav_bar, fg_color="transparent")
         nav_container.pack(expand=True)
         items = ["이전으로", "옵션", "로봇설정", "프로그램", "로그", "리셋"]
         for item in items:
             btn = ctk.CTkButton(nav_container, text=item, fg_color="transparent", text_color="#A0A0A0", 
-                                font=ctk.CTkFont(weight="bold"), hover_color="#2A2D35", corner_radius=0,
+                                font=Theme.font(size=12, weight="bold"), hover_color=Theme.BG_SURFACE, corner_radius=0,
                                 command=lambda x=item: self.switch_view(x))
             btn.pack(side="left", padx=5)
 
     def switch_view(self, name):
+        if name == "이전으로" and self.on_back:
+            self.on_back()
+            return
+            
         for w in self.content_frame.winfo_children(): w.destroy()
         
         if name == "로봇설정":

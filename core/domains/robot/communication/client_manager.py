@@ -17,6 +17,10 @@ class RobotClientManager:
         self._active_robot_name = None
         self._robot_lock = threading.Lock()
         
+        # 로봇의 최신 상태(좌표 + 상태)를 저장할 메모장
+        self._latest_states = {} 
+        self._state_lock = threading.Lock()
+        
     def add_robot(self, name: str, ip: str, plc_ip: str = None):
         if name not in self._robots:
             self._robots[name] = {"ip": ip, "plc_ip": plc_ip, "instance": None}
@@ -57,7 +61,6 @@ class RobotClientManager:
             except Exception: pass
             
         try:
-            # Lazy import to avoid circular dependencies
             from indy_utils import indydcp_client as client
             r = client.IndyDCPClient(target_ip, "NRMK-Indy7")
             r.connect()
@@ -75,9 +78,35 @@ class RobotClientManager:
                 time.sleep(0.5)
             except Exception: pass
             self._robots[name]["instance"] = None
+            # 상태 메모장에서도 제거
+            with self._state_lock:
+                self._latest_states.pop(name, None)
             
     def get_all_robots(self):
         return self._robots
+        
+    def update_robot_state(self, name: str, j_pos, t_pos, robot_status=None):
+        """로봇 좌표 + 상태를 메모장에 기록"""
+        with self._state_lock:
+            self._latest_states[name] = {
+                "j_pos": j_pos, 
+                "t_pos": t_pos,
+                "status": robot_status,  # get_robot_status() 결과
+                "timestamp": time.time()
+            }
+
+    def get_robot_state(self, name: str):
+        with self._state_lock:
+            return self._latest_states.get(name)
+    
+    def is_connected(self, name: str) -> bool:
+        """해당 로봇이 연결되어 있는지 확인"""
+        info = self._robots.get(name)
+        return info is not None and info.get("instance") is not None
+    
+    def get_any_connected(self) -> bool:
+        """하나라도 연결된 로봇이 있는지"""
+        return any(info.get("instance") for info in self._robots.values())
         
 # Singleton export
 robot_manager = RobotClientManager()

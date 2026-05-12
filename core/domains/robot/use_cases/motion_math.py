@@ -28,9 +28,13 @@ class MotionMath:
         return p
 
     @staticmethod
-    def compute_pallet_point(p1: list, p2: list, p3: list, size_m: int, size_n: int, current_m: int, current_n: int) -> list:
+    def compute_pallet_point(p1: list, p2: list, p3: list, size_m: int, size_n: int, current_m: int, current_n: int, p4: list = None, size_l: int = 1, current_l: int = 0) -> list:
         """
-        팔레타이징 3점 기반 그리드 보간
+        팔레타이징 3점(+4점) 기반 그리드 보간
+        p1: 시작점, p2: 행 끝점, p3: 열 끝점, p4: 층 끝점 (옵션)
+        current_m: 현재 행 인덱스 (0-based)
+        current_n: 현재 열 인덱스 (0-based)
+        current_l: 현재 층 인덱스 (0-based)
         """
         if not (p1 and p2 and p3) or len(p1) < 6 or len(p2) < 6 or len(p3) < 6:
             return p1 if p1 else [0.0]*6
@@ -38,10 +42,15 @@ class MotionMath:
         result = [0.0] * 6
         m_steps = max(1, size_m - 1)
         n_steps = max(1, size_n - 1)
+        l_steps = max(1, size_l - 1)
         
         for i in range(6):
-            dm = (p2[i] - p1[i]) / m_steps
-            dn = (p3[i] - p1[i]) / n_steps
-            result[i] = p1[i] + (dm * current_m) + (dn * current_n)
+            dm = (p2[i] - p1[i]) / m_steps if size_m > 1 else 0.0
+            dn = (p3[i] - p1[i]) / n_steps if size_n > 1 else 0.0
+            dl = 0.0
+            if p4 and len(p4) >= 6 and size_l > 1:
+                dl = (p4[i] - p1[i]) / l_steps
+            result[i] = p1[i] + (dm * current_m) + (dn * current_n) + (dl * current_l)
             
         return result
+

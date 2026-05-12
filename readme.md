@@ -1,69 +1,144 @@
-# Indy7 PC-HMI Project (Android APK Sync)
+# Indy7 PC-HMI — Deep Space Command Center 🚀
 
 이 프로그램은 Neuromeka(뉴로메카) 사의 **Indy7 협동 로봇**을 컴퓨터(PC)에서 조종하고 작업 지시를 내리기 위해 만들어진 리모컨(HMI) 소프트웨어입니다.
 기존에 태블릿(안드로이드 앱)에서 짰던 작업 파일(JSON)을 컴퓨터로 가져와서 그대로 쓸 수 있고, 컴퓨터에서 편하게 수정한 뒤 다시 태블릿으로 보낼 수도 있는 **100% 양방향 호환성**을 자랑합니다.
 
+> **테마**: "Deep Space Command Center" — 깊은 우주 사령실 컨셉의 다크 모드 UI.  
+> 디자인 토큰(`presentation/ui/theme.py`)을 수정하면 앱 전체 스타일이 일괄 변경됩니다.
+
 ---
 
-## 📦 1. 이 프로그램을 실행하기 위해 필요한 준비물 (라이브러리)
+## 📦 1. 설치 및 실행
 
-이 프로그램은 Python(파이썬) 언어로 만들어졌으며, 실행하려면 추가적인 부품(라이브러리)들이 필요합니다. 이 부품들의 목록은 `requirements.txt` 파일에 정리되어 있습니다.
-
-### 📌 사용된 핵심 라이브러리와 그 역할
-1. **`customtkinter`**: 까맣고 칙칙한 구형 윈도우 창 대신, 둥글둥글하고 예쁜 최신식 다크모드 화면(UI)을 만들어주는 그림 붓 역할을 합니다.
-2. **`numpy` & `scipy`**: 로봇이 허공에서 어느 방향으로 얼마나 움직여야 하는지, 팔레타이징(물건 쌓기)을 할 때 사선이나 층수를 똑똑하게 계산해 주는 천재 수학자 역할을 합니다.
-3. **`paho-mqtt` & `pymysql`**: 로봇과 데이터를 주고받고, 나중에 공장의 큰 시스템(MES)이나 데이터베이스(DB)에 작업 기록을 남길 때 사용하는 통신/저장소 담당자입니다.
-4. **`pyserial`**: 로봇에 연결된 기타 장비들과 직접 유선(시리얼)으로 대화할 때 씁니다.
-
-### ⚙️ 한 방에 설치하는 방법 (명령어)
-명령 프롬프트(터미널)를 열고 아래 명령어를 복사해서 붙여넣기 후 엔터를 치면, 위에서 말한 모든 부품이 알아서 다운로드되고 설치됩니다.
+### 필수 라이브러리
 ```bash
 pip install -r requirements.txt
 ```
+| 라이브러리 | 역할 |
+|---|---|
+| `customtkinter` | 둥글고 예쁜 다크모드 UI 프레임워크 |
+| `numpy` & `scipy` | 로봇 좌표 계산, 팔레타이징 수학 |
+| `matplotlib` | 오실로스코프(실시간 그래프) |
+| `paho-mqtt` & `pymysql` | MQTT 통신 / MES DB 연동 |
+| `pyserial` | 시리얼 통신 |
+| `pymcprotocol` | 미쓰비시 PLC (MC Protocol) |
 
----
-
-## 🏗 2. 프로그램 제작 표준 및 구조 (어떻게 만들어졌는가?)
-
-이 프로그램은 그냥 주먹구구식으로 코드를 짠 것이 아니라, **전 세계 최고 수준의 소프트웨어 회사들이 지키는 2가지 강력한 국제 설계 표준**을 엄격하게 지켜서 만들어졌습니다.
-
-### 🥇 첫 번째 표준: 클린 아키텍처 (Clean Architecture)
-* **무슨 뜻인가요?**: 프로그램의 **"껍데기(화면)"**와 **"알맹이(로봇 조종 로직)"**를 완전히 분리하는 방식입니다.
-* **왜 좋은가요?**: 만약 나중에 "화면 버튼 색깔을 바꿔줘!"라고 해서 껍데기를 뜯어고치더라도, 알맹이(로봇 조종 코드)는 전혀 건드리지 않기 때문에 로봇이 갑자기 오작동할 위험이 0%입니다. 화면은 화면끼리, 통신은 통신끼리 철저하게 격리벽을 쳐두었습니다.
-
-### 🥇 두 번째 표준: 도메인 주도 설계 (DDD: Domain-Driven Design)
-* **무슨 뜻인가요?**: 로봇이 하는 일을 현실 세계의 역할(도메인)에 맞춰서 코드를 쪼개는 방식입니다.
-* **어떻게 적용되었나요?**: 
-  - `presentation` 폴더: 눈에 보이는 화면(UI)만 담당합니다.
-  - `application` 폴더: 화면의 버튼이 눌렸을 때 "로봇아 움직여라!" 라고 지시를 내리는 중간 관리자 역할을 합니다.
-  - `domain` 폴더: 로봇의 관절 각도, 좌표 데이터, 작업 순서표(트리) 등 순수한 '데이터'의 규칙을 정의합니다.
-  - `infrastructure` 폴더: JSON 파일을 하드디스크에 저장하고 불러오거나, IndyDCP 통신선으로 로봇에 전기를 쏴서 움직이게 하는 가장 밑바닥 육체노동을 담당합니다.
-
----
-
-## 🚀 3. 상세 기능 설명 (어떤 일들을 할 수 있나요?)
-
-### ✅ 로봇 통신 및 안드로이드 파일 동기화
-* 로봇의 IP 주소를 입력해 즉시 통신을 연결/해제할 수 있습니다.
-* 태블릿(안드로이드)에서 쓰던 `test_save.json` 파일을 열어서 작업하고, 다시 저장하면 태블릿에서 에러 없이 100% 똑같이 열립니다.
-
-### ✅ 프로그램 트리 (작업 순서도 짜기)
-* 좌측 화면에서 블록을 추가하면, 중앙 화면에 `1. 이동해라` `2. 물건을 집어라` 처럼 작업 순서가 쌓입니다.
-* `Folder(폴더)`, `Loop(반복문)`, `If(조건문)`을 통해 로봇에게 복잡한 조건(예: 신호가 들어올 때만 10번 반복해라)을 지시할 수 있습니다.
-
-### ✅ 조그(JOG) 수동 조작 컨트롤러
-* 우측 하단의 JOG 패널에서 버튼을 꾹 누르면 로봇이 즉시 움직입니다.
-* 로봇의 각 관절만 꺾을 수도 있고(Joint), 로봇 전체를 앞뒤/위아래 직선으로 밀고 당길 수도 있습니다(Base/Tool).
-* 초보자를 위해 1~10단계로 속도 조절이 가능합니다.
-
-### ✅ 궁극의 팔레타이징 (Pick & Place)
-물건을 집어서 박스에 차곡차곡 쌓는 가장 중요한 기능입니다.
-* **자동 계산 기능**: 첫 번째 물건 위치(P1) 하나만 로봇으로 잡아주고, 상자 크기(가로/세로/높이)와 배열(M x N)만 적어주면 나머지 끝점 위치들은 천재 수학자 라이브러리가 완벽하게 자동 계산해 줍니다. (로봇이 삐딱하게 서 있어도 문제없습니다!)
-* **3D 다단 적재**: 위로 몇 층(L)을 쌓을지 입력하면, Z축 방향으로 올라가는 좌표(P4)까지 완벽하게 계산합니다.
-* **3단계 시뮬레이션**: `위에서 대기(Approach) -> 내려와서 집기(Target) -> 위로 빠져나오기(Retract)`의 3동작을 묶어서 버튼 한 번에 자동으로 테스트해 볼 수 있습니다.
-
-### ✅ 파일 및 실행
-이 프로그램은 아래 명령어로 단숨에 켤 수 있습니다.
+### 실행 방법
 ```bash
-python3 presentation/ui/main_window.py
+# 전체 앱 (PLC/MQTT 없이 UI만 확인)
+python3 run_ui_only.py
+
+# 전체 앱 (PLC/MQTT/MES 연결 포함)
+python3 main.py
 ```
+
+---
+
+## 🏗 2. 아키텍처
+
+**Clean Architecture + DDD (Domain-Driven Design)** 기반으로 설계되었습니다.
+
+```
+Indy7_HMI_Clean/
+├── core/                           # 핵심 비즈니스 로직
+│   ├── domains/
+│   │   ├── robot/                  # 로봇 제어 도메인
+│   │   │   ├── communication/      # IndyDCP 클라이언트 매니저
+│   │   │   └── use_cases/          # 로봇 제어 유스케이스 (JOG, 이동, F/T탐색)
+│   │   ├── motion_management/      # 모션 엔티티
+│   │   ├── plc_communication/      # PLC 통신 레포지토리
+│   │   ├── mes_integration/        # MES DB 연동
+│   │   └── teaching_management/    # 티칭 트리 파서
+│   ├── application/use_cases/      # 팩토리 오케스트레이터
+│   ├── kernel/                     # DI 컨테이너 (Microkernel)
+│   └── shared/                     # 도메인 이벤트
+├── presentation/ui/                # UI 계층 (화면)
+│   ├── theme.py                    # 🎨 디자인 토큰 (색상/폰트 중앙 관리)
+│   ├── main_window.py              # 메인 윈도우 (Page 1 ↔ Page 2 전환)
+│   ├── robot_hmi/                  # Page 2: Teaching/Setting Mode
+│   │   ├── robot_hmi_view.py       # HMI 메인 뷰 (트리, 팔레트, 에디터)
+│   │   ├── editors/                # 노드별 속성 에디터
+│   │   │   ├── motion_editors.py   # JOG, Move, MoveBy 에디터
+│   │   │   ├── process_editors.py  # Pick/Place, 팔레타이징, 비전 에디터
+│   │   │   ├── logic_editors.py    # If, Loop, Math, Switch 에디터
+│   │   │   ├── io_monitor.py       # I/O 모니터링 패널
+│   │   │   └── config_dialog.py    # 설정 다이얼로그
+│   │   └── tools/                  # 🛠 현장 도구
+│   │       ├── oscilloscope.py     # 실시간 오실로스코프
+│   │       ├── palletizing_wizard.py # 팔레타이징 마법사 (6패턴)
+│   │       └── auto_payload.py     # 페이로드 자동 측정
+│   └── digital_twin/              # Page 1: Auto/Monitor Mode (3D 뷰어)
+└── infrastructure/                # 인프라 계층
+    ├── plc/                       # PLC 클라이언트
+    ├── mqtt/                      # MQTT 클라이언트
+    └── db/                        # MySQL MES 클라이언트
+```
+
+---
+
+## 🚀 3. 주요 기능
+
+### Page 1: Auto / Monitor Mode
+- 다중 로봇 상태 모니터링 (Robot A/B/C)
+- 3D 뷰어 기반 실시간 좌표 추적
+- 전체 로봇 일괄 연결/해제
+
+### Page 2: Setting / Teaching Mode
+| 카테고리 | 기능 |
+|---|---|
+| **APK 기능** | Folder, Move Home, Joint Move, Frame Move, Move B/C, Pick, Place, DO, Wait, Wait DI, Loop, If (DI), Math, Comment, Stop, Call |
+| **PC 제어** | Move By, AI, Wait AI, Switch, Force |
+| **추가 기능** | Vision ★, Sync ★ *(★ = APK에 없는 PC 전용)* |
+| **도구** | 오실로스코프, 팔레타이징 마법사, 페이로드 자동 측정 |
+
+### 🧱 팔레타이징 (Pick & Place)
+- **6가지 배치 패턴**: 일반(Z형), 지그재그, 교차(90°), S자형, 외곽나선, 중앙확산
+- **마법사 ↔ 에디터 양방향 연동**: 마법사에서 디자인 → 에디터에 M/N/L, 크기, 간격, 패턴 자동 반영
+- **P1 기반 자동 좌표 계산**: P2(행 끝), P3(열 끝), P4(층 끝) 자동 생성
+- **3동작 시퀀스**: Approach → Target → Retract 자동 실행
+- **3D 다단 적재**: L층 높이 적재 완벽 지원
+
+### 🕹 JOG 제어
+- Joint / Base / Tool 3모드 실시간 조그
+- 속도 1~100단계 슬라이더
+- 로봇 상태 실시간 표시 (정상/동작중/에러/비상정지/충돌)
+
+### 🔧 현장 도구
+- **오실로스코프**: 관절 각도 / Task 좌표 / F/T 센서를 10Hz 실시간 그래프로 시각화
+- **팔레타이징 마법사**: 2D Canvas로 배열 시각 설계, 화살표로 방문 순서 표시
+- **페이로드 자동 측정**: 3자세 루틴으로 툴 무게 & 무게중심 자동 계산
+
+### 🔍 고급 로직
+- **Stack Search**: F/T 센서 기반 적재물 높이 자동 탐색
+- **Spiral Search**: 나선형 경로로 Peg-in-Hole 삽입 자동화
+
+---
+
+## 🎨 4. 디자인 시스템
+
+**"Deep Space Command Center"** 테마 — `presentation/ui/theme.py`
+
+| 토큰 | 값 | 용도 |
+|---|---|---|
+| `BG_BASE` | `#060311` (Midnight Ink) | 주 배경 |
+| `BG_SURFACE` | `#161320` (Slate Deep) | 패널/카드 배경 |
+| `ACCENT_PRIMARY` | `#5800fd` (Deep Violet) | 활성 버튼/하이라이트 |
+| `TEXT_PRIMARY` | `#ffffff` (White Star) | 기본 텍스트 |
+| `SUCCESS` | `#4CAF50` | 실행/ON |
+| `DANGER` | `#F44336` | 정지/OFF |
+
+> 색상이나 폰트를 바꾸고 싶으면 `theme.py`만 수정하면 앱 전체가 일괄 변경됩니다.
+
+---
+
+## 📁 5. 작업 파일 호환성
+
+- Android APK (Conty) ↔ PC HMI 간 JSON 파일 100% 호환
+- 저장 경로: `user_programs/{Robot_Name}/program.json`
+- 불러오기/저장/복사/삭제 모두 지원
+
+---
+
+## 📝 License & Contact
+
+부산 프로젝트 — Indy7 HMI Clean Architecture

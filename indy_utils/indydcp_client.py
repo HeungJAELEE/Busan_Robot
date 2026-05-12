@@ -407,11 +407,11 @@ def dump_buf(msg, buf, length) :
 def socket_connect(func):
     def decorated(*args, **kwargs):
         args[0].lock.acquire()
-        # args[0].connect()
-        func_out = func(*args, **kwargs)
-        # args[0].disconnect()
-        args[0].lock.release()
-        return func_out
+        try:
+            func_out = func(*args, **kwargs)
+            return func_out
+        finally:
+            args[0].lock.release()
     return decorated
 
 # gwkim
@@ -460,7 +460,7 @@ class IndyDCPClient:
 
         self.sock_fd = socket.socket()
 
-        self.time_out = 10
+        self.time_out = 2.0
         self.v_invokeId = 0
 
         self.server_ip = server_ip
@@ -472,11 +472,12 @@ class IndyDCPClient:
         self.robot_status = RobotStatus()
 
     def connect(self):
-        # self.__lock.acquire()
         self.sock_fd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock_fd.settimeout(2.0)
 
         try:
             self.sock_fd.connect((self.server_ip, self.__server_port))
+            self.sock_fd.settimeout(self.time_out)
         except socket.error as e:
             print("Socket connection error: {}".format(e))
             self.sock_fd.close()

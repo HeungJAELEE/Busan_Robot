@@ -9,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')
 from presentation.ui.robot_hmi.robot_hmi_view import RobotHmiView
 from presentation.ui.digital_twin.digital_twin_view import DigitalTwinView
 from core.domains.robot.communication.client_manager import robot_manager
+from presentation.ui.theme import Theme
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -35,20 +36,22 @@ class ModernContyApp(ctk.CTk):
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
         
+        Theme.apply_window_style(self)
+        
         # 상단 네비게이션 (헤더)
-        self.header = ctk.CTkFrame(self, height=60, fg_color="#18181B", corner_radius=0)
+        self.header = ctk.CTkFrame(self, height=60, fg_color=Theme.BG_BASE, corner_radius=0)
         self.header.grid(row=0, column=0, sticky="ew")
         
         # 좌측 상단 로고
-        ctk.CTkLabel(self.header, text="⚡ INDY7 COMMAND CENTER", font=ctk.CTkFont(size=20, weight="bold", slant="italic"), text_color="#00E5FF").pack(side="left", padx=20)
+        ctk.CTkLabel(self.header, text="⚡ INDY7 COMMAND CENTER", font=Theme.font(size=20, weight="bold", role="display"), text_color=Theme.TEXT_PRIMARY).pack(side="left", padx=20)
         
         # 중앙 페이지 탭 버튼
         tab_container = ctk.CTkFrame(self.header, fg_color="transparent")
         tab_container.pack(side="left", expand=True)
         
         # 활성/비활성 스타일 정의
-        self.style_active = {"fg_color": "#1976D2", "text_color": "white", "hover_color": "#1565C0"}
-        self.style_inactive = {"fg_color": "transparent", "text_color": "#8B8B96", "hover_color": "#3A3D45"}
+        self.style_active = {"fg_color": Theme.ACCENT_PRIMARY, "text_color": Theme.TEXT_PRIMARY, "hover_color": Theme.ACCENT_HOVER}
+        self.style_inactive = {"fg_color": "transparent", "text_color": Theme.TEXT_SECONDARY, "hover_color": Theme.BG_SURFACE}
         
         self.btn_page1 = ctk.CTkButton(tab_container, text="[Page 1] Auto / Monitor Mode", corner_radius=15, command=lambda: self.switch_page(1), **self.style_inactive)
         self.btn_page1.pack(side="left", padx=5)
@@ -57,18 +60,11 @@ class ModernContyApp(ctk.CTk):
         self.btn_page2.pack(side="left", padx=5)
         
         # 우측 연결 버튼
-        ctk.CTkButton(self.header, text="로봇 통신 연결", fg_color="#2E7D32", command=self.connect_all).pack(side="right", padx=20)
-        
-        # 서브 메뉴 바
-        self.menu_bar = ctk.CTkFrame(self, height=40, fg_color="#1E1E22", corner_radius=0)
-        self.menu_bar.grid(row=1, column=0, sticky="ew")
-        menu_container = ctk.CTkFrame(self.menu_bar, fg_color="transparent")
-        menu_container.pack(expand=True, fill="y")
-        for m in ["옵션", "로봇설정", "프로그램", "로그"]:
-            ctk.CTkLabel(menu_container, text=m, font=ctk.CTkFont(size=13), text_color="#B0BEC5").pack(side="left", padx=40, pady=5)
+        self.conn_btn = ctk.CTkButton(self.header, text="로봇 통신 연결", fg_color=Theme.SUCCESS, command=self.toggle_connection)
+        self.conn_btn.pack(side="right", padx=20)
         
         # 하단 터미널
-        self.terminal = ctk.CTkTextbox(self, height=150, fg_color="#121215", text_color="#00FF41", font=ctk.CTkFont(family="Consolas", size=13))
+        self.terminal = ctk.CTkTextbox(self, height=150, fg_color=Theme.BG_SURFACE, text_color=Theme.SUCCESS, font=ctk.CTkFont(family="Consolas", size=13))
         self.terminal.grid(row=3, column=0, sticky="ew", padx=10, pady=10)
         sys.stdout = PrintLogger(self.log_queue)
         
@@ -86,17 +82,18 @@ class ModernContyApp(ctk.CTk):
         # Page 2 (HMI)
         self.page2_frame = ctk.CTkFrame(self.pages_container, fg_color="transparent")
         self.page2_frame.grid(row=0, column=0, sticky="nsew")
-        self.hmi_view = RobotHmiView(self.page2_frame)
+        self.hmi_view = RobotHmiView(self.page2_frame, on_back=lambda: self.switch_page(1))
         
-        # 로봇 기본 설정
+        # 로봇 기본 설정 (연결은 하지 않음!)
         robot_manager.add_robot("Robot A", "192.168.3.7")
         robot_manager.add_robot("Robot B", "192.168.3.6")
         robot_manager.add_robot("Robot C", "192.168.3.5")
         
         # 기본 페이지 설정
+        self.active_page = 2
         self.switch_page(2)
         
-        # 폴링 스레드
+        # 폴링 스레드 — 연결된 로봇이면 항상 좌표 수집
         threading.Thread(target=self._poll_loop, daemon=True).start()
         
     def _poll_log_queue(self):
@@ -112,6 +109,7 @@ class ModernContyApp(ctk.CTk):
             self.after(50, self._poll_log_queue)
             
     def switch_page(self, page_num):
+        self.active_page = page_num
         if page_num == 1:
             self.btn_page1.configure(**self.style_active)
             self.btn_page2.configure(**self.style_inactive)
@@ -121,38 +119,106 @@ class ModernContyApp(ctk.CTk):
             self.btn_page2.configure(**self.style_active)
             self.page2_frame.tkraise()
             
-    def connect_all(self):
+    def toggle_connection(self):
         def _bg():
-            for name, info in robot_manager.get_all_robots().items():
-                print(f">> [통신] {name} ({info['ip']}) 연결 시도...")
-                if robot_manager.connect(name):
-                    print(f">> [성공] {name} 연결 완료!")
+            if self.active_page == 2:
+                # Page 2: 현재 활성화된(Active) 로봇만 연결/해제
+                active = robot_manager.get_active_robot_name()
+                if not active:
+                    return
+                info = robot_manager.get_robot_info(active)
+                is_connected = info and info.get("instance") is not None
+                if is_connected:
+                    print(f">> [통신] {active} 연결 해제 시도...")
+                    robot_manager.disconnect(active)
+                    print(f">> [성공] {active} 연결 해제 완료!")
+                else:
+                    print(f">> [통신] {active} 연결 시도...")
+                    if robot_manager.connect(active):
+                        print(f">> [성공] {active} 연결 완료!")
+                    else:
+                        print(f">> [실패] {active} 연결할 수 없습니다.")
+            else:
+                # Page 1: 전체 로봇 일괄 연결/해제
+                any_connected = any(info.get("instance") for info in robot_manager.get_all_robots().values())
+                if any_connected:
+                    for name in list(robot_manager.get_all_robots().keys()):
+                        print(f">> [통신] {name} 일괄 연결 해제 시도...")
+                        robot_manager.disconnect(name)
+                        print(f">> [성공] {name} 연결 해제 완료!")
+                else:
+                    for name, info in robot_manager.get_all_robots().items():
+                        print(f">> [통신] {name} ({info['ip']}) 일괄 연결 시도...")
+                        if robot_manager.connect(name):
+                            print(f">> [성공] {name} 연결 완료!")
         threading.Thread(target=_bg, daemon=True).start()
         
     def _poll_loop(self):
+        """
+        백그라운드 폴링 루프.
+        연결된 모든 로봇의 좌표를 항상 수집.
+        
+        IndyDCP 클라이언트 내부에 자체 lock(@socket_connect)이 있으므로,
+        외부 lock을 추가하지 않는다. JOG/이동 명령이 실행되면
+        IndyDCP 내부 lock에 의해 자동으로 폴링이 대기한 뒤 재개된다.
+        """
         while True:
-            active = robot_manager.get_active_robot_name()
-            
-            # 모든 등록된 로봇을 순회하며 상태(좌표) 수집
-            for name, info in robot_manager.get_all_robots().items():
-                inst = info.get("instance")
-                if inst is not None:
+            try:
+                active = robot_manager.get_active_robot_name()
+                
+                # 글로벌 연결 버튼 상태 동기화
+                self._sync_conn_button(active)
+                
+                # 연결된 모든 로봇 좌표 수집 (IndyDCP 내부 lock이 충돌 방지)
+                for name, info in robot_manager.get_all_robots().items():
+                    inst = info.get("instance")
+                    if inst is None:
+                        continue
+                    
                     try:
-                        with robot_manager.get_lock():
-                            t_pos = inst.get_task_pos()
-                            j_pos = inst.get_joint_pos()
-                            
+                        t_pos = inst.get_task_pos()
+                        j_pos = inst.get_joint_pos()
+                        
+                        # 로봇 상태도 함께 수집 (movedone, busy, emergency 등)
+                        robot_status = None
+                        try:
+                            robot_status = inst.get_robot_status()
+                        except:
+                            pass
+                        
                         if t_pos and j_pos:
-                            t_str = f"X: {t_pos[0]:.2f}  Y: {t_pos[1]:.2f}  Z: {t_pos[2]:.2f}\nU: {t_pos[3]:.2f}  V: {t_pos[4]:.2f}  W: {t_pos[5]:.2f}"
-                            j_str = f"J1: {j_pos[0]:.2f}  J2: {j_pos[1]:.2f}  J3: {j_pos[2]:.2f}\nJ4: {j_pos[3]:.2f}  J5: {j_pos[4]:.2f}  J6: {j_pos[5]:.2f}"
+                            robot_manager.update_robot_state(name, j_pos, t_pos, robot_status)
                             
-                            # active 로봇인지 여부 전달 (메인 텍스트 갱신용)
-                            is_active = (name == active)
-                            
-                            self.after(0, lambda t=t_str, j=j_str, p=t_pos, jp=j_pos, n=name, a=is_active: self._update_labels(t, j, p, jp, n, a))
-                    except Exception as e:
+                            # Page 1일 때만 3D 뷰어 UI 갱신
+                            if self.active_page == 1:
+                                t_str = f"X: {t_pos[0]:.2f}  Y: {t_pos[1]:.2f}  Z: {t_pos[2]:.2f}\nU: {t_pos[3]:.2f}  V: {t_pos[4]:.2f}  W: {t_pos[5]:.2f}"
+                                j_str = f"J1: {j_pos[0]:.2f}  J2: {j_pos[1]:.2f}  J3: {j_pos[2]:.2f}\nJ4: {j_pos[3]:.2f}  J5: {j_pos[4]:.2f}  J6: {j_pos[5]:.2f}"
+                                is_active = (name == active)
+                                self.after(0, lambda t=t_str, j=j_str, p=t_pos, jp=j_pos, n=name, a=is_active: self._update_labels(t, j, p, jp, n, a))
+                    except Exception:
                         pass
-            time.sleep(0.05)
+                        
+            except Exception:
+                pass
+                
+            time.sleep(0.1)
+    
+    def _sync_conn_button(self, active):
+        """글로벌 연결 버튼의 텍스트/색상을 현재 상태에 동기화"""
+        try:
+            if self.active_page == 2:
+                info = robot_manager.get_robot_info(active) if active else None
+                is_connected = info and info.get("instance") is not None
+            else:
+                is_connected = any(info.get("instance") for info in robot_manager.get_all_robots().values())
+            
+            current_text = self.conn_btn.cget("text")
+            if is_connected and current_text == "로봇 통신 연결":
+                self.after(0, lambda: self.conn_btn.configure(text="로봇 연결 해제", fg_color=Theme.DANGER))
+            elif not is_connected and current_text == "로봇 연결 해제":
+                self.after(0, lambda: self.conn_btn.configure(text="로봇 통신 연결", fg_color=Theme.SUCCESS))
+        except Exception:
+            pass
             
     def _update_labels(self, t_str, j_str, t_pos, j_pos, name, is_active):
         # 현재 선택된 타겟 로봇일 경우에만 우측 텔레메트리 메인 패널 갱신

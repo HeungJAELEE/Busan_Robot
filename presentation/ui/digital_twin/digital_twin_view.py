@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from core.domains.robot.communication.client_manager import robot_manager
 import math
+from presentation.ui.robot_hmi.robot_hmi_view import RobotSettingsEditor
 
 class DigitalTwinView:
     def __init__(self, parent_tab):
@@ -66,6 +67,10 @@ class DigitalTwinView:
         ctk.CTkLabel(joint_box, text="JOINT ANGLES (J1 ~ J6)").pack(anchor="w", padx=10, pady=5)
         self.joint_label = ctk.CTkLabel(joint_box, text="WAITING SIGNAL...", text_color="#00FF41", font=ctk.CTkFont(family="Consolas", size=14, weight="bold"), justify="left")
         self.joint_label.pack(anchor="w", padx=10, pady=(0, 10))
+        
+        # 네트워크 및 연결 설정 추가
+        ctk.CTkFrame(self.right_panel, height=2, fg_color="#3A3D45").pack(fill="x", padx=15, pady=15)
+        self.network_editor = RobotSettingsEditor(self.right_panel)
         
         self.center_panel = ctk.CTkFrame(self.parent, fg_color="#18181B", corner_radius=12)
         self.center_panel.grid(row=0, column=1, sticky="nsew", padx=5, pady=10)
@@ -195,31 +200,32 @@ class DigitalTwinView:
                     
     def emergency_stop(self):
         print("\n🚨 [긴급] 사용자가 비상정지(E-STOP) 버튼을 눌렀습니다!")
-        import threading
-        def _bg():
-            inst = robot_manager.get_active_instance()
-            if inst:
-                try:
-                    with robot_manager.get_lock():
-                        inst.stop_emergency()
-                    print(">> 🚨 정지 명령이 전송되었습니다.")
-                except Exception as e:
-                    print(f"❌ [에러] 비상정지 실패: {e}")
-            else:
-                print(">> [알림] 현재 연결된 활성 로봇이 없습니다.")
-        threading.Thread(target=_bg, daemon=True).start()
+        from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
+        RobotControlUseCase.emergency_stop()
+        print(">> 🚨 정지 명령이 전송되었습니다.")
             
     def _safe_action(self, func_name):
-        def _bg():
-            inst = robot_manager.get_active_instance()
-            if inst:
-                try:
-                    with robot_manager.get_lock():
+        """IndyDCP 내부 lock이 thread-safety를 보장하므로 외부 lock 불필요"""
+        from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
+        action_map = {
+            "go_home": RobotControlUseCase.go_home,
+            "go_zero": RobotControlUseCase.go_zero,
+            "reset_robot": RobotControlUseCase.reset_robot,
+        }
+        action = action_map.get(func_name)
+        if action:
+            action()
+        else:
+            # Fallback: 직접 inst 호출 (lock 없이 — IndyDCP 내부 lock이 보호)
+            def _bg():
+                inst = robot_manager.get_active_instance()
+                if inst:
+                    try:
                         getattr(inst, func_name)()
-                except Exception as e:
-                    print(f"❌ [에러] 명령 실행 실패: {e}")
-        import threading
-        threading.Thread(target=_bg, daemon=True).start()
+                    except Exception as e:
+                        print(f"❌ [에러] 명령 실행 실패: {e}")
+            import threading
+            threading.Thread(target=_bg, daemon=True).start()
 
     def _update_lamp(self, addr, state):
         color = "#424242" # Off

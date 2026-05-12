@@ -112,10 +112,39 @@ class ContyProgram:
         
     def _add_system_config_node(self):
         node = TeachingNode(1, 0, 999)
+        node.__raw__ = {
+            "indyCareInfo": {
+                "useIndyCare": False,
+                "ipAddr": "0.0.0.0",
+                "dataConfig": [
+                    {"name": "", "type": 0},
+                    {"name": "", "type": 0},
+                    {"name": "", "type": 0},
+                    {"name": "", "type": 0},
+                    {"name": "", "type": 0}
+                ]
+            },
+            "type": 999,
+            "conveyorConfigInfo": {"conveyorConfig": []},
+            "toolInfo": [],
+            "visionInfo": {"useVision": False},
+            "collisionPolicy": {"policy": 0, "time": 2},
+            "enable": True,
+            "pId": 0,
+            "palletInfo": [],
+            "id": 1
+        }
         self.nodes.append(node)
         
     def _add_program_start_node(self):
         node = TeachingNode(2, 0, 2)
+        node.__raw__ = {
+            "varList": [],
+            "enable": True,
+            "type": 2,
+            "pId": 0,
+            "id": 2
+        }
         self.nodes.append(node)
 
     def add_node(self, internal_type: int, pId: int, waypoint: Optional[WaypointVO] = None) -> TeachingNode:
