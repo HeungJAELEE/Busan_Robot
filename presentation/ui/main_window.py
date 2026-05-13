@@ -9,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')
 from presentation.ui.robot_hmi.robot_hmi_view import RobotHmiView
 from presentation.ui.digital_twin.digital_twin_view import DigitalTwinView
 from core.domains.robot.communication.client_manager import robot_manager
+from infrastructure.repositories.database_repository import db_repository
 from presentation.ui.theme import Theme
 
 ctk.set_appearance_mode("dark")
@@ -195,6 +196,20 @@ class ModernContyApp(ctk.CTk):
                         
                         if t_pos and j_pos:
                             robot_manager.update_robot_state(name, j_pos, t_pos, robot_status)
+                            
+                            # 추가: 토크 값 수집 및 DB 전송
+                            torque = [0]*6
+                            try:
+                                torque = inst.get_control_torque()
+                            except:
+                                pass
+                                
+                            status_data = {
+                                "q": j_pos,
+                                "torque": torque,
+                                "busy": robot_status.get('busy', 0) if robot_status else 0
+                            }
+                            db_repository.insert_realtime_data(name, status_data)
                             
                             # Page 1일 때만 3D 뷰어 UI 갱신
                             if self.active_page == 1:
