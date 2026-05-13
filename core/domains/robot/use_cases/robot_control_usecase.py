@@ -13,6 +13,9 @@ class RobotControlUseCase:
     [인터락] 펜던트(Conty)가 제어권을 가진 상태에서는 HMI의 이동 명령을 차단한다.
     """
     
+    # 글로벌 정지 플래그 (wait_for_move_finish 에서 즉시 반환용)
+    _global_stop = False
+    
     # =========================================================================
     # 0. 인터락 (Interlock) — 제어권 충돌 방지
     # =========================================================================
@@ -132,7 +135,12 @@ class RobotControlUseCase:
             return False
         start = time.time()
         while (time.time() - start) < timeout_sec:
+            # 글로벌 정지 플래그 체크 — 즉시 반환
+            if RobotControlUseCase._global_stop:
+                return False
             try:
+                # get_joint_pos 호출로 소켓 통신 → 응답 헤더에서 robot_status 자동 갱신
+                inst.get_joint_pos()
                 status = inst.get_robot_status()
                 if status.get('movedone', 0) and not status.get('busy', 0):
                     return True
@@ -372,7 +380,6 @@ class RobotControlUseCase:
     @staticmethod
     def set_do(idx: int, val: int):
         """Digital Output 설정 (0: OFF, 1: ON)"""
-        if not RobotControlUseCase._guard_motion("DO 출력"): return False
         inst = robot_manager.get_active_instance()
         if not inst: return False
         def _do():

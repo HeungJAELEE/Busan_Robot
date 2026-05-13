@@ -89,6 +89,9 @@ class ModernContyApp(ctk.CTk):
         robot_manager.add_robot("Robot B", "192.168.3.6")
         robot_manager.add_robot("Robot C", "192.168.3.5")
         
+        # 프로그램 실행 중 폴링 일시중지 플래그
+        self._program_running = False
+        
         # 기본 페이지 설정
         self.active_page = 2
         self.switch_page(2)
@@ -163,6 +166,10 @@ class ModernContyApp(ctk.CTk):
         IndyDCP 내부 lock에 의해 자동으로 폴링이 대기한 뒤 재개된다.
         """
         while True:
+            # 프로그램 실행 중에는 폴링 중지 (소켓 Lock 경합 방지)
+            if self._program_running:
+                time.sleep(0.5)
+                continue
             try:
                 active = robot_manager.get_active_robot_name()
                 

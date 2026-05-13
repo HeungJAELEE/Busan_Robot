@@ -32,12 +32,16 @@ class TeachingRepositoryImpl:
                 max_node_id = node_id
                 
             node = TeachingNode(node_id, raw_node.get("pId", 0), t)
-            node.__raw__ = raw_node.copy()  # <--- MAGIC HAPPENS HERE: Lossless persistence
+            node.__raw__ = raw_node.copy()  # <--- Lossless persistence
             
             node.name = raw_node.get("name", "")
             node.enable = raw_node.get("enable", True)
             
-            if t in [100, 102, 103, 104, 105, 106, 110]:
+            # ─── Conty 실제 타입 매핑 ─────────────────────────
+            # 1=JointMove, 2=FrameMove, 3=CircularMove, 4=MoveHome,
+            # 5=MoveB, 6=MoveC — 모두 wpList로 좌표 참조
+            if t in [1, 2, 3, 5, 6]:
+                # Move 노드: wpList에서 좌표 추출
                 if "wpList" in raw_node and len(raw_node["wpList"]) > 0:
                     wp_ref = raw_node["wpList"][0]
                     if wp_ref.get("t") == 2:
@@ -49,28 +53,79 @@ class TeachingRepositoryImpl:
                             node.target_q = wp.j_pos
                             node.target_p = wp.t_pos
                             node.blending_radius = wp.blend_radius
-                            
-                if t == 110: # Move By
-                    offset = raw_node.get("offset", {})
-                    if "dx" in offset:
-                        node.offset_dx = offset.get("dx", 0.0)
-                        node.offset_dy = offset.get("dy", 0.0)
-                        node.offset_dz = offset.get("dz", 0.0)
-                        
-            elif t == 20: # Loop
-                node.count = raw_node.get("count", 3)
-            elif t == 22: # Wait Time
-                node.time = raw_node.get("time", 1.0)
-            elif t == 28: # Wait DI
+                # target에 직접 좌표가 있는 경우 (Place/Pallet 스타일)
+                elif "target" in raw_node:
+                    target = raw_node["target"]
+                    point = target.get("point", {})
+                    node.target_q = point.get("q", [0]*6)
+                    node.target_p = point.get("p", [0]*6)
+                    node.blending_radius = raw_node.get("blendRadius", 0)
+                    
+            elif t == 4:
+                # type=4는 두 가지 용도:
+                # 1) doList가 있으면 → 직접 DO 출력 노드
+                # 2) doList가 없으면 → MoveHome
+                do_list = raw_node.get("doList", [])
+                if do_list:
+                    node.is_direct_do = True
+                    node.doList = do_list
+                else:
+                    node.is_direct_do = False
+                
+            elif t == 20:  # DO (Digital Output)
+                # count = toolCommand id → toolInfo에서 doMap 참조
+                node.do_tool_cmd_id = raw_node.get("count", -1)
+                # toolInfo에서 실제 DO 매핑 추출
+                node.do_map = []
+                main_prog = next((n for n in data.get("program", []) if n.get("type") == 999), None)
+                if main_prog:
+                    for tool in main_prog.get("toolInfo", []):
+                        for tc in tool.get("toolCommand", []):
+                            if tc.get("id") == node.do_tool_cmd_id:
+                                node.do_map = tc.get("doMap", [])
+                                node.do_cmd_name = tc.get("name", "")
+                                node.do_postwait = tc.get("postwait", 0)
+                                break
+                                
+            elif t == 21:  # WaitDI (DI 신호 대기)
+                node.diList = raw_node.get("diList", [])
+                node.endtoolDiList = raw_node.get("endtoolDiList", [])
+                
+            elif t == 22:  # AO (Analog Output)
+                pass  # raw에 보존
+                
+            elif t == 24:  # EndToolDO
+                pass  # raw에 보존
+                
+            elif t == 28:  # Wait (시간 대기)
                 node.time = raw_node.get("time", 1.0)
                 node.diList = raw_node.get("diList", [])
-            elif t == 24: # If Condition
+                
+            elif t == 29:  # WaitPeriod (DI 신호 주기적 대기)
+                node.diList = raw_node.get("diList", [])
+                node.endtoolDiList = raw_node.get("endtoolDiList", [])
+                
+            elif t == 100:  # Folder (그룹)
+                pass  # children은 pId로 자동 연결
+                
+            elif t == 102:  # If(DI) 조건 분기
+                node.diList = raw_node.get("diList", [])
+                # 변수 비교 조건도 지원
                 cond = raw_node.get("cond", {})
-                node.cond_value = cond.get("right", {}).get("value", 0.0)
-                op_val = cond.get("op", 0)
-                op_map = {0: "==", 1: "!=", 2: ">", 3: "<", 4: ">=", 5: "<="}
-                node.cond_operator = op_map.get(op_val, "==")
-            elif t in [201, 202]: # Pick/Place
+                if cond:
+                    node.cond_value = cond.get("right", {}).get("value", 0.0)
+                    op_val = cond.get("op", 0)
+                    op_map = {0: "==", 1: "!=", 2: ">", 3: "<", 4: ">=", 5: "<="}
+                    node.cond_operator = op_map.get(op_val, "==")
+                    
+            elif t == 103:  # Loop (반복문)
+                # count 필드가 있으면 그 값, 없으면 None (무한 루프 — 원본 보존)
+                node.count = raw_node.get("count", None)
+                
+            elif t in [200]:  # Pick (그룹)
+                node.groupName = raw_node.get("groupName", "")
+                
+            elif t in [201, 202]:  # Place / Pallet
                 node.toolId = raw_node.get("toolId", 1)
                 target = raw_node.get("target", {})
                 node.target_type = target.get("type", 0)
@@ -161,7 +216,7 @@ class TeachingRepositoryImpl:
                 n_dict["name"] = node.name
                 
             # Override specific properties handled by UI editors
-            if node.type in [103, 104, 105, 106, 110]:
+            if node.type in [1, 2, 3, 5, 6]:  # Move nodes
                 # If UI modified boundary, we must sync it to moveList
                 if "boundary" in n_dict and "moveList" in data:
                     for mv in data["moveList"]:
@@ -185,7 +240,15 @@ class TeachingRepositoryImpl:
                     existing_wp["q"] = node.waypoint.j_pos
                     existing_wp["blendRadius"] = node.waypoint.blend_radius
                     
-            if node.type == 20: n_dict["count"] = getattr(node, "count", 3)
+            if node.type == 103:  # Loop
+                # count가 원본에 있었으면 보존, 없었으면 추가하지 않음
+                raw_count = getattr(node, "__raw__", {}).get("count")
+                if raw_count is not None:
+                    n_dict["count"] = getattr(node, "count", raw_count)
+                elif hasattr(node, "count") and node.count is not None:
+                    n_dict["count"] = node.count
+            elif node.type == 20:  # DO — count는 toolCommand id를 보존
+                n_dict["count"] = getattr(node, "do_tool_cmd_id", n_dict.get("count", -1))
             elif node.type in [201, 202]: # Pick / Place
                 # Update approach/retract directly from DDD node
                 n_dict["approach"] = getattr(node, "approach", n_dict.get("approach", {
@@ -257,16 +320,14 @@ class TeachingRepositoryImpl:
                     target["point"]["p"] = getattr(node, "target_p", getattr(node, "task_pos", target["point"].get("p", [0]*6)))
                 n_dict["target"] = target
                 
-            elif node.type == 22: n_dict["time"] = getattr(node, "time", 1.0)
-            elif node.type == 28: 
+            elif node.type == 28:  # Wait (시간)
                 n_dict["time"] = getattr(node, "time", 1.0)
                 n_dict["diList"] = getattr(node, "diList", [])
-            elif node.type == 110:
-                n_dict["offset"] = {
-                    "dx": getattr(node, "offset_dx", 0.0),
-                    "dy": getattr(node, "offset_dy", 0.0),
-                    "dz": getattr(node, "offset_dz", 0.0)
-                }
+            elif node.type == 29:  # WaitPeriod (DI)
+                n_dict["diList"] = getattr(node, "diList", [])
+                n_dict["endtoolDiList"] = getattr(node, "endtoolDiList", [])
+            elif node.type == 21:  # WaitDI
+                n_dict["diList"] = getattr(node, "diList", [])
 
             # Preserve original boundary values as-is (do not clamp)
             # The user sets velLevel/accLevel intentionally; overriding them causes

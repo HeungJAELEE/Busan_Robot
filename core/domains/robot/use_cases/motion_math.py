@@ -40,16 +40,28 @@ class MotionMath:
             return p1 if p1 else [0.0]*6
             
         result = [0.0] * 6
-        m_steps = max(1, size_m - 1)
-        n_steps = max(1, size_n - 1)
-        l_steps = max(1, size_l - 1)
         
         for i in range(6):
-            dm = (p2[i] - p1[i]) / m_steps if size_m > 1 else 0.0
-            dn = (p3[i] - p1[i]) / n_steps if size_n > 1 else 0.0
+            # M 방향 보간 (행) — M=1이면 행 이동 없음
+            dm = 0.0
+            if size_m > 1:
+                dm = (p2[i] - p1[i]) / (size_m - 1)
+            
+            # N 방향 보간 (열) — N=1이면 열 이동 없음
+            dn = 0.0
+            if size_n > 1:
+                dn = (p3[i] - p1[i]) / (size_n - 1)
+            
+            # L 방향 보간 (층) — P4가 있으면 P4 기준, 없으면 Z축 자동 오프셋
             dl = 0.0
-            if p4 and len(p4) >= 6 and size_l > 1:
-                dl = (p4[i] - p1[i]) / l_steps
+            if size_l > 1:
+                if p4 and len(p4) >= 6:
+                    dl = (p4[i] - p1[i]) / (size_l - 1)
+                elif i == 2:
+                    # P4 없을 때: Z축만 자동 오프셋 (P2-P1의 Z 차이 또는 기본 0.1m 간격)
+                    z_gap = abs(p2[2] - p1[2]) if abs(p2[2] - p1[2]) > 0.001 else 0.1
+                    dl = z_gap
+            
             result[i] = p1[i] + (dm * current_m) + (dn * current_n) + (dl * current_l)
             
         return result

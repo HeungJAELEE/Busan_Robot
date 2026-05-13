@@ -1,7 +1,10 @@
 import customtkinter as ctk
 from core.domains.robot.communication.client_manager import robot_manager
 from .editors.motion_editors import JogController, MoveEditor, MoveByEditor, MoveCEditor, MoveHomeEditor, ForceEditor
-from .editors.logic_editors import LoopEditor, MathEditor, CallEditor, IfEditor, WaitEditor, WaitDIEditor, WaitAIEditor, CommentEditor, StopEditor, SwitchEditor, FolderEditor
+from .editors.logic_editors import (LoopEditor, MathEditor, CallEditor, IfEditor, WaitEditor, WaitDIEditor, WaitAIEditor,
+                                    CommentEditor, StopEditor, SwitchEditor, FolderEditor,
+                                    WaitForEditor, LoopBreakEditor, SpeedRatioEditor, ToolSensingEditor,
+                                    ConveyorTrackingEditor, TaktTimeEditor, DetectEditor, RetrieveEditor, PythonScriptEditor)
 from .editors.process_editors import PickPlaceEditor, VisionEditor, SyncEditor, SetAOEditor
 from presentation.ui.theme import Theme
 import tkinter as tk
@@ -37,6 +40,7 @@ class ProgramTreeEditor:
         self.on_node_selected_callback = None
         self.node_data = {}
         self.custom_paths = {} # robot_name -> file_path
+        self._load_custom_paths()  # 디스크에서 마지막 사용 경로 복원
         self.current_robot = "Robot A"
         self.is_loading = False
         
@@ -65,13 +69,67 @@ class ProgramTreeEditor:
         dir_path = os.path.join(base_dir, 'user_programs', robot_name.replace(" ", "_"))
         os.makedirs(dir_path, exist_ok=True)
         return os.path.join(dir_path, 'program.json')
+    
+    def _get_paths_config_file(self):
+        """custom_paths를 영구 저장하는 설정 파일 경로"""
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+        return os.path.join(base_dir, 'user_programs', '_custom_paths.json')
+    
+    def _save_custom_paths(self):
+        """custom_paths를 디스크에 저장 (앱 재시작 후에도 유지)"""
+        try:
+            cfg = self._get_paths_config_file()
+            os.makedirs(os.path.dirname(cfg), exist_ok=True)
+            with open(cfg, 'w', encoding='utf-8') as f:
+                json.dump(self.custom_paths, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f">> [경고] custom_paths 저장 실패: {e}")
+    
+    def _load_custom_paths(self):
+        """디스크에서 custom_paths 복원"""
+        try:
+            cfg = self._get_paths_config_file()
+            if os.path.exists(cfg):
+                with open(cfg, 'r', encoding='utf-8') as f:
+                    self.custom_paths = json.load(f)
+                print(f">> [정보] 저장된 프로그램 경로 복원: {self.custom_paths}")
+        except Exception as e:
+            print(f">> [경고] custom_paths 복원 실패: {e}")
         
     def save_program(self, silent=False):
         robot = self.robot_sel.get()
         if not silent:
             from core.domains.robot.communication.client_manager import robot_manager
             robot_manager.set_active_robot(robot)
-        path = self.get_current_program_path(robot)
+        
+        # 트리가 비어있으면 저장하지 않음 (빈 파일로 덮어씌움 방지)
+        all_children = self.tree.get_children()
+        if not all_children:
+            print(">> [경고] 트리가 비어있어 저장을 건너뜁니다.")
+            return
+        
+        # 실제 노드가 있는지 확인 (Main Program만 있고 자식이 없으면 스킵)
+        has_real_nodes = False
+        for child in all_children:
+            text = self.tree.item(child, "text").strip()
+            if "Main Program" in text:
+                if self.tree.get_children(child):
+                    has_real_nodes = True
+                    break
+            else:
+                has_real_nodes = True
+                break
+        
+        if not has_real_nodes and silent:
+            # 자동 저장 시 빈 프로그램이면 기존 파일 보존
+            return
+            
+        # 항상 user_programs 경로에 저장 (기본)
+        default_path = self.get_program_path(robot)
+        # custom_path가 있으면 거기에도 저장
+        custom_path = self.custom_paths.get(robot)
+        
+        path = custom_path if custom_path else default_path
         
         try:
             from core.domains.teaching_management.entities import ContyProgram, TeachingNode
@@ -94,53 +152,68 @@ class ProgramTreeEditor:
                     n = TeachingNode(len(prog.nodes) + len(nodes) + 1, p_id, 100)
                     n.name = node_name
                     
-                    if "Move J" in node_name: n.type = 103
-                    elif "Move L" in node_name: n.type = 104
-                    elif "Move C" in node_name: n.type = 105
-                    elif "Move B" in node_name: n.type = 106
-                    elif "Move By" in node_name: n.type = 110
-                    elif "Move Home" in node_name: n.type = 102
-                    elif "Pick" in node_name: n.type = 201
-                    elif "Place" in node_name: n.type = 202
-                    elif "Wait DI" in node_name: n.type = 29
-                    elif "Wait AI" in node_name: n.type = 30
-                    elif "Wait" in node_name: n.type = 28
-                    elif "Loop" in node_name: n.type = 20
-                    elif "Switch" in node_name: n.type = 31
-                    elif "If" in node_name: n.type = 29
-                    elif "Math" in node_name: n.type = 21
-                    elif "Call" in node_name: n.type = 40
-                    elif "Force" in node_name: n.type = 41
-                    elif "Vision" in node_name: n.type = 203
-                    elif "Sync" in node_name: n.type = 60
-                    elif "Set DO" in node_name: n.type = 25
-                    elif "Set AO" in node_name: n.type = 26
-                    elif "Folder" in node_name: n.type = 98
-                    elif "Comment" in node_name: n.type = 99
-                    elif "Stop" in node_name: n.type = 10
+                    # ─── Conty 실제 타입 매핑 (새 노드 생성 시) ─────
+                    if "Move J" in node_name: n.type = 1        # JointMove
+                    elif "Move L" in node_name: n.type = 2      # FrameMove
+                    elif "Move C" in node_name: n.type = 3      # CircularMove
+                    elif "Move B" in node_name: n.type = 5      # MoveB
+                    elif "Move By" in node_name: n.type = 6     # frameMove:Relative
+                    elif "Move Home" in node_name: n.type = 4   # MoveHome
+                    elif "Smart DO" in node_name: n.type = 4    # smartDO (type=4+doList)
+                    elif "Pick" in node_name: n.type = 200      # Pick (그룹)
+                    elif "Pallet" in node_name: n.type = 202    # Pallet
+                    elif "Place" in node_name: n.type = 201     # Place
+                    elif "Wait DI" in node_name: n.type = 29    # WaitPeriod (DI)
+                    elif "Wait" in node_name: n.type = 28       # Wait (시간)
+                    elif "Loop" in node_name: n.type = 103      # Loop
+                    elif "Else" in node_name: n.type = 26       # Else
+                    elif "If Var" in node_name: n.type = 25     # If(변수)
+                    elif "If" in node_name: n.type = 102        # If(DI)
+                    elif "Set DO" in node_name: n.type = 20     # toolCommand
+                    elif "EndTool" in node_name: n.type = 24    # endToolDO
+                    elif "Set AO" in node_name: n.type = 22     # smartAO
+                    elif "Call" in node_name: n.type = 250      # Call
+                    elif "Force" in node_name: n.type = 302     # Force
+                    elif "Folder" in node_name: n.type = 100    # Folder
+                    elif "Comment" in node_name: n.type = 40    # Comment
+                    elif "Stop" in node_name: n.type = 41       # Stop
+                    elif "Math" in node_name: n.type = 21       # assignment
+                    elif "Wait For" in node_name: n.type = 30   # waitFor (조건 대기)
+                    elif "Loop Break" in node_name: n.type = 31 # loopBreak
+                    elif "Speed Ratio" in node_name: n.type = 32 # speedRatio
+                    elif "Tool Sensing" in node_name: n.type = 23 # toolSensing
+                    elif "Conveyor" in node_name: n.type = 300   # conveyorTracking
+                    elif "TaktTime" in node_name: n.type = 303   # indyCARE:TaktTime
+                    elif "Detect" in node_name: n.type = 400     # detect
+                    elif "Retrieve" in node_name: n.type = 401   # retrieve
+                    elif "Python Script" in node_name: n.type = 500 # pythonScript
                     
                     # Conty 호환 __raw__ 기본 템플릿 생성
                     _ref = {"type": 1, "tref": [0,0,0,0,0,0]}
                     _tcp = [0,0,0,0,0,0]
                     raw_templates = {
-                        100: {"enable": True, "type": 100, "pId": p_id},  # Move (generic)
-                        103: {"wpList": [], "enable": True, "type": 103, "pId": p_id},  # Move J
-                        104: {"wpList": [], "enable": True, "type": 104, "pId": p_id},  # Move L
-                        105: {"wpList": [], "enable": True, "type": 105, "pId": p_id},  # Move C
-                        106: {"wpList": [], "enable": True, "type": 106, "pId": p_id},  # Move B
-                        110: {"enable": True, "type": 110, "pId": p_id, "offset": {"dx": 0, "dy": 0, "dz": 0}},
-                        102: {"enable": True, "type": 102, "pId": p_id},  # Move Home
-                        20:  {"count": -1, "enable": True, "type": 20, "pId": p_id},  # Loop
-                        28:  {"endtoolDiList": [], "type": 28, "time": 1, "enable": True, "diList": [], "pId": p_id},
-                        29:  {"endtoolDiList": [], "type": 29, "enable": True, "diList": [], "pId": p_id},
-                        30:  {"enable": True, "type": 30, "pId": p_id},
-                        22:  {"time": 0, "enable": True, "type": 22, "pId": p_id},
-                        25:  {"doList": [], "enable": True, "type": 4, "pId": p_id},  # Set DO → Conty type=4
-                        26:  {"enable": True, "type": 5, "aoList": [], "pId": p_id},  # Set AO → Conty type=5
-                        21:  {"enable": True, "type": 21, "pId": p_id},
-                        31:  {"varList": [], "enable": True, "type": 3, "pId": p_id},  # Switch → Conty type=3
-                        40:  {"enable": True, "type": 40, "toolCmd": {"cmdId": -1, "toolId": -1}, "pId": p_id},
-                        41:  {"type": 41, "toolCmd": {"cmdId": -1, "toolId": -1}, "enable": True, "sensName": "", "pId": p_id},
+                        1:   {"wpList": [], "enable": True, "type": 1, "pId": p_id},   # JointMove
+                        2:   {"wpList": [], "enable": True, "type": 2, "pId": p_id},   # FrameMove
+                        3:   {"wpList": [], "enable": True, "type": 3, "pId": p_id},   # CircularMove
+                        4:   {"enable": True, "type": 4, "pId": p_id},                 # MoveHome
+                        5:   {"wpList": [], "enable": True, "type": 5, "pId": p_id},   # MoveB
+                        20:  {"count": -1, "enable": True, "type": 20, "pId": p_id},   # DO
+                        21:  {"endtoolDiList": [], "enable": True, "type": 21, "diList": [], "pId": p_id},  # WaitDI
+                        22:  {"enable": True, "type": 22, "pId": p_id},                # AO
+                        24:  {"enable": True, "type": 24, "pId": p_id},                # EndToolDO
+                        25:  {"enable": True, "type": 25, "cond": {}, "pId": p_id},       # If(변수)
+                        26:  {"enable": True, "type": 26, "pId": p_id},                # Else
+                        28:  {"endtoolDiList": [], "type": 28, "time": 1, "enable": True, "diList": [], "pId": p_id},  # Wait
+                        29:  {"endtoolDiList": [], "type": 29, "enable": True, "diList": [], "pId": p_id},  # WaitPeriod
+                        30:  {"endtoolDiList": [], "type": 30, "enable": True, "diList": [], "pId": p_id},  # WaitDI(alt)
+                        40:  {"enable": True, "type": 40, "pId": p_id},                # Comment
+                        41:  {"enable": True, "type": 41, "pId": p_id},                # Stop
+                        100: {"enable": True, "type": 100, "pId": p_id},               # Folder
+                        102: {"enable": True, "type": 102, "diList": [], "pId": p_id},  # If(DI)
+                        103: {"enable": True, "type": 103, "pId": p_id},               # Loop (count는 없으면 무한)
+                        104: {"enable": True, "type": 104, "pId": p_id},               # PalletDef
+                        105: {"enable": True, "type": 105, "pId": p_id},               # PalletDef2
+                        200: {"groupName": "", "enable": True, "type": 200, "pId": p_id},  # Pick
                         201: {"enable": True, "type": 201, "pId": p_id, "toolId": 1, "sensName": "",
                               "approach": {"direction": 0, "boundary": {"velLevel": 5, "accLevel": 5}, "distance": 0.1, "waitTime": 0, "waitFor": {"type": 0, "time": 0}},
                               "retract": {"direction": 1, "boundary": {"velLevel": 5, "accLevel": 5}, "distance": 0.1, "waitTime": 0, "waitFor": {"type": 0, "time": 0}},
@@ -151,11 +224,16 @@ class ProgramTreeEditor:
                               "retract": {"direction": 1, "boundary": {"velLevel": 5, "accLevel": 5}, "distance": 0.1, "waitTime": 0, "waitFor": {"type": 0, "time": 0}},
                               "target": {"type": 0, "boundary": {"velLevel": 5, "accLevel": 5}, "pallet": {},
                                          "point": {"q": [], "p": []}, "refFrame": _ref, "tcp": _tcp}},
-                        203: {"enable": True, "type": 203, "pId": p_id},
-                        10:  {"enable": True, "type": 1, "pId": p_id},  # Stop → Conty type=1
-                        98:  {"groupName": "", "enable": True, "type": 200, "pId": p_id},  # Folder → Conty type=200
-                        99:  {"enable": True, "type": 99, "pId": p_id},
-                        60:  {"enable": True, "type": 60, "pId": p_id},
+                        250: {"enable": True, "type": 250, "pId": p_id},               # Call
+                        300: {"enable": True, "type": 300, "pId": p_id},               # ConveyorTracking
+                        302: {"enable": True, "type": 302, "pId": p_id},               # Force
+                        303: {"enable": True, "type": 303, "pId": p_id},               # TaktTime
+                        23:  {"enable": True, "type": 23, "pId": p_id, "sensName": ""},  # ToolSensing
+                        31:  {"enable": True, "type": 31, "pId": p_id},                # LoopBreak
+                        32:  {"enable": True, "type": 32, "pId": p_id, "prgSpdRatio": 100},  # SpeedRatio
+                        400: {"enable": True, "type": 400, "pId": p_id},               # Detect
+                        401: {"enable": True, "type": 401, "pId": p_id},               # Retrieve
+                        500: {"enable": True, "type": 500, "pId": p_id, "scriptCode": ""},  # PythonScript
                     }
                     
                     if child in self.node_data:
@@ -211,6 +289,18 @@ class ProgramTreeEditor:
                 
             prog.nodes = _build_nodes("", 0)
             repo.save_to_json(prog, path)
+            
+            # user_programs 기본 경로에도 백업 저장 (유실 방지)
+            if path != default_path:
+                try:
+                    repo.save_to_json(prog, default_path)
+                except:
+                    pass
+            
+            # 현재 경로 기록
+            self.custom_paths[robot] = path
+            self._save_custom_paths()
+            
             print(f">> [성공] 프로그램 {prog.name} 저장 완료: {path}")
             if not silent:
                 from tkinter import messagebox
@@ -295,49 +385,144 @@ class ProgramTreeEditor:
                             
                             parent_item = node_map.get(pid, main_node)
                             node_str = f" Node ({name})"
-                            if t == 100: node_str = f" Move Group ({name})" if name else " Move Group"
-                            elif t == 102: node_str = f" Move Home Node ({name})" if name else " Move Home Node"
-                            elif t == 103: node_str = f" Move J Node ({name})" if name else " Move J Node"
-                            elif t == 104: node_str = f" Move L Node ({name})" if name else " Move L Node"
-                            elif t == 105: node_str = f" Move C Node ({name})" if name else " Move C Node"
-                            elif t == 106: node_str = f" Move B Node ({name})" if name else " Move B Node"
-                            elif t == 110: node_str = f" Move By Node ({name})" if name else " Move By Node"
-                            elif t == 200: node_str = f" Folder ({name})" if name else " Folder"
-                            elif t == 201: node_str = f" Pick Node ({name})" if name else " Pick Node"
-                            elif t == 202: node_str = f" Place Node ({name})" if name else " Place Node"
-                            elif t == 28: node_str = " Wait Node"
-                            elif t == 29: node_str = " Wait DI Node"
-                            elif t == 30: node_str = " Wait AI Node"
-                            elif t == 31: node_str = f" Switch Node ({name})" if name else " Switch Node"
-                            elif t == 20: node_str = " Loop Node"
-                            elif t == 21: node_str = f" Math Node ({name})" if name else " Math Node"
-                            elif t == 24: node_str = f" If Condition ({name})" if name else " If Condition"
-                            elif t == 25: node_str = f" Set DO Node ({name})" if name else " Set DO Node"
-                            elif t == 26: node_str = f" Set AO Node ({name})" if name else " Set AO Node"
-                            elif t == 40: node_str = f" Call Node ({name})" if name else " Call Node"
-                            elif t == 41: node_str = f" Force Node ({name})" if name else " Force Node"
-                            elif t == 60: node_str = f" Sync Node ({name})" if name else " Sync Node"
-                            elif t == 203: node_str = f" Vision Node ({name})" if name else " Vision Node"
-                            elif t == 999: node_str = f" Program Settings"
-                            elif t == 2: node_str = f" Variables"
-                            else: node_str = f" Unknown Node ({t})"
+                            # ─── Conty 실제 타입 매핑 ─────────────
+                            # ─── Conty 실제 타입 코드 (학습파일 12개 분석 기반) ───
+                            if t == 999: node_str = " Program Settings"
+                            elif t == 1: node_str = f" JointMove ({name})" if name else " JointMove"
+                            elif t in [2, 3]:  # Variables
+                                vl = getattr(node, "varList", getattr(node, "__raw__", {}).get("varList", []))
+                                node_str = f" Variables ({len(vl)}개)" if vl else " Variables"
+                            elif t == 4:  # SmartDO
+                                do_list = getattr(node, "doList", getattr(node, "__raw__", {}).get("doList", []))
+                                if do_list:
+                                    pins = ", ".join(f"DO{d['idx']}={'ON' if d['value'] else 'OFF'}" for d in do_list)
+                                    node_str = f" Smart DO ({pins})"
+                                else:
+                                    node_str = " Smart DO"
+                            elif t == 5:  # SmartAO
+                                node_str = " Smart AO"
+                            elif t == 6:  # EndTool DO
+                                node_str = " EndTool DO"
+                            elif t == 20:  # Loop
+                                node_str = " Loop"
+                            elif t == 21:  # loopBreak
+                                node_str = " Loop Break"
+                            elif t == 22:  # Wait (시간)
+                                time_v = getattr(node, "time", getattr(node, "__raw__", {}).get("time", 0))
+                                node_str = f" Wait ({time_v}s)"
+                            elif t == 23:  # if (변수 조건)
+                                node_str = f" If Var ({name})" if name else " If Var"
+                            elif t == 24:  # if (조건)
+                                node_str = f" If ({name})" if name else " If"
+                            elif t == 28:  # Wait For [DI]
+                                di_list = getattr(node, "diList", getattr(node, "__raw__", {}).get("diList", []))
+                                time_v = getattr(node, "time", getattr(node, "__raw__", {}).get("time", 0))
+                                if di_list:
+                                    pins = ", ".join(f"DI{d['idx']}" for d in di_list)
+                                    node_str = f" Wait For [DI] ({pins})"
+                                else:
+                                    node_str = f" Wait For [DI] (DI 미지정)"
+                            elif t == 29:  # waitFor[DI] / if[DI] (자식 유무로 구분)
+                                di_list = getattr(node, "diList", getattr(node, "__raw__", {}).get("diList", []))
+                                # 자식이 있으면 if[DI], 없으면 waitFor[DI]
+                                has_children = any(n2.pId == cid for n2 in program.nodes if hasattr(n2, 'pId'))
+                                if di_list:
+                                    pins = ", ".join(f"DI{d['idx']}" for d in di_list)
+                                    if has_children:
+                                        node_str = f" If [DI] ({pins})"
+                                    else:
+                                        node_str = f" Wait For [DI] ({pins})"
+                                else:
+                                    node_str = " If [DI]" if has_children else " Wait For [DI]"
+                            elif t == 40:  # toolCommand
+                                raw = getattr(node, "__raw__", {})
+                                cmd = raw.get("toolCmd", "")
+                                node_str = f" Tool Command ({cmd})" if cmd else " Tool Command"
+                            elif t == 41:  # toolSensing
+                                raw = getattr(node, "__raw__", {})
+                                sens = raw.get("sensName", "")
+                                node_str = f" Tool Sensing ({sens})" if sens else " Tool Sensing"
+                            elif t == 100:  # Home
+                                node_str = f" Home ({name})" if name else " Home"
+                            elif t == 102:  # FrameMove (이름 있음)
+                                node_str = f" FrameMove ({name})" if name else " FrameMove"
+                            elif t == 103:  # FrameMove:Absolute
+                                node_str = f" FrameMove ({name})" if name else " FrameMove"
+                            elif t == 200: node_str = f" Pick Group ({name})" if name else " Pick Group"
+                            elif t == 201: node_str = f" Pick ({name})" if name else " Pick"
+                            elif t == 202: node_str = f" Place ({name})" if name else " Place"
+                            elif t == 250:
+                                spd = getattr(node, "__raw__", {}).get("prgSpdRatio", "")
+                                node_str = f" Call ({name})" if name else f" Call (spd={spd}%)"
+                            elif t == 302:
+                                node_str = f" indyCARE ({name})" if name else " indyCARE"
+                            elif t == 104: node_str = f" Pallet Def ({name})" if name else " Pallet Def"
+                            elif t == 105: node_str = f" Pallet Def ({name})" if name else " Pallet Def"
+                            else: node_str = f" Unknown ({t})"
                                 
                             n_id = self.tree.insert(parent_item, "end", text=node_str)
                             node_map[cid] = n_id
                             
-                            # OOD TeachingRepositoryImpl uses target_q and target_p
+                            # node_data에 raw 정보 저장 (에디터/실행 엔진용)
                             self.node_data[n_id] = {
                                 "q": getattr(node, "target_q", getattr(node, "joint_pos", [0.0]*6)),
-                                "p": getattr(node, "target_p", getattr(node, "task_pos", [0.0]*6))
+                                "p": getattr(node, "target_p", getattr(node, "task_pos", [0.0]*6)),
+                                "__raw__": getattr(node, "__raw__", {}),
                             }
                             
-                            if t in [103, 104, 105, 106, 110]:
+                            # ─── Conty 실제 타입별 데이터 (수정됨) ─────────
+                            if t == 1:  # JointMove
                                 self.node_data[n_id]["t_type"] = "move"
-                                self.node_data[n_id]["b_radius"] = getattr(node, "blending_radius", 0.0)
-                                self.node_data[n_id]["boundary"] = getattr(node, "__raw__", {}).get("boundary", {"velLevel": 5, "accLevel": 5})
-                                if t == 110:
-                                    self.node_data[n_id]["offset"] = getattr(node, "__raw__", {}).get("offset", {})
-                            elif t in [201, 202]:
+                                raw = getattr(node, "__raw__", {})
+                                target = raw.get("target", {})
+                                self.node_data[n_id]["boundary"] = target.get("boundary", {"velLevel": 5, "accLevel": 5})
+                                self.node_data[n_id]["tcp"] = target.get("tcp", [0,0,0,0,0,0])
+
+                            elif t in [2, 3]:  # Variables
+                                raw = getattr(node, "__raw__", {})
+                                self.node_data[n_id]["varList"] = raw.get("varList", getattr(node, "varList", []))
+
+                            elif t == 4:  # SmartDO
+                                do_list = getattr(node, "doList", getattr(node, "__raw__", {}).get("doList", []))
+                                self.node_data[n_id]["doList"] = do_list
+
+                            elif t == 5:  # SmartAO
+                                raw = getattr(node, "__raw__", {})
+                                self.node_data[n_id]["aoList"] = raw.get("aoList", [])
+
+                            elif t == 6:  # EndTool DO
+                                raw = getattr(node, "__raw__", {})
+                                self.node_data[n_id]["endtoolDoList"] = raw.get("endtoolDoList", [])
+
+                            elif t == 20:  # Loop
+                                raw = getattr(node, "__raw__", {})
+                                self.node_data[n_id]["count"] = raw.get("count", getattr(node, "count", -1))
+                                
+                            elif t == 21:  # loopBreak (필드 없음)
+                                pass
+
+                            elif t in [22, 28]:  # Wait (시간 대기)
+                                self.node_data[n_id]["time"] = getattr(node, "time", getattr(node, "__raw__", {}).get("time", 0))
+
+                            elif t in [23, 24]:  # if (변수/조건)
+                                raw = getattr(node, "__raw__", {})
+                                self.node_data[n_id]["cond"] = raw.get("cond", {})
+                                
+                            elif t == 29:  # waitFor[DI] / if[DI]
+                                self.node_data[n_id]["diList"] = getattr(node, "diList", getattr(node, "__raw__", {}).get("diList", []))
+                                self.node_data[n_id]["endtoolDiList"] = getattr(node, "endtoolDiList", getattr(node, "__raw__", {}).get("endtoolDiList", []))
+
+                            elif t in [40, 41]:  # toolCommand / toolSensing
+                                raw = getattr(node, "__raw__", {})
+                                self.node_data[n_id]["toolCmd"] = raw.get("toolCmd", "")
+                                self.node_data[n_id]["sensName"] = raw.get("sensName", "")
+
+                            elif t in [102, 103]:  # FrameMove
+                                self.node_data[n_id]["t_type"] = "move"
+                                raw = getattr(node, "__raw__", {})
+                                self.node_data[n_id]["name"] = raw.get("name", name)
+                                
+                            elif t in [201, 202]:  # Place / Pallet
                                 self.node_data[n_id]["target_type"] = getattr(node, "target_type", 0)
                                 self.node_data[n_id]["t_type"] = getattr(node, "target_type", 0)
                                 self.node_data[n_id]["target_pallet_name"] = getattr(node, "target_pallet_name", "")
@@ -349,27 +534,10 @@ class ProgramTreeEditor:
                                 self.node_data[n_id]["ret_data"] = getattr(node, "__raw__", {}).get("retract", getattr(node, "retract", {}))
                                 self.node_data[n_id]["approach"] = self.node_data[n_id]["app_data"]
                                 self.node_data[n_id]["retract"] = self.node_data[n_id]["ret_data"]
-                            elif t == 21: # Math
-                                self.node_data[n_id]["mathVar"] = getattr(node, "math_var_name", "var1")
-                                self.node_data[n_id]["mathOp"] = getattr(node, "math_operator", "+")
-                                self.node_data[n_id]["mathVal"] = getattr(node, "math_value", 0.0)
-                            elif t == 24: # If
-                                self.node_data[n_id]["cond"] = getattr(node, "__raw__", {}).get("cond", {})
-                            elif t in [22, 28]: # Wait
-                                self.node_data[n_id]["time"] = getattr(node, "__raw__", {}).get("time", 1.0)
-                            elif t in [29]: # Wait DI / Set DO
-                                self.node_data[n_id]["diList"] = getattr(node, "__raw__", {}).get("diList", [])
-                            elif t == 202:
-                                self.node_data[n_id]["t_type"] = getattr(node, "target_type", 0)
-                                self.node_data[n_id]["p_name"] = getattr(node, "target_pallet_name", "")
-                                self.node_data[n_id]["p_data"] = getattr(node, "target_pallet_data", None)
-                                self.node_data[n_id]["app_data"] = getattr(node, "__raw__", {}).get("approach", {})
-                                self.node_data[n_id]["ret_data"] = getattr(node, "__raw__", {}).get("retract", {})
-                                self.node_data[n_id]["approach"] = self.node_data[n_id]["app_data"]
-                                self.node_data[n_id]["retract"] = self.node_data[n_id]["ret_data"]
 
                 print(f">> [성공] {file_path} 에서 프로그램을 로드했습니다.")
                 self.custom_paths[self.current_robot] = file_path
+                self._save_custom_paths()  # 경로를 디스크에 영구 저장
                 self.refresh_info()
             except Exception as e:
                 traceback.print_exc()
@@ -490,68 +658,185 @@ class ProgramTreeEditor:
         log_box = ctk.CTkTextbox(sim_win, fg_color=Theme.BG_BASE, text_color="#00E5FF", font=ctk.CTkFont(family="Consolas"))
         log_box.pack(fill="both", expand=True, padx=10, pady=10)
         
-        nodes = []
-        # Return both item id and text
-        def _get_items_and_text(item):
+        # 트리 구조 재귀 수집
+        def _collect_tree(parent_item):
             result = []
-            for child in self.tree.get_children(item):
-                result.append((child, self.tree.item(child, "text").strip()))
-                result.extend(_get_items_and_text(child))
+            for child in self.tree.get_children(parent_item):
+                text = self.tree.item(child, "text").strip()
+                data = self.node_data.get(child, {})
+                raw = data.get("__raw__", {})
+                children = _collect_tree(child)
+                result.append({"id": child, "text": text, "data": data, "raw": raw, "children": children})
             return result
-            
-        for item in self.tree.get_children():
-            nodes.extend(_get_items_and_text(item))
-            
-        if not nodes:
+        
+        tree_nodes = _collect_tree("")
+        if not tree_nodes:
             log_box.insert("end", "[경고] 프로그램 트리가 비어있습니다.\n")
             return
+        
+        class _SimBreak(Exception): pass
+        sim_stop = [False]
+        sim_max_loops = 3  # 가상 모드: 무한루프는 3회로 제한
             
         def _run_sim():
-            log_box.insert("end", "[시스템] 실제 티칭(Teaching) 데이터 기반 시뮬레이션을 시작합니다...\n")
+            log_box.insert("end", "[시스템] 트리 구조 기반 시뮬레이션 시작\n")
+            log_box.insert("end", f"[설정] 무한루프 최대 {sim_max_loops}회 제한\n")
             log_box.insert("end", "-"*40 + "\n")
             
             nonlocal current_j
-            for i, (item_id, n) in enumerate(nodes):
-                log_box.insert("end", f"[{i+1}/{len(nodes)}] 실행 중 ➔ {n}\n")
-                log_box.see("end")
-                
-                # 애니메이션 로직
+            
+            def _animate_node(text, item_id, color="#00FF41"):
+                """노드 애니메이션 + 하이라이트"""
+                nonlocal current_j
                 target_j = None
                 if hasattr(self, 'node_joint_targets') and item_id in self.node_joint_targets:
                     target_j = self.node_joint_targets[item_id]
                 
-                if "Move" in n or target_j is not None:
-                    if target_j is None:
-                        import random
-                        target_j = [random.uniform(-45, 45) for _ in range(6)]
-                        target_j[2] -= 90 # J3 offset
-                        target_j[4] -= 90 # J5 offset
-                        
-                    steps = 15
+                data = self.node_data.get(item_id, {})
+                q = data.get("q", None)
+                if target_j is None and q and not all(v == 0.0 for v in q):
+                    target_j = list(q)
+                
+                if target_j:
+                    steps = 12
                     for step in range(steps):
                         interp_j = [current_j[k] + (target_j[k] - current_j[k]) * (step / steps) for k in range(6)]
-                        
-                        tool_color = "#00FF41"
-                        if "Pick" in n: tool_color = "#FF1744"
-                        elif "Place" in n: tool_color = Theme.INFO
-                        
-                        _draw_robot(interp_j, tool_color=tool_color)
-                        time.sleep(0.05)
+                        _draw_robot(interp_j, tool_color=color)
+                        time.sleep(0.03)
                     current_j = target_j
-                elif "Pick" in n:
-                    _draw_robot(current_j, tool_color="#FF1744") # 빨간색
-                    time.sleep(0.5)
-                elif "Place" in n:
-                    _draw_robot(current_j, tool_color=Theme.INFO) # 파란색
-                    time.sleep(0.5)
                 else:
-                    _draw_robot(current_j, tool_color="#00FF41") # 기본색
-                    time.sleep(0.8)
+                    _draw_robot(current_j, tool_color=color)
+                    time.sleep(0.3)
+            
+            def _exec_sim_nodes(node_list, depth=0):
+                """트리 구조 재귀 시뮬레이션"""
+                nonlocal current_j
+                indent = "  " * depth
+                
+                for node in node_list:
+                    if sim_stop[0]: return
+                    text = node["text"]
+                    raw = node["raw"]
+                    data = node["data"]
+                    item_id = node["id"]
+                    node_type = raw.get("type", -1)
                     
+                    # 트리 하이라이트
+                    try:
+                        self.tree.selection_set(item_id)
+                        self.tree.see(item_id)
+                    except: pass
+                    
+                    if "Main Program" in text or "Program Settings" in text or node_type == 999:
+                        _exec_sim_nodes(node["children"], depth)
+                        continue
+                    
+                    if "Variables" in text or node_type in [2, 3]:
+                        log_box.insert("end", f"{indent}📋 Variables (스킵)\n")
+                        log_box.see("end")
+                        continue
+                    
+                    # ─── Loop (type=20) ───
+                    if node_type == 20 or "Loop" in text:
+                        count = data.get("count", raw.get("count", -1))
+                        max_iter = count if count > 0 else sim_max_loops
+                        label = f"{count}회" if count > 0 else f"무한→{sim_max_loops}회 제한"
+                        log_box.insert("end", f"{indent}🔄 Loop 시작 ({label})\n")
+                        log_box.see("end")
+                        
+                        for iteration in range(1, max_iter + 1):
+                            if sim_stop[0]: return
+                            log_box.insert("end", f"{indent}  ── 반복 #{iteration}/{max_iter} ──\n")
+                            log_box.see("end")
+                            try:
+                                _exec_sim_nodes(node["children"], depth + 1)
+                            except _SimBreak:
+                                log_box.insert("end", f"{indent}  ⏹️ Loop Break → 루프 탈출\n")
+                                log_box.see("end")
+                                break
+                        
+                        log_box.insert("end", f"{indent}🔄 Loop 종료\n")
+                        log_box.see("end")
+                        continue
+                    
+                    # ─── loopBreak (type=21) ───
+                    if node_type == 21 or "Loop Break" in text:
+                        log_box.insert("end", f"{indent}⏹️ Loop Break!\n")
+                        log_box.see("end")
+                        raise _SimBreak()
+                    
+                    # ─── if[DI] (type=29, 자식 있음) ───
+                    if node_type == 29 and node["children"]:
+                        log_box.insert("end", f"{indent}🔀 If [DI] → TRUE (시뮬레이션)\n")
+                        log_box.see("end")
+                        _exec_sim_nodes(node["children"], depth + 1)
+                        continue
+                    
+                    # ─── Home (type=100) ───
+                    if node_type == 100 or "Home" in text:
+                        log_box.insert("end", f"{indent}🏠 Home 이동\n")
+                        log_box.see("end")
+                        _animate_node(text, item_id, "#00BCD4")
+                        continue
+                    
+                    # ─── Pick (type=201) ───
+                    if node_type == 201 or "Pick" in text:
+                        log_box.insert("end", f"{indent}🫳 Pick: 접근→하강→Hold(잡기)→후퇴\n")
+                        log_box.see("end")
+                        _animate_node(text, item_id, "#FF1744")
+                        continue
+                    
+                    # ─── Place (type=202) ───
+                    if node_type == 202 or "Place" in text:
+                        log_box.insert("end", f"{indent}📦 Place: 접근→하강→Release(놓기)→후퇴\n")
+                        log_box.see("end")
+                        _animate_node(text, item_id, Theme.INFO)
+                        continue
+                    
+                    # ─── SmartDO (type=4) ───
+                    if node_type == 4 or "Smart DO" in text:
+                        do_list = data.get("doList", raw.get("doList", []))
+                        pins = ", ".join(f"DO{d['idx']}={'ON' if d['value'] else 'OFF'}" for d in do_list) if do_list else "none"
+                        log_box.insert("end", f"{indent}⚡ Smart DO ({pins})\n")
+                        log_box.see("end")
+                        _draw_robot(current_j, tool_color="#FFC107")
+                        time.sleep(0.3)
+                        continue
+                    
+                    # ─── Wait / WaitFor[DI] (type=28) ───
+                    if node_type == 28 or "Wait For" in text:
+                        log_box.insert("end", f"{indent}⏳ Wait For [DI] (시뮬: 0.5초)\n")
+                        log_box.see("end")
+                        time.sleep(0.5)
+                        continue
+                    
+                    # ─── FrameMove (type=102, 103) ───
+                    if node_type in [102, 103] or "FrameMove" in text:
+                        log_box.insert("end", f"{indent}➡️ FrameMove: {text}\n")
+                        log_box.see("end")
+                        _animate_node(text, item_id, "#4CAF50")
+                        continue
+                    
+                    # ─── JointMove (type=1) ───
+                    if node_type == 1 or "JointMove" in text:
+                        log_box.insert("end", f"{indent}➡️ JointMove: {text}\n")
+                        log_box.see("end")
+                        _animate_node(text, item_id, "#2196F3")
+                        continue
+                    
+                    # ─── 기타 노드 ───
+                    log_box.insert("end", f"{indent}▶ {text}\n")
+                    log_box.see("end")
+                    _draw_robot(current_j, tool_color="#00FF41")
+                    time.sleep(0.3)
+            
+            _exec_sim_nodes(tree_nodes)
+            
             time.sleep(0.5)
             _draw_robot(current_j, tool_color="#00FF41")
             log_box.insert("end", "-"*40 + "\n")
-            log_box.insert("end", "[시스템] 모든 프로그램 노드 가상 실행 완료!\n")
+            log_box.insert("end", "[시스템] 시뮬레이션 완료!\n")
+            log_box.see("end")
             
         threading.Thread(target=_run_sim, daemon=True).start()
 
@@ -563,54 +848,79 @@ class ProgramTreeEditor:
         self.parent.grid_columnconfigure(2, weight=2, minsize=420) # Jog + 설정 (넓게)
         self.parent.grid_rowconfigure(0, weight=1)
         Theme.apply_window_style(self.parent)
-        
-        # Left Palette
+        # Left Palette — 팬던트와 동일한 카테고리 구조
         left = ctk.CTkScrollableFrame(self.parent, fg_color=Theme.BG_BASE, width=160, corner_radius=0)
         left.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
-        ctk.CTkLabel(left, text="🛠 COMMANDS", font=Theme.font(size=14, weight="bold", role="display"), text_color=Theme.TEXT_PRIMARY).pack(pady=10)
+        ctk.CTkLabel(left, text="🛠 기본 명령", font=Theme.font(size=14, weight="bold", role="display"), text_color=Theme.TEXT_PRIMARY).pack(pady=10)
         
-        # ─── APK 기능 (Conty 호환) ───
-        ctk.CTkLabel(left, text="📱 APK 기능", font=Theme.font(size=11, weight="bold"), 
-                     text_color=Theme.SUCCESS).pack(anchor="w", padx=10, pady=(5, 2))
-        apk_cmds = [
-            ("Folder", Theme.WARNING), ("Move Home", Theme.INFO), ("Joint Move", Theme.INFO), 
-            ("Frame Move", Theme.SUCCESS), ("Move B", "#F57C00"), ("Move C", "#009688"),
-            ("Pick", Theme.INFO), ("Place", "#009688"), ("DO", "#9C27B0"), 
-            ("Wait", "#607D8B"), ("Wait DI", "#607D8B"), ("Loop", Theme.DANGER), 
-            ("If (DI)", "#E91E63"), ("Math", "#FF5722"), ("Comment", "#9E9E9E"), 
-            ("Stop", Theme.DANGER), ("Call", Theme.BG_SURFACE),
-        ]
-        for cmd, col in apk_cmds:
-            btn = ctk.CTkButton(left, text=f"+ {cmd}", fg_color=col, height=26,
-                                font=Theme.font(size=11),
-                                command=lambda c=cmd: self.add_node(c))
+        def _add_category(label, color, cmds):
+            ctk.CTkLabel(left, text=label, font=Theme.font(size=11, weight="bold"), 
+                         text_color=color).pack(anchor="w", padx=10, pady=(6, 2))
+            for cmd_name, col in cmds:
+                btn = ctk.CTkButton(left, text=f"  {cmd_name}", fg_color=col, height=26,
+                                    font=Theme.font(size=11), anchor="w",
+                                    command=lambda c=cmd_name: self.add_node(c))
+                btn.pack(fill="x", padx=10, pady=1)
+        
+        # ─── 모션 명령어 ───
+        _add_category("▸ 모션 명령어", Theme.SUCCESS, [])
+        # 사용자 모션 변수 버튼 (팬던트 사진 4번과 동일)
+        btn_mv = ctk.CTkButton(left, text="  + 사용자 모션 변수", fg_color="#2E7D32", hover_color="#388E3C",
+                                height=28, font=Theme.font(size=11, weight="bold"), anchor="w",
+                                command=self._add_user_motion_var)
+        btn_mv.pack(fill="x", padx=10, pady=1)
+        for cmd_name, col in [
+            ("Joint Move", "#1565C0"),        # jointMove:Absolute
+            ("Frame Move", "#2E7D32"),        # frameMove:Absolute
+            ("Move C", "#00796B"),            # circularMove
+            ("Move Home", "#0277BD"),         # home
+            ("Move B", "#E65100"),            # jointMove:Relative
+            ("Move By", "#6A1B9A"),           # frameMove:Relative
+        ]:
+            btn = ctk.CTkButton(left, text=f"  {cmd_name}", fg_color=col, height=26,
+                                font=Theme.font(size=11), anchor="w",
+                                command=lambda c=cmd_name: self.add_node(c))
             btn.pack(fill="x", padx=10, pady=1)
         
-        # ─── PC 제어 기능 (HMI 전용) ───
-        ctk.CTkLabel(left, text="💻 PC 제어", font=Theme.font(size=11, weight="bold"), 
-                     text_color=Theme.INFO).pack(anchor="w", padx=10, pady=(8, 2))
-        pc_cmds = [
-            ("Move By", "#8E24AA"), ("AO", "#CDDC39"), ("Wait AI", "#607D8B"),
-            ("Switch", "#E91E63"), ("Force", "#795548"),
-        ]
-        for cmd, col in pc_cmds:
-            btn = ctk.CTkButton(left, text=f"+ {cmd}", fg_color=col, height=26,
-                                font=Theme.font(size=11),
-                                command=lambda c=cmd: self.add_node(c))
-            btn.pack(fill="x", padx=10, pady=1)
+        # ─── 흐름제어 명령어 ───
+        _add_category("▸ 흐름제어 명령어", "#FF9800", [
+            ("Loop", "#C62828"),              # loop
+            ("Wait", "#546E7A"),              # wait
+            ("Wait For", "#26A69A"),          # waitFor (조건 대기)
+            ("Wait DI", "#455A64"),           # waitFor[digitalInput]
+            ("If (DI)", "#AD1457"),           # if[digitalInput]
+            ("If Var", "#880E4F"),            # if (변수 조건)
+            ("Else", "#4A148C"),             # else
+            ("Math", "#BF360C"),             # assignment
+            ("Loop Break", "#EF5350"),       # loopBreak
+            ("Speed Ratio", "#FFB300"),      # speedRatio
+            ("Folder", "#E65100"),           # group
+            ("Comment", "#757575"),          # comment
+            ("Stop", "#B71C1C"),             # stop
+        ])
         
-        # ─── 추가 기능 (APK에 없음 ⚡) ───
-        ctk.CTkLabel(left, text="⚡ 추가 기능", font=Theme.font(size=11, weight="bold"), 
-                     text_color=Theme.WARNING).pack(anchor="w", padx=10, pady=(8, 2))
-        extra_cmds = [
-            ("Vision", Theme.INFO), ("Sync", "#FFEB3B"),
-            ("Stack Search", "#E040FB"), ("Spiral Search", "#7C4DFF"),
-        ]
-        for cmd, col in extra_cmds:
-            btn = ctk.CTkButton(left, text=f"+ {cmd} ⚡", fg_color=col, height=26,
-                                font=Theme.font(size=11),
-                                command=lambda c=cmd: self.add_node(c))
-            btn.pack(fill="x", padx=10, pady=1)
+        # ─── 입출력 명령어 ───
+        _add_category("▸ 입출력 명령어", "#03A9F4", [
+            ("DO", "#7B1FA2"),               # toolCommand
+            ("Tool Sensing", "#42A5F5"),     # toolSensing
+            ("EndTool DO", "#512DA8"),        # endToolDO
+            ("Smart DO", "#6A1B9A"),          # smartDO (type=4+doList)
+            ("AO", "#827717"),               # smartAO
+        ])
+        
+        # ─── 응용 명령어 ───
+        _add_category("▸ 응용 명령어", "#4CAF50", [
+            ("Pick", "#00838F"),             # pick
+            ("Place", "#00695C"),            # place
+            ("Pallet", "#004D40"),           # pallet
+            ("Conveyor", "#F9A825"),         # conveyorTracking
+            ("TaktTime", "#AB47BC"),         # indyCARE:TaktTime
+            ("Detect", "#29B6F6"),           # detect
+            ("Retrieve", "#66BB6A"),         # retrieve
+            ("Python", "#FFA726"),           # pythonScript
+            ("Call", "#37474F"),             # subProgram call
+            ("Force", "#4E342E"),            # force control
+        ])
         
         # ─── 도구 (Tools) ───
         ctk.CTkLabel(left, text="🔧 도구", font=Theme.font(size=11, weight="bold"), 
@@ -712,6 +1022,15 @@ class ProgramTreeEditor:
         self.folder_editor = FolderEditor(self.pp_frame)
         self.switch_editor = SwitchEditor(self.pp_frame)
         self.loop_editor = LoopEditor(self.pp_frame)
+        self.waitfor_editor = WaitForEditor(self.pp_frame)
+        self.loopbreak_editor = LoopBreakEditor(self.pp_frame)
+        self.speed_ratio_editor = SpeedRatioEditor(self.pp_frame)
+        self.tool_sensing_editor = ToolSensingEditor(self.pp_frame)
+        self.conveyor_editor = ConveyorTrackingEditor(self.pp_frame)
+        self.takttime_editor = TaktTimeEditor(self.pp_frame)
+        self.detect_editor = DetectEditor(self.pp_frame)
+        self.retrieve_editor = RetrieveEditor(self.pp_frame)
+        self.python_editor = PythonScriptEditor(self.pp_frame)
         
         self.pp_editor.render()
         self.current_editor = self.pp_editor
@@ -833,6 +1152,51 @@ class ProgramTreeEditor:
                 self.pp_editor.teach_btn.configure(command=self._on_teach_btn_clicked)
                 self.pp_editor.load_btn.configure(command=self._on_load_btn_clicked)
                 self.pp_editor.move_btn.configure(command=self._on_move_btn_clicked)
+            elif "Wait For" in item_text:
+                for w in self.pp_frame.winfo_children(): w.destroy()
+                self.current_editor = self.waitfor_editor
+                self.waitfor_editor.render()
+                self.waitfor_editor.update_ui(item_text)
+            elif "Loop Break" in item_text:
+                for w in self.pp_frame.winfo_children(): w.destroy()
+                self.current_editor = self.loopbreak_editor
+                self.loopbreak_editor.render()
+                self.loopbreak_editor.update_ui(item_text)
+            elif "Speed Ratio" in item_text:
+                for w in self.pp_frame.winfo_children(): w.destroy()
+                self.current_editor = self.speed_ratio_editor
+                self.speed_ratio_editor.render()
+                self.speed_ratio_editor.update_ui(item_text, d.get("prgSpdRatio", 100))
+            elif "Tool Sensing" in item_text:
+                for w in self.pp_frame.winfo_children(): w.destroy()
+                self.current_editor = self.tool_sensing_editor
+                self.tool_sensing_editor.render()
+                self.tool_sensing_editor.update_ui(item_text)
+            elif "Conveyor" in item_text:
+                for w in self.pp_frame.winfo_children(): w.destroy()
+                self.current_editor = self.conveyor_editor
+                self.conveyor_editor.render()
+                self.conveyor_editor.update_ui(item_text)
+            elif "TaktTime" in item_text:
+                for w in self.pp_frame.winfo_children(): w.destroy()
+                self.current_editor = self.takttime_editor
+                self.takttime_editor.render()
+                self.takttime_editor.update_ui(item_text)
+            elif "Detect" in item_text:
+                for w in self.pp_frame.winfo_children(): w.destroy()
+                self.current_editor = self.detect_editor
+                self.detect_editor.render()
+                self.detect_editor.update_ui(item_text)
+            elif "Retrieve" in item_text:
+                for w in self.pp_frame.winfo_children(): w.destroy()
+                self.current_editor = self.retrieve_editor
+                self.retrieve_editor.render()
+                self.retrieve_editor.update_ui(item_text)
+            elif "Python" in item_text:
+                for w in self.pp_frame.winfo_children(): w.destroy()
+                self.current_editor = self.python_editor
+                self.python_editor.render()
+                self.python_editor.update_ui(item_text)
                 
         # 콜백 연결
         self.on_node_selected_callback = _on_node_selected
@@ -927,8 +1291,11 @@ class ProgramTreeEditor:
     def _stop_execution(self):
         """Stop the running program execution."""
         self._exec_stop = True
+        RobotControlUseCase._global_stop = True  # wait_for_move_finish 즉시 반환
         try:
-            RobotControlUseCase.stop_robot()
+            inst = robot_manager.get_active_instance()
+            if inst:
+                inst.stop_emergency()
         except:
             pass
         print(">> ⏹ [정지] 프로그램 실행이 중단되었습니다.")
@@ -937,6 +1304,92 @@ class ProgramTreeEditor:
         """로봇 설정 다이얼로그 열기."""
         from presentation.ui.robot_hmi.editors.config_dialog import RobotConfigDialog
         RobotConfigDialog(self.parent)
+
+    def _add_user_motion_var(self):
+        """사용자 모션 변수 추가 — 현재 로봇 좌표를 이름 붙여 저장"""
+        dialog = ctk.CTkToplevel(self.parent)
+        dialog.title("사용자 모션 변수 추가")
+        dialog.geometry("400x350")
+        dialog.transient(self.parent)
+        dialog.grab_set()
+        Theme.apply_window_style(dialog)
+        
+        ctk.CTkLabel(dialog, text="📌 사용자 모션 변수 등록", font=Theme.font(size=16, weight="bold"),
+                     text_color=Theme.SUCCESS).pack(pady=(15, 5))
+        ctk.CTkLabel(dialog, text="현재 로봇 좌표를 이름 붙여 저장하고,\n프로그램에서 해당 변수를 참조할 수 있습니다.",
+                     text_color=Theme.TEXT_SECONDARY, font=Theme.font(size=11)).pack(pady=5)
+        
+        form = ctk.CTkFrame(dialog, fg_color=Theme.BG_SURFACE)
+        form.pack(fill="x", padx=15, pady=10)
+        
+        row1 = ctk.CTkFrame(form, fg_color="transparent")
+        row1.pack(fill="x", padx=10, pady=8)
+        ctk.CTkLabel(row1, text="변수 이름:", font=Theme.font(size=12, weight="bold")).pack(side="left", padx=5)
+        name_entry = ctk.CTkEntry(row1, width=200, placeholder_text="예: pick_pos_1")
+        name_entry.pack(side="left", padx=5)
+        
+        row2 = ctk.CTkFrame(form, fg_color="transparent")
+        row2.pack(fill="x", padx=10, pady=5)
+        ctk.CTkLabel(row2, text="좌표 타입:", font=Theme.font(size=12)).pack(side="left", padx=5)
+        type_sel = ctk.CTkOptionMenu(row2, values=["Joint (관절좌표)", "Task (TCP좌표)"], width=160)
+        type_sel.pack(side="left", padx=5)
+        
+        # 현재 좌표 표시
+        coord_frame = ctk.CTkFrame(form, fg_color=Theme.BG_BASE, corner_radius=8)
+        coord_frame.pack(fill="x", padx=10, pady=8)
+        coord_label = ctk.CTkLabel(coord_frame, text="현재 좌표: (로봇 미연결)", 
+                                    font=Theme.font(size=10), text_color=Theme.TEXT_SECONDARY)
+        coord_label.pack(pady=8, padx=10)
+        
+        # 로봇 연결 시 현재 좌표 표시
+        try:
+            active = robot_manager.get_active_robot_name()
+            if active:
+                state = robot_manager.get_robot_state(active)
+                if state:
+                    j = state.get("j_pos", [0]*6)
+                    t = state.get("t_pos", [0]*6)
+                    j_str = ", ".join([f"{v:.2f}" for v in j[:6]])
+                    t_str = ", ".join([f"{v:.4f}" for v in t[:6]])
+                    coord_label.configure(text=f"J: [{j_str}]\nT: [{t_str}]")
+        except: pass
+        
+        # 저장된 변수 목록
+        if not hasattr(self, '_user_motion_vars'):
+            self._user_motion_vars = {}
+        
+        def _save():
+            vname = name_entry.get().strip()
+            if not vname:
+                name_entry.configure(border_color=Theme.DANGER)
+                return
+            vtype = "joint" if "Joint" in type_sel.get() else "task"
+            coords = [0.0]*6
+            try:
+                active = robot_manager.get_active_robot_name()
+                if active:
+                    state = robot_manager.get_robot_state(active)
+                    if state:
+                        coords = state.get("j_pos" if vtype == "joint" else "t_pos", [0]*6)
+            except: pass
+            self._user_motion_vars[vname] = {"type": vtype, "coords": list(coords)}
+            print(f">> [모션 변수] '{vname}' 저장됨: {vtype} = {coords}")
+            dialog.destroy()
+        
+        btn_row = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_row.pack(fill="x", padx=15, pady=10)
+        ctk.CTkButton(btn_row, text="💾 현재 좌표 저장", fg_color=Theme.SUCCESS, hover_color="#388E3C",
+                      font=Theme.font(size=13, weight="bold"), height=38, command=_save).pack(side="left", fill="x", expand=True, padx=5)
+        ctk.CTkButton(btn_row, text="취소", fg_color=Theme.BG_SURFACE, hover_color="#333",
+                      font=Theme.font(size=12), height=38, command=dialog.destroy).pack(side="left", width=80, padx=5)
+        
+        # 기존 저장 변수 목록 표시
+        if self._user_motion_vars:
+            ctk.CTkLabel(dialog, text=f"📋 저장된 변수: {len(self._user_motion_vars)}개",
+                         font=Theme.font(size=11, weight="bold"), text_color=Theme.INFO).pack(anchor="w", padx=20, pady=(5,2))
+            for vn, vd in self._user_motion_vars.items():
+                ctk.CTkLabel(dialog, text=f"  • {vn} ({vd['type']})", font=Theme.font(size=10),
+                             text_color=Theme.TEXT_SECONDARY).pack(anchor="w", padx=25)
 
     def _open_oscilloscope(self):
         """오실로스코프 (실시간 데이터 로거) 열기."""
@@ -956,6 +1409,11 @@ class ProgramTreeEditor:
     def _run_program(self):
         """Execute the entire program tree on the real robot."""
         self._exec_stop = False
+        RobotControlUseCase._global_stop = False  # 글로벌 정지 플래그 리셋
+        
+        class _LoopBreakException(Exception):
+            """loopBreak (type=21) 실행 시 가장 가까운 Loop를 탈출하기 위한 예외"""
+            pass
         
         # 트리에서 모든 노드를 재귀적으로 수집
         def _collect_nodes(parent_item):
@@ -987,72 +1445,330 @@ class ProgramTreeEditor:
             except: pass
         
         def _execute_node_list(node_list):
-            for node in node_list:
+            skip_indices = set()  # 인터리빙으로 이미 처리된 노드 인덱스
+            for idx, node in enumerate(node_list):
+                if idx in skip_indices:
+                    continue
                 if self._exec_stop:
                     return
                 
                 text = node["text"]
                 data = node["data"]
                 item_id = node["id"]
+                raw = data.get("__raw__", {})
+                node_type = raw.get("type", -1)
                 q = data.get("q", [0.0]*6)
+                p = data.get("p", [0.0]*6)
                 
                 _highlight(item_id)
-                print(f"\n>> ▶ 실행: {text}")
+                print(f"\n>> ▶ 실행: {text} (type={node_type})")
                 
-                if "Main Program" in text:
+                # ─── type 기반 디스패치 (Conty 실제 타입 — 학습파일 분석 기반) ───
+                
+                if "Main Program" in text or node_type == 999:
+                    # Config/Root → 자식 실행
                     _execute_node_list(node["children"])
+                
+                elif node_type in [2, 3]:  # Variables → 스킵
+                    print(f">> 📋 Variables 노드 (스킵)")
                     
-                elif "Loop" in text:
-                    count = data.get("count", None)
+                elif node_type == 20:  # Loop
+                    count = data.get("count", raw.get("count", -1))
                     iteration = 0
                     while not self._exec_stop:
                         iteration += 1
-                        if count is not None and iteration > count:
+                        if count is not None and count >= 0 and iteration > count:
+                            print(f">> 🔄 Loop 완료 ({count}회)")
                             break
-                        print(f">> 🔄 Loop 반복 #{iteration}" + (f"/{count}" if count else " (무한)"))
-                        _execute_node_list(node["children"])
-                        
-                elif "Move Home" in text:
-                    print(f">>   → Home 이동: [0, 0, -90, 0, -90, 0]")
-                    RobotControlUseCase.move_to_joint([0.0, 0.0, -90.0, 0.0, -90.0, 0.0])
+                        print(f">> 🔄 Loop #{iteration}" + (f"/{count}" if count and count > 0 else " (무한)"))
+                        try:
+                            _execute_node_list(node["children"])
+                        except _LoopBreakException:
+                            print(f">> ⏹️ Loop Break 실행 — 루프 탈출")
+                            break
+                        # 자식 실행 후 정지 플래그 재확인
+                        if self._exec_stop:
+                            break
+                
+                elif node_type == 21:  # loopBreak
+                    print(f">> ⏹️ Loop Break!")
+                    raise _LoopBreakException()
+                    
+                elif node_type == 100:  # Home
+                    print(f">>   → Home 이동")
+                    RobotControlUseCase.go_home()
                     RobotControlUseCase.wait_for_move_finish(30.0)
                     
-                elif "Move J" in text or "Move L" in text or "Move B" in text:
+                elif node_type == 1:  # JointMove
                     if q and not all(v == 0.0 for v in q):
                         print(f">>   → Joint 이동: {[f'{v:.1f}' for v in q]}")
                         RobotControlUseCase.move_to_joint(q)
                         RobotControlUseCase.wait_for_move_finish(30.0)
                         
-                elif "Pick" in text or "Place" in text:
-                    is_pick = "Pick" in text
-                    p = data.get("p", [0.0]*6)
-                    app_data = data.get("approach", {})
-                    ret_data = data.get("retract", {})
-                    app_dist = app_data.get("distance", 0.0) / 1000.0
-                    ret_dist = ret_data.get("distance", 0.0) / 1000.0
-                    app_dir = app_data.get("direction", 0)
-                    ret_dir = ret_data.get("direction", 0)
+                elif node_type in [102, 103]:  # FrameMove
+                    if p and not all(v == 0.0 for v in p):
+                        print(f">>   → Task 이동: {[f'{v:.3f}' for v in p]}")
+                        RobotControlUseCase.move_to_task(p)
+                        RobotControlUseCase.wait_for_move_finish(30.0)
+                    elif q and not all(v == 0.0 for v in q):
+                        RobotControlUseCase.move_to_joint(q)
+                        RobotControlUseCase.wait_for_move_finish(30.0)
+                
+                elif node_type == 4:  # SmartDO
+                    do_list = data.get("doList", raw.get("doList", []))
+                    for d in do_list:
+                        idx = d.get("idx", 0)
+                        val = d.get("value", 0)
+                        RobotControlUseCase.set_do(idx, val)
+                        print(f">>   DO{idx} = {'ON' if val else 'OFF'}")
+                
+                elif node_type == 5:  # SmartAO
+                    ao_list = data.get("aoList", raw.get("aoList", []))
+                    for a in ao_list:
+                        idx = a.get("idx", 0)
+                        val = a.get("value", 0)
+                        print(f">>   AO{idx} = {val}")
+                
+                elif node_type == 6:  # EndTool DO
+                    do_list = data.get("endtoolDoList", raw.get("endtoolDoList", []))
+                    for d in do_list:
+                        idx = d.get("idx", 0)
+                        val = d.get("value", 0)
+                        print(f">>   EndTool DO{idx} = {'ON' if val else 'OFF'}")
+                
+                elif node_type == 40:  # toolCommand
+                    tool_cmd = data.get("toolCmd", raw.get("toolCmd", ""))
+                    print(f">>   🔧 Tool Command: {tool_cmd}")
+                
+                elif node_type == 41:  # toolSensing
+                    sens = data.get("sensName", raw.get("sensName", ""))
+                    print(f">>   📡 Tool Sensing: {sens}")
+                
+                elif node_type == 22:  # Wait (시간만)
+                    wait_time = data.get("time", raw.get("time", 1.0))
+                    print(f">>   ⏳ 대기: {wait_time}초")
+                    time.sleep(wait_time)
                     
-                    # direction: 0=Z, 1=-Z, 2=X, 3=-X, 4=Y, 5=-Y
-                    def _offset(base, direction, dist):
+                elif node_type == 28:  # Wait For [DI]
+                    di_list = data.get("diList", raw.get("diList", []))
+                    wait_time = data.get("time", raw.get("time", 0))
+                    if di_list:
+                        pins_str = ", ".join(f"DI{d['idx']}={'HI' if d['value'] else 'LO'}" for d in di_list)
+                        print(f">>   ⏳ DI 대기: {pins_str} (timeout={wait_time}s)")
+                        timeout = wait_time if wait_time > 0 else 60.0
+                        start = time.time()
+                        while not self._exec_stop and (time.time() - start) < timeout:
+                            all_met = True
+                            current_di = RobotControlUseCase.get_di()
+                            if current_di:
+                                for cond in di_list:
+                                    idx = cond.get("idx", 0)
+                                    expected = cond.get("value", 1)
+                                    if idx < len(current_di) and current_di[idx] != expected:
+                                        all_met = False
+                                        break
+                            else:
+                                all_met = False
+                            if all_met:
+                                print(f">>   ✅ DI 조건 충족")
+                                break
+                            time.sleep(0.1)
+                        else:
+                            print(f">>   ⚠️ DI 대기 타임아웃 ({timeout}s)")
+                    else:
+                        print(f">>   ⏳ Wait For [DI] (DI 미지정 — 스킵)")
+                    
+                elif node_type == 29:  # if[DI] / waitFor[DI]
+                    di_list = data.get("diList", raw.get("diList", []))
+                    has_children = len(node["children"]) > 0
+                    
+                    if has_children:
+                        # if[DI] — 조건 확인 후 자식 실행
+                        result = False
+                        if di_list:
+                            current_di = RobotControlUseCase.get_di()
+                            if current_di:
+                                result = all(
+                                    current_di[c["idx"]] == c["value"]
+                                    for c in di_list if c["idx"] < len(current_di)
+                                )
+                        pins_str = ", ".join(f"DI{d['idx']}" for d in di_list) if di_list else "미지정"
+                        print(f">>   🔀 If [DI] ({pins_str}) → {'TRUE' if result else 'FALSE'}")
+                        if result:
+                            _execute_node_list(node["children"])
+                    else:
+                        # waitFor[DI] — DI 조건 대기
+                        if di_list:
+                            pins_str = ", ".join(f"DI{d['idx']}={'HI' if d['value'] else 'LO'}" for d in di_list)
+                            print(f">>   ⏳ Wait For [DI]: {pins_str}")
+                            timeout = 60.0
+                            start = time.time()
+                            while not self._exec_stop and (time.time() - start) < timeout:
+                                all_met = True
+                                current_di = RobotControlUseCase.get_di()
+                                if current_di:
+                                    for cond in di_list:
+                                        idx = cond.get("idx", 0)
+                                        expected = cond.get("value", 1)
+                                        if idx < len(current_di) and current_di[idx] != expected:
+                                            all_met = False
+                                            break
+                                else:
+                                    all_met = False
+                                if all_met:
+                                    print(f">>   ✅ DI 조건 충족")
+                                    break
+                                time.sleep(0.1)
+                        else:
+                            print(f">>   (DI 미지정 — 스킵)")
+                
+                elif node_type in [23, 24]:  # If Var / If (조건)
+                    cond = data.get("cond", raw.get("cond", {}))
+                    result = False
+                    if cond:
+                        left = cond.get("left", {})
+                        right = cond.get("right", {})
+                        op_val = cond.get("op", 0)
+                        op_map = {0: "==", 1: "!=", 2: ">", 3: "<", 4: ">=", 5: "<="}
+                        op_str = op_map.get(op_val, "==")
+                        var_name = left.get("value", "var1") if left.get("type", -1) == 10 else "var1"
+                        compare_val = right.get("value", 0) if right.get("type", -1) != -1 else 0
+                        result = RobotControlUseCase.eval_condition(str(var_name), op_str, float(compare_val or 0))
+                    print(f">>   🔀 If → {'TRUE' if result else 'FALSE'}")
+                    if result:
+                        _execute_node_list(node["children"])
+                
+                elif node_type in (201, 202):  # Pick / Place
+                    is_pick = (node_type == 201)   # 201=Pick(Hold), 202=Place(Release)
+                    app_data = data.get("approach", raw.get("approach", {}))
+                    ret_data = data.get("retract", raw.get("retract", {}))
+                    app_dist = app_data.get("distance", 0.05)
+                    ret_dist = ret_data.get("distance", 0.05)
+                    # distance가 미터 단위인지 확인 (0.1 이하면 미터, 이상이면 mm → 변환)
+                    if app_dist > 1.0: app_dist /= 1000.0
+                    if ret_dist > 1.0: ret_dist /= 1000.0
+                    
+                    # ─── 접근/후퇴 오프셋 함수 ───
+                    # Conty 규약: approach/retract 모두 타겟 위(+Z)에서 진입/탈출
+                    # direction=0: Z축 접근 (위에서 내려감)
+                    # direction=1: Z축 후퇴 (아래에서 올라감)
+                    # → 둘 다 타겟보다 높은 위치를 가리킴 (Z + distance)
+                    def _safe_offset(base, dist):
+                        """타겟 위치에서 Z축 위로 dist만큼 오프셋된 위치 반환"""
                         pos = list(base)
-                        if direction == 0: pos[2] += dist
-                        elif direction == 1: pos[2] -= dist
-                        elif direction == 2: pos[0] += dist
-                        elif direction == 3: pos[0] -= dist
-                        elif direction == 4: pos[1] += dist
-                        elif direction == 5: pos[1] -= dist
+                        pos[2] += abs(dist)  # 항상 위로 (안전)
                         return pos
                     
-                    # 팔레타이징 체크
+                    # toolId로 doMap 결정
+                    # raw(원본 JSON)에서 toolId를 우선 사용 (UI 편집에 의한 변조 방지)
+                    tool_id = raw.get("toolId", data.get("toolId", -1))
+                    hold_do_map = []
+                    release_do_map = []
+                    
+                    has_raw = hasattr(self, '_current_raw_data') and bool(self._current_raw_data)
+                    print(f">>   [DEBUG] tool_id={tool_id}, has_raw_data={has_raw}")
+                    
+                    if has_raw:
+                        prog_nodes = self._current_raw_data.get("program", [])
+                        cfg_node = None
+                        for pn in prog_nodes:
+                            if pn.get("type") == 999:
+                                cfg_node = pn
+                                break
+                        
+                        if cfg_node:
+                            tool_info = cfg_node.get("toolInfo", [])
+                            print(f">>   [DEBUG] type=999 찾음, toolInfo 개수={len(tool_info)}")
+                            
+                            # 1차: 정확한 toolId 매칭
+                            matched = False
+                            for tool in tool_info:
+                                if tool.get("id") == tool_id or tool_id == -1:
+                                    print(f">>   [DEBUG] 매칭된 tool: id={tool.get('id')}, name={tool.get('name')}")
+                                    for tc in tool.get("toolCommand", []):
+                                        if tc.get("name") == "Hold" and tc.get("doMap"):
+                                            hold_do_map = tc["doMap"]
+                                        elif tc.get("name") == "Release" and tc.get("doMap"):
+                                            release_do_map = tc["doMap"]
+                                    matched = True
+                                    break
+                            
+                            # 2차: 매칭 실패 시 첫 번째 도구를 fallback으로 사용
+                            if not matched and tool_info:
+                                fallback_tool = tool_info[0]
+                                print(f">>   [DEBUG] ⚠️ tool_id={tool_id} 매칭 실패! fallback → id={fallback_tool.get('id')}, name={fallback_tool.get('name')}")
+                                for tc in fallback_tool.get("toolCommand", []):
+                                    if tc.get("name") == "Hold" and tc.get("doMap"):
+                                        hold_do_map = tc["doMap"]
+                                    elif tc.get("name") == "Release" and tc.get("doMap"):
+                                        release_do_map = tc["doMap"]
+                        else:
+                            print(f">>   [DEBUG] ⚠️ type=999 노드를 찾지 못함!")
+                    
+                    print(f">>   [DEBUG] 최종: hold={hold_do_map}, release={release_do_map}")
+                    
                     target_type = data.get("target_type", 0)
                     p_data = data.get("p_data", None)
                     
+                    def _do_tool_action(do_hold):
+                        """do_hold=True→그리퍼 잡기(Hold), False→놓기(Release)"""
+                        do_map = hold_do_map if do_hold else release_do_map
+                        action_name = "Hold(잡기)" if do_hold else "Release(놓기)"
+                        
+                        from core.domains.robot.communication.client_manager import robot_manager
+                        active_inst = robot_manager.get_active_instance()
+                        if not active_inst:
+                            print(f">>     ⚠️ active_inst가 None!")
+                            return
+                        
+                        if do_map:
+                            # 공압 밸브 안전 순서: OFF(0) 먼저 → ON(1) 나중에
+                            # 양쪽 솔레노이드 동시 통전 방지
+                            sorted_map = sorted(do_map, key=lambda d: d["value"])
+                            
+                            off_cmds = [d for d in sorted_map if d["value"] == 0]
+                            on_cmds = [d for d in sorted_map if d["value"] == 1]
+                            
+                            # 1단계: 먼저 꺼야 할 핀 OFF
+                            for d in off_cmds:
+                                try:
+                                    active_inst.set_do(d["idx"], 0)
+                                    print(f">>     DO{d['idx']}=OFF ({action_name}) ✅")
+                                    time.sleep(0.1)
+                                except Exception as e:
+                                    print(f">>     ⚠️ DO OFF 에러: {e}")
+                            
+                            # 밸브 안정화 대기
+                            if off_cmds and on_cmds:
+                                time.sleep(0.15)
+                            
+                            # 2단계: 켜야 할 핀 ON
+                            for d in on_cmds:
+                                try:
+                                    active_inst.set_do(d["idx"], 1)
+                                    print(f">>     DO{d['idx']}=ON ({action_name}) ✅")
+                                    time.sleep(0.1)
+                                except Exception as e:
+                                    print(f">>     ⚠️ DO ON 에러: {e}")
+                            
+                            time.sleep(0.3)  # 공압 동작 완료 대기
+                        else:
+                            print(f">>     ⚠️ doMap 없음 — {action_name} 스킵")
+                    
+                    from core.domains.robot.communication.client_manager import robot_manager
+                    inst = robot_manager.get_active_instance()
+                    if not inst: 
+                        print(">>   ⚠️ 로봇 미연결 — Pick/Place 스킵")
+                        continue
+                    
+                    action_label = "🫳 Pick(잡기)" if is_pick else "📦 Place(놓기)"
+                    
                     if target_type == 1 and p_data and isinstance(p_data, dict):
-                        # 팔레타이징 모드
+                        # ═══ 팔레트 대상 ═══
                         from core.domains.robot.use_cases.motion_math import MotionMath
                         size = p_data.get("size", [1,1,1])
-                        m, n, l_val = size[0], size[1], size[2] if len(size) > 2 else 1
+                        m, n = size[0], size[1]
+                        l_val = size[2] if len(size) > 2 else 1
                         pts = p_data.get("points", [])
                         p1 = pts[0]["p"] if len(pts) > 0 else p
                         p2 = pts[1]["p"] if len(pts) > 1 else p1
@@ -1060,156 +1776,163 @@ class ProgramTreeEditor:
                         p4 = pts[3]["p"] if len(pts) > 3 else None
                         
                         total = m * n * l_val
-                        count = 0
+                        
+                        # ── Pick-Place 인터리빙 파트너 탐색 ──
+                        # 현재 노드 이후의 형제 노드들을 탐색하여
+                        # 반대 타입(Pick↔Place) 노드와 그 사이의 노드들을 찾음
+                        partner_node = None
+                        between_nodes = []  # Pick과 Place 사이의 노드들 (Home 등)
+                        partner_idx = None
+                        
+                        opposite_type = 202 if is_pick else 201
+                        for look_idx in range(idx + 1, len(node_list)):
+                            look_raw = node_list[look_idx]["data"].get("__raw__", {})
+                            look_type = look_raw.get("type", -1)
+                            if look_type == opposite_type:
+                                partner_node = node_list[look_idx]
+                                partner_idx = look_idx
+                                break
+                            elif look_type in (100, 103, 1, 102):  # Home, FrameMove, JointMove
+                                between_nodes.append(node_list[look_idx])
+                            else:
+                                break  # 다른 타입(Loop, Wait 등)을 만나면 탐색 중단
+                        
+                        if partner_node:
+                            # 파트너 및 사이 노드들을 skip 처리
+                            for bi in range(idx + 1, partner_idx + 1):
+                                skip_indices.add(bi)
+                            
+                            partner_data = partner_node["data"]
+                            partner_raw = partner_data.get("__raw__", {})
+                            partner_p = partner_data.get("p", [0.0]*6)
+                            partner_app = partner_data.get("approach", partner_raw.get("approach", {}))
+                            partner_ret = partner_data.get("retract", partner_raw.get("retract", {}))
+                            partner_app_dist = partner_app.get("distance", 0.05)
+                            partner_ret_dist = partner_ret.get("distance", 0.05)
+                            if partner_app_dist > 1.0: partner_app_dist /= 1000.0
+                            if partner_ret_dist > 1.0: partner_ret_dist /= 1000.0
+                            
+                            partner_target_type = partner_data.get("target_type", 0)
+                            partner_p_data = partner_data.get("p_data", None)
+                            partner_is_pick = (partner_raw.get("type", -1) == 201)
+                            partner_label = "🫳 Pick(잡기)" if partner_is_pick else "📦 Place(놓기)"
+                            
+                            print(f">>   🔄 인터리빙 모드: {action_label} (팔레트 {total}개) ↔ {partner_label}")
+                        
+                        pallet_count = 0
                         for layer in range(l_val):
                             for row in range(m):
                                 for col in range(n):
                                     if self._exec_stop: return
-                                    count += 1
-                                    cur_target = MotionMath.compute_pallet_point(
-                                        p1, p2, p3, m, n, row, col,
-                                        p4=p4, size_l=l_val, current_l=layer
-                                    )
-                                    cur_app = _offset(cur_target, app_dir, app_dist)
-                                    cur_ret = _offset(cur_target, ret_dir, ret_dist)
+                                    pallet_count += 1
+                                    cur_t = MotionMath.compute_pallet_point(p1, p2, p3, m, n, row, col, p4=p4, size_l=l_val, current_l=layer)
+                                    cur_app = _safe_offset(cur_t, app_dist)
+                                    cur_ret = _safe_offset(cur_t, ret_dist)
                                     
-                                    print(f">>   📦 [{count}/{total}] {'Place' if not is_pick else 'Pick'} L{layer+1} R{row+1} C{col+1}")
-                                    
-                                    from core.domains.robot.communication.client_manager import robot_manager
-                                    inst = robot_manager.get_active_instance()
-                                    if not inst: return
-                                    
+                                    # 1) 팔레트 Pick/Place
+                                    print(f">>   {action_label} [{pallet_count}/{total}] L{layer+1} R{row+1} C{col+1}")
+                                    print(f">>     1) 접근 위치(Z+{app_dist:.3f}m)")
                                     inst.task_move_to(cur_app)
                                     RobotControlUseCase.wait_for_move_finish(30.0)
-                                    inst.task_move_to(cur_target)
+                                    print(f">>     2) 타겟 위치로 하강")
+                                    inst.task_move_to(cur_t)
                                     RobotControlUseCase.wait_for_move_finish(30.0)
-                                    
-                                    # 툴 동작
-                                    if is_pick:
-                                        RobotControlUseCase.set_do(1, 1)
-                                    else:
-                                        RobotControlUseCase.set_do(1, 0)
-                                    time.sleep(0.3)
-                                    
+                                    time.sleep(0.2)
+                                    print(f">>     3) {'Hold' if is_pick else 'Release'}")
+                                    _do_tool_action(is_pick)
+                                    print(f">>     4) 후퇴 위치(Z+{ret_dist:.3f}m)")
                                     inst.task_move_to(cur_ret)
                                     RobotControlUseCase.wait_for_move_finish(30.0)
+                                    
+                                    # 2) 사이 노드 실행 (Home 등)
+                                    if partner_node and between_nodes:
+                                        for bn in between_nodes:
+                                            if self._exec_stop: return
+                                            bn_raw = bn["data"].get("__raw__", {})
+                                            bn_type = bn_raw.get("type", -1)
+                                            _highlight(bn["id"])
+                                            if bn_type == 100:
+                                                print(f">>   → Home 이동")
+                                                RobotControlUseCase.go_home()
+                                                RobotControlUseCase.wait_for_move_finish(30.0)
+                                            elif bn_type in (1, 102, 103):
+                                                bn_q = bn["data"].get("q", [0.0]*6)
+                                                bn_p = bn["data"].get("p", [0.0]*6)
+                                                if bn_type == 1:
+                                                    inst.joint_move_to(bn_q)
+                                                else:
+                                                    inst.task_move_to(bn_p)
+                                                RobotControlUseCase.wait_for_move_finish(30.0)
+                                    
+                                    # 3) 파트너(Place/Pick) 실행
+                                    if partner_node:
+                                        _highlight(partner_node["id"])
+                                        p_target = partner_p if partner_p else [0.0]*6
+                                        p_app = _safe_offset(p_target, partner_app_dist)
+                                        p_ret = _safe_offset(p_target, partner_ret_dist)
+                                        
+                                        print(f">>   {partner_label} [{pallet_count}/{total}]")
+                                        print(f">>     1) 접근 위치(Z+{partner_app_dist:.3f}m)")
+                                        inst.task_move_to(p_app)
+                                        RobotControlUseCase.wait_for_move_finish(30.0)
+                                        print(f">>     2) 타겟 위치로 하강")
+                                        inst.task_move_to(p_target)
+                                        RobotControlUseCase.wait_for_move_finish(30.0)
+                                        time.sleep(0.2)
+                                        print(f">>     3) {'Hold' if partner_is_pick else 'Release'}")
+                                        _do_tool_action(partner_is_pick)
+                                        print(f">>     4) 후퇴 위치(Z+{partner_ret_dist:.3f}m)")
+                                        inst.task_move_to(p_ret)
+                                        RobotControlUseCase.wait_for_move_finish(30.0)
                     else:
-                        # 단일 위치 모드
-                        from core.domains.robot.communication.client_manager import robot_manager
-                        inst = robot_manager.get_active_instance()
-                        if not inst: return
-                        
+                        # ═══ 싱글 포인트 대상 ═══
                         target_p = p if p else [0.0]*6
-                        app_p = _offset(target_p, app_dir, app_dist)
-                        ret_p = _offset(target_p, ret_dir, ret_dist)
-                        
+                        app_p = _safe_offset(target_p, app_dist)
+                        ret_p = _safe_offset(target_p, ret_dist)
+                        print(f">>   {action_label}")
+                        print(f">>     target: z={target_p[2]:.4f}")
+                        print(f">>     1) 접근 위치(Z={app_p[2]:.4f}, +{app_dist:.3f}m 위)")
                         inst.task_move_to(app_p)
                         RobotControlUseCase.wait_for_move_finish(30.0)
+                        print(f">>     2) 타겟 위치로 하강(Z={target_p[2]:.4f})")
                         inst.task_move_to(target_p)
                         RobotControlUseCase.wait_for_move_finish(30.0)
-                        
-                        if is_pick:
-                            RobotControlUseCase.set_do(1, 1)
-                        else:
-                            RobotControlUseCase.set_do(1, 0)
-                        time.sleep(0.3)
-                        
+                        time.sleep(0.2)
+                        print(f">>     3) {'Hold(잡기)' if is_pick else 'Release(놓기)'}")
+                        _do_tool_action(is_pick)
+                        print(f">>     4) 후퇴 위치(Z={ret_p[2]:.4f}, +{ret_dist:.3f}m 위)")
                         inst.task_move_to(ret_p)
                         RobotControlUseCase.wait_for_move_finish(30.0)
-                        
-                elif "Wait" in text:
-                    wait_time = data.get("time", 1.0)
-                    print(f">>   ⏳ 대기: {wait_time}초")
-                    time.sleep(wait_time)
+                
+                elif node_type == 200:  # Pick Group → 자식 실행
+                    _execute_node_list(node["children"])
                     
-                elif "Set DO" in text:
-                    do_list = data.get("doList", data.get("diList", []))
-                    for do in do_list:
-                        pin = do.get("idx", do.get("pin", 0))
-                        val = do.get("value", do.get("val", 0))
-                        RobotControlUseCase.set_do(pin, val)
-                        print(f">>   DO {pin} = {val}")
-                
-                elif "Set AO" in text:
-                    ao_list = data.get("aoList", [])
-                    for ao in ao_list:
-                        port = ao.get("idx", ao.get("port", 0))
-                        voltage = ao.get("value", ao.get("voltage", 0))
-                        RobotControlUseCase.set_ao(port, voltage)
-                        print(f">>   AO {port} = {voltage}")
-                
-                elif "Move C" in text:
-                    via_p = data.get("via_p", [0.0]*6)
-                    target_p = data.get("p", [0.0]*6)
-                    if via_p and target_p:
-                        RobotControlUseCase.move_c(via_p, target_p)
-                        RobotControlUseCase.wait_for_move_finish(30.0)
-                
-                elif "Move By" in text:
-                    offset = data.get("offset", {})
-                    dx = offset.get("dx", 0.0)
-                    dy = offset.get("dy", 0.0)
-                    dz = offset.get("dz", 0.0)
-                    print(f">>   → 상대 이동: dx={dx}, dy={dy}, dz={dz}")
-                    RobotControlUseCase.move_by_task([dx, dy, dz, 0, 0, 0])
-                    RobotControlUseCase.wait_for_move_finish(30.0)
-                
-                elif "Math" in text:
-                    var_name = data.get("mathVar", "var1")
-                    op = data.get("mathOp", "=")
-                    val = data.get("mathVal", 0.0)
-                    RobotControlUseCase.math_operation(var_name, op, val)
-                
-                elif "If" in text:
-                    cond = data.get("cond", {})
-                    left = cond.get("left", {})
-                    right = cond.get("right", {})
-                    op_val = cond.get("op", 0)
-                    op_map = {0: "==", 1: "!=", 2: ">", 3: "<", 4: ">=", 5: "<="}
-                    op_str = op_map.get(op_val, "==")
-                    var_name = left.get("value", "var1") if left.get("type", -1) == 10 else "var1"
-                    compare_val = right.get("value", 0) if right.get("type", -1) != -1 else 0
-                    
-                    result = RobotControlUseCase.eval_condition(str(var_name), op_str, float(compare_val or 0))
-                    print(f">>   🔀 If {var_name} {op_str} {compare_val} → {'TRUE' if result else 'FALSE'}")
-                    if result:
-                        _execute_node_list(node["children"])
-                
-                elif "Call" in text:
-                    sub_path = data.get("sub_program", "")
+                elif node_type == 250:  # Call SubProgram
+                    sub_path = raw.get("sub_program", data.get("sub_program", ""))
                     if sub_path:
-                        print(f">>   📞 서브프로그램 호출: {sub_path}")
+                        print(f">>   📞 서브프로그램: {sub_path}")
                         RobotControlUseCase.call_sub_program(sub_path)
                         RobotControlUseCase.wait_for_move_finish(60.0)
                 
-                elif "Force" in text:
-                    print(f">>   💪 힘 제어 노드 (설정된 파라미터로 실행)")
-                    # Force control is typically configured via impedance parameters
-                
-                elif "Stack Search" in text:
-                    axis = data.get("axis", 2)
-                    direction = data.get("direction", -1)
-                    threshold = data.get("force_threshold", 10.0)
-                    step = data.get("step_mm", 1.0)
-                    print(f">>   🔍 스택 탐색: 축={['X','Y','Z'][axis]}, 방향={'↓' if direction<0 else '↑'}, 임계값={threshold}N")
-                    found_pos = RobotControlUseCase.stack_search(axis, direction, threshold, step)
-                    if found_pos:
-                        RobotControlUseCase.set_variable("stack_z", found_pos[2])
-                        print(f">>   ✅ 접촉 위치 변수 저장: stack_z={found_pos[2]:.4f}")
-                
-                elif "Spiral Search" in text:
-                    z_force = data.get("z_force", 10.0)
-                    radius = data.get("radius_mm", 5.0)
-                    print(f">>   🌀 나선형 탐색: 가압력={z_force}N, 반경={radius}mm")
-                    found_pos = RobotControlUseCase.spiral_search(z_force=z_force, radius_mm=radius)
-                    if found_pos:
-                        print(f">>   ✅ 삽입 성공 위치: {[f'{v:.4f}' for v in found_pos[:3]]}")
-                    
-                elif "Folder" in text:
-                    _execute_node_list(node["children"])
+                elif node_type == 302:  # Force
+                    print(f">>   💪 힘 제어 노드")
                     
                 else:
-                    print(f">>   (스킵: {text})")
+                    # 텍스트 fallback (사용자 직접 추가 노드)
+                    if "Stack Search" in text:
+                        axis = data.get("axis", 2)
+                        direction = data.get("direction", -1)
+                        threshold = data.get("force_threshold", 10.0)
+                        step = data.get("step_mm", 1.0)
+                        found_pos = RobotControlUseCase.stack_search(axis, direction, threshold, step)
+                        if found_pos:
+                            RobotControlUseCase.set_variable("stack_z", found_pos[2])
+                    elif "Spiral Search" in text:
+                        z_force = data.get("z_force", 10.0)
+                        radius = data.get("radius_mm", 5.0)
+                        RobotControlUseCase.spiral_search(z_force=z_force, radius_mm=radius)
+                    else:
+                        print(f">>   (스킵: type={node_type}, {text})")
         
         def _clear_all_highlights():
             """모든 노드의 하이라이트 제거"""
@@ -1222,6 +1945,29 @@ class ProgramTreeEditor:
             except: pass
         
         def _run():
+            import datetime, io, os as _os
+            log_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', '..', '..', 'logs')
+            _os.makedirs(log_dir, exist_ok=True)
+            log_path = _os.path.join(log_dir, f"exec_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+            log_lines = []
+            
+            _orig_print = print
+            def _log_print(*args, **kwargs):
+                msg = " ".join(str(a) for a in args)
+                log_lines.append(msg)
+                _orig_print(*args, **kwargs)
+            
+            import builtins
+            builtins.print = _log_print
+            
+            # 폴링 일시중지 (소켓 Lock 경합 방지)
+            try:
+                app = self.parent.winfo_toplevel()
+                if hasattr(app, '_program_running'):
+                    app._program_running = True
+                    print(">> [시스템] 폴링 일시중지")
+            except: pass
+            
             print("\n>> ═══════════════════════════════════")
             print(">> 🚀 프로그램 실행을 시작합니다!")
             print(">> ═══════════════════════════════════")
@@ -1229,12 +1975,31 @@ class ProgramTreeEditor:
                 _execute_node_list(all_nodes)
             except Exception as e:
                 print(f">> [실행 에러] {e}")
+                import traceback
+                traceback.print_exc()
             
             _clear_all_highlights()
             if self._exec_stop:
                 print(">> ⏹ 사용자에 의해 프로그램이 중단되었습니다.")
             else:
                 print(">> ✅ 프로그램 실행 완료!")
+            
+            # 폴링 재개
+            try:
+                app = self.parent.winfo_toplevel()
+                if hasattr(app, '_program_running'):
+                    app._program_running = False
+                    print(">> [시스템] 폴링 재개")
+            except: pass
+            
+            # 로그 파일 저장
+            builtins.print = _orig_print
+            try:
+                with open(log_path, 'w', encoding='utf-8') as f:
+                    f.write("\n".join(log_lines))
+                print(f">> [로그] 실행 로그 저장됨: {log_path}")
+            except Exception as e:
+                print(f">> [로그 에러] {e}")
         
         threading.Thread(target=_run, daemon=True).start()
 
@@ -1319,39 +2084,74 @@ class ProgramTreeEditor:
         print(">> [삭제] 선택한 노드가 삭제되었습니다.")
 
     def add_node(self, cmd_name):
-        # 표시 이름을 내부 이름으로 변환
-        display_to_internal = {
-            "Joint Move": "Move J",
-            "Frame Move": "Move L",
-            "DO": "Set DO",
-            "AO": "Set AO",
+        # 표시 이름 → 내부 이름 + Conty 타입 코드
+        _MAP = {
+            # 모션 명령어
+            "Joint Move": ("JointMove", 1),
+            "Frame Move": ("FrameMove", 103),     # type=103: FrameMove:Absolute
+            "Move C":     ("Move C", 102),         # type=102: FrameMove (variant)
+            "Move Home":  ("Folder", 100),         # type=100: Home은 Folder로 구현
+            "Move B":     ("JointMove", 1),        # type=1 (relative joint)
+            "Move By":    ("FrameMove", 103),      # type=103 (relative frame)
+            # 입출력 명령어
+            "DO":         ("Tool Command", 40),    # type=40: toolCommand
+            "Smart DO":   ("Smart DO", 4),         # type=4: doList
+            "EndTool DO": ("EndTool DO", 6),       # type=6: endtoolDoList
+            "AO":         ("Smart AO", 5),         # type=5: aoList
+            "Tool Sensing": ("Tool Sensing", 41),  # type=41: toolSensing
+            # 흐름제어 명령어
+            "Loop":       ("Loop", 20),            # type=20: count=-1
+            "Wait":       ("Wait", 28),            # type=28: time=1
+            "Wait For":   ("Wait For", 22),        # type=22: time-based wait
+            "Wait DI":    ("Wait For [DI]", 29),   # type=29: diList (no children)
+            "If (DI)":    ("If [DI]", 29),         # type=29: diList (has children)
+            "If Var":     ("If Var", 23),           # type=23: cond
+            "Else":       ("If", 24),              # type=24: cond
+            "Math":       ("If Var", 23),           # closest match
+            "Loop Break": ("Loop Break", 21),      # type=21: loopBreak
+            "Speed Ratio": ("Call", 250),          # type=250: prgSpdRatio
+            "Comment":    ("Comment", 100),        # type=100 (use Folder)
+            "Stop":       ("Stop", 100),           # type=100 (use Folder)
+            "Folder":     ("Folder", 100),         # type=100: Folder/Group
+            # 응용 명령어
+            "Pick":       ("Pick", 201),           # type=201: pick
+            "Place":      ("Place", 202),          # type=202: place
+            "Pallet":     ("Pallet", 200),         # type=200: Pick Group
+            "Call":       ("Call", 250),            # type=250
+            "Conveyor":   ("Conveyor", 100),       # placeholder
+            "Force":      ("indyCARE", 302),       # type=302
+            "TaktTime":   ("indyCARE", 302),       # type=302: careTackTime
+            "Detect":     ("Detect", 100),         # placeholder
+            "Retrieve":   ("Retrieve", 100),       # placeholder
+            "Python":     ("Python Script", 100),  # placeholder
         }
-        internal_name = display_to_internal.get(cmd_name, cmd_name)
+        internal_name, conty_type = _MAP.get(cmd_name, (cmd_name, 100))
         
         selected = self.tree.selection()
         if not selected:
             new_item = self.tree.insert("", "end", text=f" {internal_name} Node", open=True)
-            self._auto_teach(new_item, internal_name)
+            self._auto_teach(new_item, internal_name, conty_type)
             return
             
         target = selected[0]
         target_text = self.tree.item(target, "text")
         
-        # Loop문(반복문)이나 If문(조건문), Main Program인 경우에만 하위(자식)로 삽입
-        if "Loop" in target_text or "If" in target_text or "Main Program" in target_text or "Folder" in target_text:
+        # 컨테이너 노드인 경우 자식으로 삽입
+        container_keywords = ["Loop", "If", "Main Program", "Folder", "Pick", "Wait DI", "WaitPeriod", "Set DO"]
+        is_container = any(kw in target_text for kw in container_keywords)
+        
+        if is_container:
             new_item = self.tree.insert(target, "end", text=f" {internal_name} Node", open=True)
-            self.tree.item(target, open=True) # 자동으로 하위 펼치기
+            self.tree.item(target, open=True)
         else:
-            # 일반 명령어(Move, Pick 등)는 하위가 아니라 같은 레벨(형제)로 바로 밑에 삽입
             parent = self.tree.parent(target)
             idx = self.tree.index(target)
             new_item = self.tree.insert(parent, idx + 1, text=f" {internal_name} Node", open=True)
             
-        self._auto_teach(new_item, internal_name)
+        self._auto_teach(new_item, internal_name, conty_type)
         
-    def _auto_teach(self, new_item, cmd_name):
+    def _auto_teach(self, new_item, cmd_name, conty_type=100):
         if not hasattr(self, 'node_data'): self.node_data = {}
-        # Fetch current coordinates from JogController
         current_q = [0.0]*6
         current_p = [0.0]*6
         try:
@@ -1361,16 +2161,17 @@ class ProgramTreeEditor:
                 current_p[i] = float(self.jog_controller.entries[ax].get())
         except Exception:
             pass
-            
+        
+        # __raw__에 Conty 타입 포함 (실행 엔진이 type 기반으로 디스패치)
         self.node_data[new_item] = {
             "q": current_q, 
             "p": current_p, 
             "t_type": 0, 
             "p_name": "", 
             "p_data": [], 
-            "b_radius": 0.0
+            "b_radius": 0.0,
+            "__raw__": {"type": conty_type, "enable": True, "pId": 0},
         }
-        # Automatically select the newly created node so the editor updates
         self.tree.selection_set(new_item)
         self.tree.focus(new_item)
         if self.on_node_selected_callback:

@@ -724,9 +724,10 @@ class PickPlaceEditor:
         elif tt == "팔레타이징 사용": node_data["target_type"] = 1
         else: node_data["target_type"] = 2
         
-        # Tool ID
-        tid = 1 if self.tool_type_var.get() == "Gripper" else 3
-        node_data["toolId"] = tid
+        # Tool ID — 기존 toolId 보존 (원본 JSON과 불일치 방지)
+        if "toolId" not in node_data:
+            tid = 1 if self.tool_type_var.get() == "Gripper" else 3
+            node_data["toolId"] = tid
         
         # Direction map
         dir_map_rev = {"Z": 0, "-Z": 1, "X": 2, "-X": 3, "Y": 4, "-Y": 5}
