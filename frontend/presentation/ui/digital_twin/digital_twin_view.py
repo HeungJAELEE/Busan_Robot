@@ -21,6 +21,7 @@ class DigitalTwinView:
         self.robot_trails = {}
         self.robot_zone_scatters = {}
         self.robot_tcp_dots = {}
+        self.robot_base_colors = {}
         self.robot_pos_labels = {}
         self.program_runners = {}
         self.program_runner_hosts = {}
@@ -154,6 +155,7 @@ class DigitalTwinView:
         }
 
         color_map = {"Robot C": "#FF1744", "Robot B": "#00E5FF", "Robot A": "#00FF41"}
+        self.robot_base_colors = dict(color_map)
         
         label_frame = ctk.CTkFrame(self.center_panel, fg_color="transparent")
         label_frame.pack(side="bottom", fill="x", pady=5)
@@ -163,7 +165,7 @@ class DigitalTwinView:
             self.robot_arm_lines[name], = self.ax.plot([], [], [], '-', color=col, lw=3)
             self.robot_joints_dots[name], = self.ax.plot([], [], [], 'o', color=col, markersize=6, markerfacecolor='white', markeredgecolor=col, markeredgewidth=2)
             self.robot_trails[name], = self.ax.plot([], [], [], color=col, alpha=0.55, lw=1.8, linestyle='--')
-            self.robot_zone_scatters[name] = self.ax.scatter([], [], [], c=[], s=28, alpha=0.9, depthshade=False)
+            self.robot_zone_scatters[name] = self.ax.scatter([], [], [], c=[], s=18, alpha=0.38, depthshade=False)
             self.robot_tcp_dots[name], = self.ax.plot([], [], [], 'o', color=col, markersize=9, markerfacecolor=col, markeredgecolor='white', markeredgewidth=1.4)
             
             wrapper = ctk.CTkFrame(label_frame, fg_color="transparent")
@@ -264,8 +266,9 @@ class DigitalTwinView:
             zone_color = guide["color"]
             self.robot_tcp_dots[name].set_data([P6[0]], [P6[1]])
             self.robot_tcp_dots[name].set_3d_properties([P6[2]])
-            self.robot_tcp_dots[name].set_color(zone_color)
-            self.robot_tcp_dots[name].set_markerfacecolor(zone_color)
+            self.robot_tcp_dots[name].set_color(self.robot_base_colors.get(name, "#FFFFFF"))
+            self.robot_tcp_dots[name].set_markerfacecolor(self.robot_base_colors.get(name, "#FFFFFF"))
+            self.robot_tcp_dots[name].set_markeredgecolor(zone_color)
 
             if should_append:
                 hx.append(float(P6[0]))

@@ -11,9 +11,9 @@ class SingularityAnalyzer:
     fall back to a conservative workspace-boundary estimate.
     """
 
-    COLOR_SAFE = "#00C853"
-    COLOR_WARN = "#FF9800"
-    COLOR_DANGER = "#FF1744"
+    COLOR_SAFE = "#81C784"
+    COLOR_WARN = "#FFB74D"
+    COLOR_DANGER = "#EF5350"
 
     DEFAULT_DH = [
         {"a": 0.0, "alpha": 0.0, "d": 0.3, "theta_offset": 0.0},

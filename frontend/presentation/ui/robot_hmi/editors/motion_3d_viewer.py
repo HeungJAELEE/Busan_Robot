@@ -871,8 +871,8 @@ class Motion3DViewer:
                 x1, y1, _ = self._project(*p_prev)
                 x2, y2, _ = self._project(*p_cur)
                 zcolor = self.steps[si][3].get("zone_color", self.C_PLAN)
-                width_seg = 3.0 if si <= self.current_step else 1.4
-                c.create_line(x1, y1, x2, y2, fill=zcolor, width=width_seg)
+                width_seg = 1.8 if si <= self.current_step else 1.1
+                c.create_line(x1, y1, x2, y2, fill=zcolor, width=width_seg, dash=(4, 6))
 
         # ── 관절값 기반 로봇 팔 형상 ──
         robot_q = self._current_or_previous_q()
@@ -905,7 +905,8 @@ class Motion3DViewer:
             if si < self.current_step:
                 # 지나간 스텝 — 작은 점 + 번호
                 r = 4
-                c.create_oval(sx-r, sy-r, sx+r, sy+r, fill=zone_color, outline="")
+                c.create_oval(sx-r-3, sy-r-3, sx+r+3, sy+r+3, fill="", outline=zone_color, width=1)
+                c.create_oval(sx-r, sy-r, sx+r, sy+r, fill=scolor, outline="")
                 c.create_text(sx, sy-8, text=str(si+1), fill=zone_color, font=("Consolas", 7))
             elif si == self.current_step:
                 # 현재 스텝 — 큰 점 + 하이라이트 + 방사 효과
@@ -913,7 +914,7 @@ class Motion3DViewer:
                 # 방사 원
                 c.create_oval(sx-r-6, sy-r-6, sx+r+6, sy+r+6, fill="", outline=zone_color, width=1, dash=(3,3))
                 c.create_oval(sx-r-2, sy-r-2, sx+r+2, sy+r+2, fill="", outline=self.C_HIGHLIGHT, width=2)
-                c.create_oval(sx-r, sy-r, sx+r, sy+r, fill=zone_color, outline="white", width=2)
+                c.create_oval(sx-r, sy-r, sx+r, sy+r, fill=scolor, outline=zone_color, width=2)
                 # 스텝 번호
                 c.create_text(sx, sy, text=str(si+1), fill="white", font=("Consolas", 9, "bold"))
                 # 레이블
@@ -926,7 +927,7 @@ class Motion3DViewer:
             else:
                 # 미래 스텝 — 작은 빈 원
                 r = 3
-                c.create_oval(sx-r, sy-r, sx+r, sy+r, fill="", outline=zone_color, width=1)
+                c.create_oval(sx-r, sy-r, sx+r, sy+r, fill="", outline=scolor, width=1)
 
         # ── 스텝 정보 업데이트 ──
         if self.steps:
