@@ -6,7 +6,7 @@ import time
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from src.infrastructure.mqtt_manager import MqttManager
-from infrastructure.repositories.database_repository import db_repository
+from src.infrastructure.database_repository import db_repository
 
 print("🗄 [DB Worker] 시작됨 - MSA 환경")
 
