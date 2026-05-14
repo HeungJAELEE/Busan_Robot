@@ -1,0 +1,260 @@
+>> [시스템] 폴링 일시중지
+
+>> ═══════════════════════════════════
+>> 🚀 프로그램 실행을 시작합니다!
+>> ═══════════════════════════════════
+
+>> ▶ 실행: Main Program (type=-1)
+
+>> ▶ 실행: Program Settings (type=999)
+
+>> ▶ 실행: Variables (type=2)
+>> 📋 Variables 노드 (스킵)
+
+>> ▶ 실행: Home (type=100)
+>>   → Home 이동
+
+>> ▶ 실행: Loop (무한반복) (type=20)
+>> 🔄 Loop #1 (무한)
+
+>> ▶ 실행: Wait For [DI] (DI 미지정) (type=28)
+>>   ⏳ Wait For [DI] (DI 미지정 — 스킵)
+
+>> ▶ 실행: Pick (type=201)
+>>   [DEBUG] tool_id=0, has_raw_data=True
+>>   [DEBUG] type=999 찾음, toolInfo 개수=2
+>>   [DEBUG] 매칭된 tool: id=0, name=djj_grp
+>>   [DEBUG] Hold doMap=[{'value': 0, 'idx': 0}, {'value': 1, 'idx': 1}]
+>>   [DEBUG] Release doMap=[{'value': 1, 'idx': 0}, {'value': 0, 'idx': 1}]
+>>   [DEBUG] 최종: hold_do_map=[{'value': 0, 'idx': 0}, {'value': 1, 'idx': 1}], release_do_map=[{'value': 1, 'idx': 0}, {'value': 0, 'idx': 1}]
+>>   🫳 Pick(잡기)
+>>     target: z=0.1099
+>>     1) 접근 위치(Z=0.1599, +0.050m 위)
+>>     2) 타겟 위치로 하강(Z=0.1099)
+>>     3) Hold(잡기)
+>>     DO0=OFF (Hold(잡기)) ✅
+>>     DO1=ON (Hold(잡기)) ✅
+>>     4) 후퇴 위치(Z=0.1599, +0.050m 위)
+
+>> ▶ 실행: Place (type=202)
+>>   [DEBUG] tool_id=0, has_raw_data=True
+>>   [DEBUG] type=999 찾음, toolInfo 개수=2
+>>   [DEBUG] 매칭된 tool: id=0, name=djj_grp
+>>   [DEBUG] Hold doMap=[{'value': 0, 'idx': 0}, {'value': 1, 'idx': 1}]
+>>   [DEBUG] Release doMap=[{'value': 1, 'idx': 0}, {'value': 0, 'idx': 1}]
+>>   [DEBUG] 최종: hold_do_map=[{'value': 0, 'idx': 0}, {'value': 1, 'idx': 1}], release_do_map=[{'value': 1, 'idx': 0}, {'value': 0, 'idx': 1}]
+>>   📦 Place(놓기)
+>>     target: z=0.1080
+>>     1) 접근 위치(Z=0.1880, +0.080m 위)
+>>     2) 타겟 위치로 하강(Z=0.1080)
+>>     3) Release(놓기)
+>>     DO1=OFF (Release(놓기)) ✅
+>>     DO0=ON (Release(놓기)) ✅
+>>     4) 후퇴 위치(Z=0.1880, +0.080m 위)
+>> 🔄 Loop #2 (무한)
+
+>> ▶ 실행: Wait For [DI] (DI 미지정) (type=28)
+>>   ⏳ Wait For [DI] (DI 미지정 — 스킵)
+
+>> ▶ 실행: Pick (type=201)
+>>   [DEBUG] tool_id=3, has_raw_data=True
+>>   [DEBUG] type=999 찾음, toolInfo 개수=2
+>>   [DEBUG] 최종: hold_do_map=[], release_do_map=[]
+>>   🫳 Pick(잡기)
+>>     target: z=0.1099
+>>     1) 접근 위치(Z=0.1599, +0.050m 위)
+>>     2) 타겟 위치로 하강(Z=0.1099)
+>>     3) Hold(잡기)
+>>     ⚠️ doMap 없음 — Hold(잡기) 스킵
+>>     4) 후퇴 위치(Z=0.1599, +0.050m 위)
+
+>> ▶ 실행: Place (type=202)
+>>   [DEBUG] tool_id=3, has_raw_data=True
+>>   [DEBUG] type=999 찾음, toolInfo 개수=2
+>>   [DEBUG] 최종: hold_do_map=[], release_do_map=[]
+>>   📦 Place(놓기)
+>>     target: z=0.1080
+>>     1) 접근 위치(Z=0.1880, +0.080m 위)
+>>     2) 타겟 위치로 하강(Z=0.1080)
+>>     3) Release(놓기)
+>>     ⚠️ doMap 없음 — Release(놓기) 스킵
+>>     4) 후퇴 위치(Z=0.1880, +0.080m 위)
+>> 🔄 Loop #3 (무한)
+
+>> ▶ 실행: Wait For [DI] (DI 미지정) (type=28)
+>>   ⏳ Wait For [DI] (DI 미지정 — 스킵)
+
+>> ▶ 실행: Pick (type=201)
+>>   [DEBUG] tool_id=3, has_raw_data=True
+>>   [DEBUG] type=999 찾음, toolInfo 개수=2
+>>   [DEBUG] 최종: hold_do_map=[], release_do_map=[]
+>>   🫳 Pick(잡기)
+>>     target: z=0.1099
+>>     1) 접근 위치(Z=0.1599, +0.050m 위)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>>     2) 타겟 위치로 하강(Z=0.1099)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>>     3) Hold(잡기)
+>>     ⚠️ doMap 없음 — Hold(잡기) 스킵
+>>     4) 후퇴 위치(Z=0.1599, +0.050m 위)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+
+>> ▶ 실행: Place (type=202)
+>>   [DEBUG] tool_id=3, has_raw_data=True
+>>   [DEBUG] type=999 찾음, toolInfo 개수=2
+>>   [DEBUG] 최종: hold_do_map=[], release_do_map=[]
+>>   📦 Place(놓기)
+>>     target: z=0.1080
+>>     1) 접근 위치(Z=0.1880, +0.080m 위)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>>     2) 타겟 위치로 하강(Z=0.1080)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>>     3) Release(놓기)
+>>     ⚠️ doMap 없음 — Release(놓기) 스킵
+>>     4) 후퇴 위치(Z=0.1880, +0.080m 위)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> 🔄 Loop #4 (무한)
+
+>> ▶ 실행: Wait For [DI] (DI 미지정) (type=28)
+>>   ⏳ Wait For [DI] (DI 미지정 — 스킵)
+
+>> ▶ 실행: Pick (type=201)
+>>   [DEBUG] tool_id=3, has_raw_data=True
+>>   [DEBUG] type=999 찾음, toolInfo 개수=2
+>>   [DEBUG] 최종: hold_do_map=[], release_do_map=[]
+>>   🫳 Pick(잡기)
+>>     target: z=0.1099
+>>     1) 접근 위치(Z=0.1599, +0.050m 위)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>>     2) 타겟 위치로 하강(Z=0.1099)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>>     3) Hold(잡기)
+>>     ⚠️ doMap 없음 — Hold(잡기) 스킵
+>>     4) 후퇴 위치(Z=0.1599, +0.050m 위)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+
+>> ▶ 실행: Place (type=202)
+>>   [DEBUG] tool_id=3, has_raw_data=True
+>>   [DEBUG] type=999 찾음, toolInfo 개수=2
+>>   [DEBUG] 최종: hold_do_map=[], release_do_map=[]
+>>   📦 Place(놓기)
+>>     target: z=0.1080
+>>     1) 접근 위치(Z=0.1880, +0.080m 위)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>>     2) 타겟 위치로 하강(Z=0.1080)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>>     3) Release(놓기)
+>>     ⚠️ doMap 없음 — Release(놓기) 스킵
+>>     4) 후퇴 위치(Z=0.1880, +0.080m 위)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> 🔄 Loop #5 (무한)
+
+>> ▶ 실행: Wait For [DI] (DI 미지정) (type=28)
+>>   ⏳ Wait For [DI] (DI 미지정 — 스킵)
+
+>> ▶ 실행: Pick (type=201)
+>>   [DEBUG] tool_id=3, has_raw_data=True
+>>   [DEBUG] type=999 찾음, toolInfo 개수=2
+>>   [DEBUG] 최종: hold_do_map=[], release_do_map=[]
+>>   🫳 Pick(잡기)
+>>     target: z=0.1099
+>>     1) 접근 위치(Z=0.1599, +0.050m 위)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>>     2) 타겟 위치로 하강(Z=0.1099)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>>     3) Hold(잡기)
+>>     ⚠️ doMap 없음 — Hold(잡기) 스킵
+>>     4) 후퇴 위치(Z=0.1599, +0.050m 위)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+
+>> ▶ 실행: Place (type=202)
+>>   [DEBUG] tool_id=3, has_raw_data=True
+>>   [DEBUG] type=999 찾음, toolInfo 개수=2
+>>   [DEBUG] 최종: hold_do_map=[], release_do_map=[]
+>>   📦 Place(놓기)
+>>     target: z=0.1080
+>>     1) 접근 위치(Z=0.1880, +0.080m 위)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>>     2) 타겟 위치로 하강(Z=0.1080)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>>     3) Release(놓기)
+>>     ⚠️ doMap 없음 — Release(놓기) 스킵
+>>     4) 후퇴 위치(Z=0.1880, +0.080m 위)
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> ⏹ [정지] 프로그램 실행이 중단되었습니다.
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [경고] 이동 완료 대기 타임아웃 (30.0초)
+>> ⏹ 사용자에 의해 프로그램이 중단되었습니다.
+>> [시스템] 폴링 재개

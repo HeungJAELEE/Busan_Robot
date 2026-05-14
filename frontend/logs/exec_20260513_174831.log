@@ -1,0 +1,171 @@
+>> [시스템] 폴링 일시중지
+
+>> ═══════════════════════════════════
+>> 🚀 프로그램 실행을 시작합니다!
+>> ═══════════════════════════════════
+
+>> ▶ 실행: Main Program (type=-1)
+
+>> ▶ 실행: Program Settings (type=999)
+
+>> ▶ 실행: Variables (type=2)
+>> 📋 Variables 노드 (스킵)
+
+>> ▶ 실행: Home (type=100)
+>>   → Home 이동
+
+>> ▶ 실행: Loop (무한반복) (type=20)
+>> 🔄 Loop #1/5
+
+>> ▶ 실행: Wait For [DI] (DI 미지정) (type=28)
+>>   ⏳ Wait For [DI] (DI 미지정 — 스킵)
+
+>> ▶ 실행: Pick (type=201)
+>>   [DEBUG] tool_id=0, has_raw_data=True
+>>   [DEBUG] type=999 찾음, toolInfo 개수=2
+>>   [DEBUG] 매칭된 tool: id=0, name=djj_grp
+>>   [DEBUG] 최종: hold=[{'value': 0, 'idx': 0}, {'value': 1, 'idx': 1}], release=[{'value': 1, 'idx': 0}, {'value': 0, 'idx': 1}]
+>>   🔄 인터리빙 모드: 🫳 Pick(잡기) (팔레트 5개) ↔ 📦 Place(놓기)
+>>   🫳 Pick(잡기) [1/5] L1 R1 C1
+>>     1) 접근 위치(Z+0.050m)
+>>     2) 타겟 위치로 하강
+>>     3) Hold
+>>     DO0=OFF (Hold(잡기)) ✅
+>>     DO1=ON (Hold(잡기)) ✅
+>>     4) 후퇴 위치(Z+0.050m)
+>> [자동계산] 수평 기준 3D 다단 적재(P2, P3, P4) 생성 완료
+>>   📦 Place(놓기) [1/5]
+>>     1) 접근 위치(Z+0.080m)
+>>     2) 타겟 위치로 하강
+>>     3) Release
+>>     DO1=OFF (Release(놓기)) ✅
+>>     DO0=ON (Release(놓기)) ✅
+>>     4) 후퇴 위치(Z+0.080m)
+>>   🫳 Pick(잡기) [2/5] L2 R1 C1
+>>     1) 접근 위치(Z+0.050m)
+>>     2) 타겟 위치로 하강
+>>     3) Hold
+>>     DO0=OFF (Hold(잡기)) ✅
+>>     DO1=ON (Hold(잡기)) ✅
+>>     4) 후퇴 위치(Z+0.050m)
+>>   📦 Place(놓기) [2/5]
+>>     1) 접근 위치(Z+0.080m)
+>>     2) 타겟 위치로 하강
+>>     3) Release
+>>     DO1=OFF (Release(놓기)) ✅
+>>     DO0=ON (Release(놓기)) ✅
+>>     4) 후퇴 위치(Z+0.080m)
+>>   🫳 Pick(잡기) [3/5] L3 R1 C1
+>>     1) 접근 위치(Z+0.050m)
+>>     2) 타겟 위치로 하강
+>>     3) Hold
+>>     DO0=OFF (Hold(잡기)) ✅
+>>     DO1=ON (Hold(잡기)) ✅
+>>     4) 후퇴 위치(Z+0.050m)
+>>   📦 Place(놓기) [3/5]
+>>     1) 접근 위치(Z+0.080m)
+>>     2) 타겟 위치로 하강
+>>     3) Release
+>>     DO1=OFF (Release(놓기)) ✅
+>>     DO0=ON (Release(놓기)) ✅
+>>     4) 후퇴 위치(Z+0.080m)
+>>   🫳 Pick(잡기) [4/5] L4 R1 C1
+>>     1) 접근 위치(Z+0.050m)
+>>     2) 타겟 위치로 하강
+>>     3) Hold
+>>     DO0=OFF (Hold(잡기)) ✅
+>>     DO1=ON (Hold(잡기)) ✅
+>>     4) 후퇴 위치(Z+0.050m)
+>>   📦 Place(놓기) [4/5]
+>>     1) 접근 위치(Z+0.080m)
+>>     2) 타겟 위치로 하강
+>>     3) Release
+>>     DO1=OFF (Release(놓기)) ✅
+>>     DO0=ON (Release(놓기)) ✅
+>>     4) 후퇴 위치(Z+0.080m)
+>>   🫳 Pick(잡기) [5/5] L5 R1 C1
+>>     1) 접근 위치(Z+0.050m)
+>>     2) 타겟 위치로 하강
+>>     3) Hold
+>>     DO0=OFF (Hold(잡기)) ✅
+>>     DO1=ON (Hold(잡기)) ✅
+>>     4) 후퇴 위치(Z+0.050m)
+>>   📦 Place(놓기) [5/5]
+>>     1) 접근 위치(Z+0.080m)
+>>     2) 타겟 위치로 하강
+>>     3) Release
+>>     DO1=OFF (Release(놓기)) ✅
+>>     DO0=ON (Release(놓기)) ✅
+>>     4) 후퇴 위치(Z+0.080m)
+>> 🔄 Loop #2/5
+
+>> ▶ 실행: Wait For [DI] (DI 미지정) (type=28)
+>>   ⏳ Wait For [DI] (DI 미지정 — 스킵)
+
+>> ▶ 실행: Pick (type=201)
+>>   [DEBUG] tool_id=0, has_raw_data=True
+>>   [DEBUG] type=999 찾음, toolInfo 개수=2
+>>   [DEBUG] 매칭된 tool: id=0, name=djj_grp
+>>   [DEBUG] 최종: hold=[{'value': 0, 'idx': 0}, {'value': 1, 'idx': 1}], release=[{'value': 1, 'idx': 0}, {'value': 0, 'idx': 1}]
+>>   🔄 인터리빙 모드: 🫳 Pick(잡기) (팔레트 5개) ↔ 📦 Place(놓기)
+>>   🫳 Pick(잡기) [1/5] L1 R1 C1
+>>     1) 접근 위치(Z+0.050m)
+>>     2) 타겟 위치로 하강
+>>     3) Hold
+>>     DO0=OFF (Hold(잡기)) ✅
+>>     DO1=ON (Hold(잡기)) ✅
+>>     4) 후퇴 위치(Z+0.050m)
+>> [자동계산] 수평 기준 3D 다단 적재(P2, P3, P4) 생성 완료
+>>   📦 Place(놓기) [1/5]
+>>     1) 접근 위치(Z+0.080m)
+>>     2) 타겟 위치로 하강
+>>     3) Release
+>>     DO1=OFF (Release(놓기)) ✅
+>>     DO0=ON (Release(놓기)) ✅
+>>     4) 후퇴 위치(Z+0.080m)
+>>   🫳 Pick(잡기) [2/5] L2 R1 C1
+>>     1) 접근 위치(Z+0.050m)
+>> ⏹ [정지] 프로그램 실행이 중단되었습니다.
+>> [경고] 이동 완료 대기 타임아웃 (30.0초)
+>>     2) 타겟 위치로 하강
+>>     3) Hold
+>>     DO0=OFF (Hold(잡기)) ✅
+>>     DO1=ON (Hold(잡기)) ✅
+>>     4) 후퇴 위치(Z+0.050m)
+>>   📦 Place(놓기) [2/5]
+>>     1) 접근 위치(Z+0.080m)
+>>     2) 타겟 위치로 하강
+>> ⏹ [정지] 프로그램 실행이 중단되었습니다.
+>> ⏹ [정지] 프로그램 실행이 중단되었습니다.
+>> ⏹ [정지] 프로그램 실행이 중단되었습니다.
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [I/O] DO1 = OFF
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [I/O] DO0 = ON
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [I/O] DO0 = OFF
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+>> [EndTool DI 에러] 'IndyDCPClient' object has no attribute 'get_endtool_di'
+
+>> 🎯 제어 타겟 로봇 변경: Robot B
+>> [경고] 이동 완료 대기 타임아웃 (30.0초)
+>>     3) Release
+>>     DO1=OFF (Release(놓기)) ✅
+>>     DO0=ON (Release(놓기)) ✅
+>>     4) 후퇴 위치(Z+0.080m)
+>> [통신] Robot A 일괄 연결 해제 시도...
+>> [성공] Robot A 연결 해제 완료!
+>> [통신] Robot B 일괄 연결 해제 시도...
+>> [성공] Robot B 연결 해제 완료!
+>> [통신] Robot C 일괄 연결 해제 시도...
+>> [성공] Robot C 연결 해제 완료!
+>> ⏹ [정지] 프로그램 실행이 중단되었습니다.
+>> ⏹ [정지] 프로그램 실행이 중단되었습니다.
+>> ⏹ [정지] 프로그램 실행이 중단되었습니다.
+>> [경고] 이동 완료 대기 타임아웃 (30.0초)
+>> ⏹ 사용자에 의해 프로그램이 중단되었습니다.
+>> [시스템] 폴링 재개
