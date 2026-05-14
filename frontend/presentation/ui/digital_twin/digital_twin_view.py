@@ -6,6 +6,7 @@ from core.domains.robot.communication.client_manager import robot_manager
 import math
 from presentation.ui.robot_hmi.robot_hmi_view import ProgramTreeEditor, RobotSettingsEditor
 from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
+from core.domains.robot.use_cases.singularity_analyzer import SingularityAnalyzer
 
 class DigitalTwinView:
     def __init__(self, parent_tab):
@@ -18,6 +19,7 @@ class DigitalTwinView:
         self.robot_arm_lines = {}
         self.robot_joints_dots = {}
         self.robot_trails = {}
+        self.robot_zone_scatters = {}
         self.robot_tcp_dots = {}
         self.robot_pos_labels = {}
         self.program_runners = {}
@@ -29,7 +31,10 @@ class DigitalTwinView:
         self.history_x = {n: [] for n in ["Robot A", "Robot B", "Robot C"]}
         self.history_y = {n: [] for n in ["Robot A", "Robot B", "Robot C"]}
         self.history_z = {n: [] for n in ["Robot A", "Robot B", "Robot C"]}
-        self.max_trail_points = 300
+        self.history_zone_colors = {n: [] for n in ["Robot A", "Robot B", "Robot C"]}
+        self.last_singularity_guides = {}
+        self.max_trail_points = 160
+        self.zone_sample_distance_m = 0.02
         
         self.dh_params = [
             {"a": 0.0,    "alpha": 0.0,       "d": 0.3,    "theta_offset": 0.0},
@@ -42,6 +47,7 @@ class DigitalTwinView:
         
         # TCP offset (Tool Center Point) - loaded from JSON or default Indy7 gripper
         self.tcp_offset = np.array([0.0, 0.0, 0.21, 0.0, 0.0, 0.0])
+        self.singularity_analyzer = SingularityAnalyzer(self.dh_params, self.tcp_offset)
         
         self.setup_ui()
         self._init_3d_viewer()
@@ -101,6 +107,18 @@ class DigitalTwinView:
         ctk.CTkLabel(joint_box, text="JOINT ANGLES (J1 ~ J6)").pack(anchor="w", padx=10, pady=5)
         self.joint_label = ctk.CTkLabel(joint_box, text="WAITING SIGNAL...", text_color="#00FF41", font=ctk.CTkFont(family="Consolas", size=14, weight="bold"), justify="left")
         self.joint_label.pack(anchor="w", padx=10, pady=(0, 10))
+
+        zone_box = ctk.CTkFrame(self.right_panel, fg_color="#121215")
+        zone_box.pack(fill="x", padx=15, pady=5)
+        ctk.CTkLabel(zone_box, text="SINGULARITY GUIDE ZONE").pack(anchor="w", padx=10, pady=5)
+        self.singularity_label = ctk.CTkLabel(
+            zone_box,
+            text="녹색 <70 권장 안전\n주황 70~90 주의\n빨강 90~100 위험",
+            text_color=SingularityAnalyzer.COLOR_SAFE,
+            font=ctk.CTkFont(family="Consolas", size=13, weight="bold"),
+            justify="left",
+        )
+        self.singularity_label.pack(anchor="w", padx=10, pady=(0, 10))
         
         # 네트워크 및 연결 설정 추가
         ctk.CTkFrame(self.right_panel, height=2, fg_color="#3A3D45").pack(fill="x", padx=15, pady=15)
@@ -144,7 +162,8 @@ class DigitalTwinView:
             col = color_map.get(name, "#FFFFFF")
             self.robot_arm_lines[name], = self.ax.plot([], [], [], '-', color=col, lw=3)
             self.robot_joints_dots[name], = self.ax.plot([], [], [], 'o', color=col, markersize=6, markerfacecolor='white', markeredgecolor=col, markeredgewidth=2)
-            self.robot_trails[name], = self.ax.plot([], [], [], '-', color=col, alpha=0.55, lw=1.8, linestyle='--')
+            self.robot_trails[name], = self.ax.plot([], [], [], color=col, alpha=0.55, lw=1.8, linestyle='--')
+            self.robot_zone_scatters[name] = self.ax.scatter([], [], [], c=[], s=28, alpha=0.9, depthshade=False)
             self.robot_tcp_dots[name], = self.ax.plot([], [], [], 'o', color=col, markersize=9, markerfacecolor=col, markeredgecolor='white', markeredgewidth=1.4)
             
             wrapper = ctk.CTkFrame(label_frame, fg_color="transparent")
@@ -186,9 +205,13 @@ class DigitalTwinView:
             self.history_x[name].clear()
             self.history_y[name].clear()
             self.history_z[name].clear()
+            self.history_zone_colors[name].clear()
             if name in self.robot_trails:
                 self.robot_trails[name].set_data([], [])
                 self.robot_trails[name].set_3d_properties([])
+            if name in self.robot_zone_scatters:
+                self.robot_zone_scatters[name]._offsets3d = ([], [], [])
+                self.robot_zone_scatters[name].set_color([])
         try:
             self.canvas.draw_idle()
         except Exception:
@@ -228,24 +251,47 @@ class DigitalTwinView:
             self.robot_joints_dots[name].set_data(joint_xs, joint_ys)
             self.robot_joints_dots[name].set_3d_properties(joint_zs)
 
-            self.robot_tcp_dots[name].set_data([P6[0]], [P6[1]])
-            self.robot_tcp_dots[name].set_3d_properties([P6[2]])
-
             hx, hy, hz = self.history_x[name], self.history_y[name], self.history_z[name]
+            hc = self.history_zone_colors[name]
             should_append = True
             if hx:
                 dist = float(np.linalg.norm(np.array([P6[0]-hx[-1], P6[1]-hy[-1], P6[2]-hz[-1]])))
-                should_append = dist > 0.001
+                should_append = dist > self.zone_sample_distance_m
+            guide = self.last_singularity_guides.get(name)
+            if should_append or not guide:
+                guide = self.singularity_analyzer.analyze(j_pos, tcp_pos_m=P6)
+                self.last_singularity_guides[name] = guide
+            zone_color = guide["color"]
+            self.robot_tcp_dots[name].set_data([P6[0]], [P6[1]])
+            self.robot_tcp_dots[name].set_3d_properties([P6[2]])
+            self.robot_tcp_dots[name].set_color(zone_color)
+            self.robot_tcp_dots[name].set_markerfacecolor(zone_color)
+
             if should_append:
                 hx.append(float(P6[0]))
                 hy.append(float(P6[1]))
                 hz.append(float(P6[2]))
+                hc.append(zone_color)
                 if len(hx) > self.max_trail_points:
                     del hx[:-self.max_trail_points]
                     del hy[:-self.max_trail_points]
                     del hz[:-self.max_trail_points]
+                    del hc[:-self.max_trail_points]
                 self.robot_trails[name].set_data(hx, hy)
                 self.robot_trails[name].set_3d_properties(hz)
+                if name in self.robot_zone_scatters:
+                    self.robot_zone_scatters[name]._offsets3d = (hx, hy, hz)
+                    self.robot_zone_scatters[name].set_color(hc)
+
+            if name == robot_manager.get_active_robot_name() or name == self.robot_selector.get():
+                self.singularity_label.configure(
+                    text=(
+                        f"{guide['label']}  risk={guide['score']:.0f}/100\n"
+                        f"Manip={guide['manipulability']:.4f}  Cond={guide['condition']:.1f}\n"
+                        "녹색 <70 | 주황 70~90 | 빨강 90~100"
+                    ),
+                    text_color=zone_color,
+                )
 
             self.canvas.draw_idle()
         except Exception as e:

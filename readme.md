@@ -641,7 +641,22 @@ robot/dry_run_task_done
 
 향후 분석 AI나 MySQL 분석 배치는 `session_id + cycle_index` 단위로 정상/비정상 패턴을 비교하고, 토크 피크, 불필요한 대기, 반복 궤적 편차를 기준으로 최적 경로와 루프 구조를 제안할 수 있습니다.
 
-### 15. Python / pip 설치 가이드
+### 15. Singularity Guide Zone
+
+Page 1 Digital Twin과 Page 2 `Play(가상)` 3D Motion Viewer에는 기존 티칭 데이터를 수정하지 않는 **권장 위험 가이드 레이어**가 표시됩니다. 목적은 실제 실행 전 작업자가 TCP 끝단 궤적 주변의 특이점 위험 구역을 시각적으로 보고 회피/감속/재티칭을 판단하도록 돕는 것입니다.
+
+- 녹색: `risk < 70`, 권장 안전 구간
+- 주황색: `70 <= risk < 90`, 주의/감속 권장 구간
+- 빨간색: `90 <= risk <= 100`, 회피 또는 재티칭 권장 구간
+
+계산 기준:
+
+- 관절값 `j1~j6`이 있으면 현재 HMI의 Indy7 DH 모델로 Forward Kinematics와 Translational Jacobian을 계산하고, 조작성 지수/조건수/손목·팔꿈치 특이 자세를 합산해 위험도를 산출합니다.
+- 관절값이 없는 가상 포인트는 TCP 위치 기준의 작업공간 경계 추정값으로 보수적인 위험도를 표시합니다.
+- Page 1은 매 프레임마다 정밀 계산을 반복하지 않고, TCP가 약 20mm 이상 이동했을 때만 샘플링하여 위험 존 점을 누적합니다. 계산 결과는 관절 0.1도/TCP 20mm 단위로 캐시합니다.
+- 이 레이어는 안내용입니다. 프로그램 JSON, 학습 좌표, 루프, DI/DO 조건은 자동으로 변경하지 않습니다.
+
+### 16. Python / pip 설치 가이드
 
 권장 Python 버전:
 
@@ -679,7 +694,7 @@ python3 -m pip install -r backend/vision_yolo/requirements.txt
 python3 -m py_compile $(rg --files frontend backend/robot_controller/src backend/db_worker/src -g '*.py')
 ```
 
-### 16. 구현 원칙
+### 17. 구현 원칙
 
 AI 자연어 티칭 구현은 기존 구조를 깨지 않는 방식으로 붙입니다.
 

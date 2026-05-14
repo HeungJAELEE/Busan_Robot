@@ -5,6 +5,7 @@ Pick/Place 팔레트 그리드, 접근/후퇴 경로, 이동 순서를 모두 �
 import tkinter as tk
 import customtkinter as ctk
 import math
+from core.domains.robot.use_cases.singularity_analyzer import SingularityAnalyzer
 
 
 class Motion3DViewer:
@@ -61,6 +62,7 @@ class Motion3DViewer:
             {"a": 0.0,    "alpha": math.pi/2,  "d": 0.1835, "theta_offset": 0.0},
             {"a": 0.0,    "alpha": -math.pi/2, "d": 0.228,  "theta_offset": 0.0},
         ]
+        self.singularity_analyzer = SingularityAnalyzer(self.dh_params)
 
         self._build_steps()
 
@@ -281,6 +283,9 @@ class Motion3DViewer:
             step_meta["do"] = list(sim_do)
             step_meta["vars"] = dict(sim_vars)
             step_meta.setdefault("p_mm", list(xyz))
+            guide = self.singularity_analyzer.analyze(step_meta.get("q"), tcp_pos_mm=xyz)
+            step_meta["singularity"] = guide
+            step_meta["zone_color"] = guide["color"]
             self.steps.append((label, xyz, color, step_meta))
             last_xyz = list(xyz)
 
@@ -389,6 +394,8 @@ class Motion3DViewer:
                         for wi, wp in enumerate(wps):
                             wp_p = wp.get("p", p)
                             wp_q = wp.get("q")
+                            if not (wp_q and len(wp_q) >= 6 and any(abs(float(v or 0.0)) > 1e-9 for v in wp_q[:6])):
+                                wp_q = None
                             xyz = [wp_p[0]*1000, wp_p[1]*1000, wp_p[2]*1000]
                             lbl = f"{'J' if t==102 else 'F'}Move" + (f" WP{wi+1}" if len(wps) > 1 else "")
                             emit_step(f"🔵 {lbl}", xyz, self.C_MOVE, {"q": wp_q})
@@ -833,14 +840,16 @@ class Motion3DViewer:
             for gi, gpt in enumerate(gpts):
                 np = norm(gpt)
                 sx, sy, _ = self._project(*np)
+                guide = self.singularity_analyzer.analyze(tcp_pos_mm=gpt)
+                zcolor = guide["color"]
                 # 바닥으로 수직선
                 floor_pt = norm([gpt[0], gpt[1], min_z])
                 fx, fy, _ = self._project(*floor_pt)
-                c.create_line(sx, sy, fx, fy, fill=pcolor, width=1, dash=(2, 4))
+                c.create_line(sx, sy, fx, fy, fill=zcolor, width=1, dash=(2, 4))
                 # 슬롯 점
-                c.create_oval(sx-5, sy-5, sx+5, sy+5, fill="", outline=pcolor, width=1.5)
+                c.create_oval(sx-5, sy-5, sx+5, sy+5, fill="", outline=zcolor, width=1.5)
                 # 번호 (큰 폰트)
-                c.create_text(sx, sy, text=str(gi+1), fill=pcolor, font=("Consolas", 7))
+                c.create_text(sx, sy, text=str(gi+1), fill=zcolor, font=("Consolas", 7))
 
         # ── 전체 예정 궤적 + 현재까지 실제 진행 궤적 ──
         if len(self.steps) > 1:
@@ -856,6 +865,14 @@ class Motion3DViewer:
                 c.create_line(full_path, fill=self.C_PLAN, width=1.0, dash=(2, 5))
             if len(done_path) >= 4:
                 c.create_line(done_path, fill=self.C_PATH, width=2.4)
+            for si in range(1, len(self.steps)):
+                p_prev = norm(self.steps[si - 1][1])
+                p_cur = norm(self.steps[si][1])
+                x1, y1, _ = self._project(*p_prev)
+                x2, y2, _ = self._project(*p_cur)
+                zcolor = self.steps[si][3].get("zone_color", self.C_PLAN)
+                width_seg = 3.0 if si <= self.current_step else 1.4
+                c.create_line(x1, y1, x2, y2, fill=zcolor, width=width_seg)
 
         # ── 관절값 기반 로봇 팔 형상 ──
         robot_q = self._current_or_previous_q()
@@ -883,19 +900,20 @@ class Motion3DViewer:
         for si, (slabel, spt, scolor, sextra) in enumerate(self.steps):
             np = norm(spt)
             sx, sy, _ = self._project(*np)
+            zone_color = sextra.get("zone_color", scolor)
 
             if si < self.current_step:
                 # 지나간 스텝 — 작은 점 + 번호
                 r = 4
-                c.create_oval(sx-r, sy-r, sx+r, sy+r, fill=scolor, outline="")
-                c.create_text(sx, sy-8, text=str(si+1), fill=scolor, font=("Consolas", 7))
+                c.create_oval(sx-r, sy-r, sx+r, sy+r, fill=zone_color, outline="")
+                c.create_text(sx, sy-8, text=str(si+1), fill=zone_color, font=("Consolas", 7))
             elif si == self.current_step:
                 # 현재 스텝 — 큰 점 + 하이라이트 + 방사 효과
                 r = 12
                 # 방사 원
-                c.create_oval(sx-r-6, sy-r-6, sx+r+6, sy+r+6, fill="", outline=scolor, width=1, dash=(3,3))
+                c.create_oval(sx-r-6, sy-r-6, sx+r+6, sy+r+6, fill="", outline=zone_color, width=1, dash=(3,3))
                 c.create_oval(sx-r-2, sy-r-2, sx+r+2, sy+r+2, fill="", outline=self.C_HIGHLIGHT, width=2)
-                c.create_oval(sx-r, sy-r, sx+r, sy+r, fill=scolor, outline="white", width=2)
+                c.create_oval(sx-r, sy-r, sx+r, sy+r, fill=zone_color, outline="white", width=2)
                 # 스텝 번호
                 c.create_text(sx, sy, text=str(si+1), fill="white", font=("Consolas", 9, "bold"))
                 # 레이블
@@ -908,7 +926,7 @@ class Motion3DViewer:
             else:
                 # 미래 스텝 — 작은 빈 원
                 r = 3
-                c.create_oval(sx-r, sy-r, sx+r, sy+r, fill="", outline=scolor, width=1)
+                c.create_oval(sx-r, sy-r, sx+r, sy+r, fill="", outline=zone_color, width=1)
 
         # ── 스텝 정보 업데이트 ──
         if self.steps:
@@ -921,8 +939,12 @@ class Motion3DViewer:
             q_text = ""
             if cur_q and len(cur_q) >= 6:
                 q_text = f" | J1:{cur_q[0]:.1f} J2:{cur_q[1]:.1f} J3:{cur_q[2]:.1f}"
+            guide = cur[3].get("singularity", {}) if isinstance(cur[3], dict) else {}
+            zone_text = ""
+            if guide:
+                zone_text = f" | {guide.get('label', '')} {guide.get('score', 0):.0f}/100"
             self.info_label.configure(
-                text=f"X:{cur[1][0]:.0f} Y:{cur[1][1]:.0f} Z:{cur[1][2]:.0f} mm{q_text}"
+                text=f"X:{cur[1][0]:.0f} Y:{cur[1][1]:.0f} Z:{cur[1][2]:.0f} mm{q_text}{zone_text}"
             )
 
         # ── 범례 (오른쪽 상단) ──
@@ -932,6 +954,13 @@ class Motion3DViewer:
                               ("진행 궤적", self.C_PATH), ("예정 궤적", self.C_PLAN),
                               ("로봇 FK", self.C_ROBOT)]:
             c.create_oval(w-120, legend_y, w-110, legend_y+10, fill=color, outline="")
+            c.create_text(w-105, legend_y+5, text=label, fill=self.C_TEXT,
+                          font=("Pretendard", 10), anchor="w")
+            legend_y += 20
+        for label, color in [("안전 <70", SingularityAnalyzer.COLOR_SAFE),
+                             ("주의 70~90", SingularityAnalyzer.COLOR_WARN),
+                             ("위험 90~100", SingularityAnalyzer.COLOR_DANGER)]:
+            c.create_rectangle(w-120, legend_y, w-110, legend_y+10, fill=color, outline="")
             c.create_text(w-105, legend_y+5, text=label, fill=self.C_TEXT,
                           font=("Pretendard", 10), anchor="w")
             legend_y += 20
