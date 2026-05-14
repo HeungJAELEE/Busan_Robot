@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from core.domains.robot.communication.client_manager import robot_manager
 import math
-from presentation.ui.robot_hmi.robot_hmi_view import RobotSettingsEditor
+from presentation.ui.robot_hmi.robot_hmi_view import ProgramTreeEditor, RobotSettingsEditor
+from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
 
 class DigitalTwinView:
     def __init__(self, parent_tab):
@@ -17,11 +18,18 @@ class DigitalTwinView:
         self.robot_arm_lines = {}
         self.robot_joints_dots = {}
         self.robot_trails = {}
+        self.robot_tcp_dots = {}
         self.robot_pos_labels = {}
+        self.program_runners = {}
+        self.program_runner_hosts = {}
+        self.program_status_labels = {}
+        self.program_status_boxes = {}
+        self.executor = None
         
         self.history_x = {n: [] for n in ["Robot A", "Robot B", "Robot C"]}
         self.history_y = {n: [] for n in ["Robot A", "Robot B", "Robot C"]}
         self.history_z = {n: [] for n in ["Robot A", "Robot B", "Robot C"]}
+        self.max_trail_points = 300
         
         self.dh_params = [
             {"a": 0.0,    "alpha": 0.0,       "d": 0.3,    "theta_offset": 0.0},
@@ -37,6 +45,7 @@ class DigitalTwinView:
         
         self.setup_ui()
         self._init_3d_viewer()
+        self._poll_program_status()
         
     def setup_ui(self):
         self.left_panel = ctk.CTkFrame(self.parent, fg_color="#18181B", corner_radius=12)
@@ -50,7 +59,32 @@ class DigitalTwinView:
         ctk.CTkButton(self.left_panel, text="🏠 Home 위치", height=40, fg_color="#1976D2", command=lambda: self._safe_action("go_home")).pack(pady=5, padx=20, fill="x")
         ctk.CTkButton(self.left_panel, text="0️⃣ Zero 위치", height=40, fg_color="#F57C00", command=lambda: self._safe_action("go_zero")).pack(pady=5, padx=20, fill="x")
         ctk.CTkButton(self.left_panel, text="🔄 에러 리셋", height=40, fg_color="#9C27B0", command=lambda: self._safe_action("reset_robot")).pack(pady=5, padx=20, fill="x")
+        ctk.CTkButton(self.left_panel, text="🧹 궤적 초기화", height=34, fg_color="#455A64", hover_color="#546E7A", command=self.clear_trajectories).pack(pady=5, padx=20, fill="x")
         ctk.CTkButton(self.left_panel, text="🚨 비상정지 (E-STOP)", height=50, font=ctk.CTkFont(weight="bold", size=15), fg_color="#D32F2F", hover_color="#B71C1C", command=self.emergency_stop).pack(pady=(15, 5), padx=20, fill="x")
+
+        program_box = ctk.CTkFrame(self.left_panel, fg_color="#121215", corner_radius=8)
+        program_box.pack(fill="x", padx=15, pady=(10, 5))
+        ctk.CTkLabel(program_box, text="PROGRAM RUN", font=ctk.CTkFont(size=13, weight="bold"), text_color="#8B8B96").pack(pady=(10, 6))
+
+        for name in ["Robot A", "Robot B", "Robot C"]:
+            row = ctk.CTkFrame(program_box, fg_color="transparent")
+            row.pack(fill="x", padx=8, pady=3)
+
+            box = ctk.CTkFrame(row, width=10, height=10, corner_radius=2, fg_color="#555555")
+            box.pack(side="left", padx=(0, 5))
+            box.pack_propagate(False)
+
+            ctk.CTkLabel(row, text=name.replace("Robot ", ""), width=18, font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
+            status = ctk.CTkLabel(row, text="대기", width=48, font=ctk.CTkFont(size=11), text_color="#8B8B96")
+            status.pack(side="left", padx=4)
+
+            ctk.CTkButton(row, text="▶", width=32, height=26, fg_color="#2E7D32", hover_color="#388E3C",
+                          command=lambda n=name: self._run_saved_program(n)).pack(side="left", padx=2)
+            ctk.CTkButton(row, text="■", width=32, height=26, fg_color="#B71C1C", hover_color="#D32F2F",
+                          command=lambda n=name: self._stop_saved_program(n)).pack(side="left", padx=2)
+
+            self.program_status_boxes[name] = box
+            self.program_status_labels[name] = status
         
         self.right_panel = ctk.CTkFrame(self.parent, fg_color="#18181B", corner_radius=12)
         self.right_panel.grid(row=0, column=2, sticky="nsew", padx=10, pady=10)
@@ -110,7 +144,8 @@ class DigitalTwinView:
             col = color_map.get(name, "#FFFFFF")
             self.robot_arm_lines[name], = self.ax.plot([], [], [], '-', color=col, lw=3)
             self.robot_joints_dots[name], = self.ax.plot([], [], [], 'o', color=col, markersize=6, markerfacecolor='white', markeredgecolor=col, markeredgewidth=2)
-            self.robot_trails[name], = self.ax.plot([], [], [], '-', color=col, alpha=0.4, lw=1.5)
+            self.robot_trails[name], = self.ax.plot([], [], [], '-', color=col, alpha=0.55, lw=1.8, linestyle='--')
+            self.robot_tcp_dots[name], = self.ax.plot([], [], [], 'o', color=col, markersize=9, markerfacecolor=col, markeredgecolor='white', markeredgewidth=1.4)
             
             wrapper = ctk.CTkFrame(label_frame, fg_color="transparent")
             wrapper.pack(side="left", expand=True)
@@ -146,7 +181,20 @@ class DigitalTwinView:
             T_matrices.append(T)
         return T_matrices
         
-    def update_3d_graph(self, name, j_pos):
+    def clear_trajectories(self):
+        for name in ["Robot A", "Robot B", "Robot C"]:
+            self.history_x[name].clear()
+            self.history_y[name].clear()
+            self.history_z[name].clear()
+            if name in self.robot_trails:
+                self.robot_trails[name].set_data([], [])
+                self.robot_trails[name].set_3d_properties([])
+        try:
+            self.canvas.draw_idle()
+        except Exception:
+            pass
+
+    def update_3d_graph(self, name, j_pos, task_pos=None):
         if not j_pos: return
         try:
             T = self.compute_forward_kinematics(j_pos)
@@ -180,6 +228,25 @@ class DigitalTwinView:
             self.robot_joints_dots[name].set_data(joint_xs, joint_ys)
             self.robot_joints_dots[name].set_3d_properties(joint_zs)
 
+            self.robot_tcp_dots[name].set_data([P6[0]], [P6[1]])
+            self.robot_tcp_dots[name].set_3d_properties([P6[2]])
+
+            hx, hy, hz = self.history_x[name], self.history_y[name], self.history_z[name]
+            should_append = True
+            if hx:
+                dist = float(np.linalg.norm(np.array([P6[0]-hx[-1], P6[1]-hy[-1], P6[2]-hz[-1]])))
+                should_append = dist > 0.001
+            if should_append:
+                hx.append(float(P6[0]))
+                hy.append(float(P6[1]))
+                hz.append(float(P6[2]))
+                if len(hx) > self.max_trail_points:
+                    del hx[:-self.max_trail_points]
+                    del hy[:-self.max_trail_points]
+                    del hz[:-self.max_trail_points]
+                self.robot_trails[name].set_data(hx, hy)
+                self.robot_trails[name].set_3d_properties(hz)
+
             self.canvas.draw_idle()
         except Exception as e:
             pass
@@ -200,13 +267,13 @@ class DigitalTwinView:
                     
     def emergency_stop(self):
         print("\n🚨 [긴급] 사용자가 비상정지(E-STOP) 버튼을 눌렀습니다!")
-        from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
-        RobotControlUseCase.emergency_stop()
-        print(">> 🚨 정지 명령이 전송되었습니다.")
-            
+        target = self.robot_selector.get()
+        RobotControlUseCase.emergency_stop(target)
+        print(f">> 🚨 {target} 정지 명령이 전송되었습니다.")
+
     def _safe_action(self, func_name):
         """IndyDCP 내부 lock이 thread-safety를 보장하므로 외부 lock 불필요"""
-        from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
+        target = self.robot_selector.get()
         action_map = {
             "go_home": RobotControlUseCase.go_home,
             "go_zero": RobotControlUseCase.go_zero,
@@ -214,11 +281,12 @@ class DigitalTwinView:
         }
         action = action_map.get(func_name)
         if action:
-            action()
+            action(target)
         else:
             # Fallback: 직접 inst 호출 (lock 없이 — IndyDCP 내부 lock이 보호)
             def _bg():
-                inst = robot_manager.get_active_instance()
+                info = robot_manager.get_robot_info(target)
+                inst = info.get("instance") if info else None
                 if inst:
                     try:
                         getattr(inst, func_name)()
@@ -226,6 +294,65 @@ class DigitalTwinView:
                         print(f"❌ [에러] 명령 실행 실패: {e}")
             import threading
             threading.Thread(target=_bg, daemon=True).start()
+
+    def _get_program_runner(self, name):
+        runner = self.program_runners.get(name)
+        if runner:
+            return runner
+        host = ctk.CTkFrame(self.parent, fg_color="transparent")
+        self.program_runner_hosts[name] = host
+        runner = ProgramTreeEditor(host)
+        runner.current_robot = name
+        self.program_runners[name] = runner
+        return runner
+
+    def _run_saved_program(self, name):
+        info = robot_manager.get_robot_info(name)
+        if not info or info.get("instance") is None:
+            print(f">> [오류] {name} 로봇이 연결되지 않았습니다.")
+            self._set_program_status(name, "미연결", "#F44336")
+            return
+        runner = self._get_program_runner(name)
+        if runner.is_execution_running():
+            print(f">> [경고] {name} 프로그램이 이미 실행 중입니다.")
+            return
+        print(f">> [Page 1] {name} 저장 JSON 프로그램 실행")
+        runner.run_program_for_robot(name)
+        self._set_program_status(name, "실행중", "#00E676")
+
+    def _stop_saved_program(self, name):
+        print(f">> [Page 1] {name} 프로그램 정지 요청")
+        RobotControlUseCase.request_stop(name)
+        runner = self.program_runners.get(name)
+        if runner:
+            runner.current_robot = name
+            runner._stop_execution()
+        else:
+            RobotControlUseCase.emergency_stop(name)
+        self._set_program_status(name, "정지", "#FF9800")
+
+    def _set_program_status(self, name, text, color):
+        label = self.program_status_labels.get(name)
+        box = self.program_status_boxes.get(name)
+        if label:
+            label.configure(text=text, text_color=color)
+        if box:
+            box.configure(fg_color=color)
+
+    def _poll_program_status(self):
+        for name in ["Robot A", "Robot B", "Robot C"]:
+            runner = self.program_runners.get(name)
+            if runner and runner.is_execution_running():
+                self._set_program_status(name, "실행중", "#00E676")
+            elif RobotControlUseCase.is_stop_requested(name):
+                self._set_program_status(name, "정지", "#FF9800")
+            else:
+                connected = robot_manager.is_connected(name)
+                self._set_program_status(name, "대기", "#8B8B96" if connected else "#555555")
+        try:
+            self.parent.after(300, self._poll_program_status)
+        except Exception:
+            pass
 
     def _update_lamp(self, addr, state):
         color = "#424242" # Off

@@ -1,10 +1,13 @@
 {
     "info": {
-        "name": "T1"
+        "name": "ExportedProgram"
     },
     "wpList": [],
     "program": [
         {
+            "enable": true,
+            "type": 999,
+            "pId": 0,
             "indyCareInfo": {
                 "useIndyCare": false,
                 "ipAddr": "0.0.0.0",
@@ -31,7 +34,6 @@
                     }
                 ]
             },
-            "type": 999,
             "conveyorConfigInfo": {
                 "conveyorConfig": []
             },
@@ -43,8 +45,6 @@
                 "policy": 0,
                 "time": 2
             },
-            "enable": true,
-            "pId": 0,
             "palletInfo": [],
             "id": 1
         },

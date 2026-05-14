@@ -15,11 +15,72 @@ class RobotControlUseCase:
     
     # 글로벌 정지 플래그 (wait_for_move_finish 에서 즉시 반환용)
     _global_stop = False
+    _stop_requests = {}
+    _command_lock = threading.Lock()
+    _motion_gate_until = {}
+    _control_gate_until = {}
+    _collision_gate = {}
+    DEFAULT_MOVE_TIMEOUT_SEC = 240.0
     
     # =========================================================================
     # 0. 인터락 (Interlock) — 제어권 충돌 방지
     # =========================================================================
     
+    @staticmethod
+    def _active_name(name: str = None) -> str:
+        return name or robot_manager.get_active_robot_name()
+
+    @staticmethod
+    def _get_instance(name: str = None):
+        if name:
+            info = robot_manager.get_robot_info(name)
+            return info.get("instance") if info else None
+        return robot_manager.get_active_instance()
+
+    @staticmethod
+    def _claim_gate(gate: dict, name: str, action_name: str, min_gap_sec: float) -> bool:
+        now = time.monotonic()
+        with RobotControlUseCase._command_lock:
+            until = gate.get(name, 0.0)
+            if now < until:
+                remain = until - now
+                print(f">> 🚫 [{action_name}] 명령 보호 중입니다. {remain:.1f}초 후 다시 시도하세요.")
+                return False
+            gate[name] = now + min_gap_sec
+        return True
+
+    @staticmethod
+    def _clear_motion_gate(name: str = None):
+        name = RobotControlUseCase._active_name(name)
+        if not name:
+            return
+        with RobotControlUseCase._command_lock:
+            RobotControlUseCase._motion_gate_until[name] = 0.0
+
+    @staticmethod
+    def request_stop(name: str = None):
+        """Request a program/motion wait stop. Named requests do not stop other robots."""
+        with RobotControlUseCase._command_lock:
+            if name:
+                RobotControlUseCase._stop_requests[name] = True
+            else:
+                RobotControlUseCase._global_stop = True
+
+    @staticmethod
+    def clear_stop_request(name: str = None):
+        with RobotControlUseCase._command_lock:
+            if name:
+                RobotControlUseCase._stop_requests[name] = False
+            else:
+                RobotControlUseCase._global_stop = False
+
+    @staticmethod
+    def is_stop_requested(name: str = None) -> bool:
+        with RobotControlUseCase._command_lock:
+            if name:
+                return bool(RobotControlUseCase._stop_requests.get(name, False))
+            return bool(RobotControlUseCase._global_stop)
+
     @staticmethod
     def check_interlock(name: str = None) -> tuple:
         """
@@ -28,7 +89,7 @@ class RobotControlUseCase:
         - safe=True: 명령 전송 가능
         - safe=False: 차단 (reason에 사유 포함)
         """
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst:
             return (False, "로봇이 연결되지 않았습니다.")
         
@@ -50,7 +111,7 @@ class RobotControlUseCase:
             return (False, "충돌이 감지되었습니다. 리셋 후 시도하세요.")
         
         # 4. 다이렉트 티칭 모드 (펜던트가 제어권 보유)
-        if status.get('teaching_mode', 0) or status.get('direct_teaching', 0):
+        if status.get('teaching', 0) or status.get('teaching_mode', 0) or status.get('direct_teaching', 0):
             return (False, "⚠️ 펜던트에서 다이렉트 티칭 중입니다. 티칭 종료 후 시도하세요.")
         
         # 5. 이미 동작 중 (다른 명령 실행 중)
@@ -60,12 +121,12 @@ class RobotControlUseCase:
         return (True, "OK")
     
     @staticmethod
-    def _guard_motion(action_name: str = "이동") -> bool:
+    def _guard_motion(action_name: str = "이동", name: str = None) -> bool:
         """
         이동 명령 전 인터락 체크. 차단 시 터미널에 경고 출력.
         Returns: True=안전(진행 가능), False=차단
         """
-        safe, reason = RobotControlUseCase.check_interlock()
+        safe, reason = RobotControlUseCase.check_interlock(name)
         if not safe:
             print(f">> 🚫 [{action_name}] 인터락 차단: {reason}")
             return False
@@ -123,25 +184,47 @@ class RobotControlUseCase:
         """충돌 감지 상태인지 확인"""
         status = RobotControlUseCase.get_robot_status(name)
         return bool(status.get('collision', 0))
+
+    @staticmethod
+    def _fault_reason(status: dict) -> str:
+        if not isinstance(status, dict):
+            return ""
+        if status.get('emergency', 0):
+            return "비상정지"
+        if status.get('error', 0):
+            return "로봇 에러"
+        if status.get('collision', 0):
+            return "충돌 감지"
+        return ""
     
     @staticmethod
-    def wait_for_move_finish(timeout_sec: float = 30.0) -> bool:
+    def wait_for_move_finish(timeout_sec: float = None, name: str = None) -> bool:
         """
         이동 완료까지 블로킹 대기 (타임아웃 포함).
         반드시 백그라운드 스레드에서만 호출할 것!
         """
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst:
             return False
+        timeout_sec = max(float(timeout_sec or 0.0), RobotControlUseCase.DEFAULT_MOVE_TIMEOUT_SEC)
         start = time.time()
         while (time.time() - start) < timeout_sec:
-            # 글로벌 정지 플래그 체크 — 즉시 반환
-            if RobotControlUseCase._global_stop:
+            # 로봇별 정지 플래그 체크 — A 정지가 B/C 실행을 끊지 않도록 분리
+            if RobotControlUseCase.is_stop_requested(name):
                 return False
             try:
                 # get_joint_pos 호출로 소켓 통신 → 응답 헤더에서 robot_status 자동 갱신
                 inst.get_joint_pos()
                 status = inst.get_robot_status()
+                fault_reason = RobotControlUseCase._fault_reason(status)
+                if fault_reason:
+                    RobotControlUseCase.request_stop(name)
+                    try:
+                        inst.stop_motion()
+                    except Exception:
+                        pass
+                    print(f">> [N.G] {fault_reason} 상태 감지 — 이동 대기 중단")
+                    return False
                 if status.get('movedone', 0) and not status.get('busy', 0):
                     return True
             except:
@@ -155,9 +238,10 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
-    def set_velocity_level(level: int, is_joint: bool = True):
+    def set_velocity_level(level: int, is_joint: bool = True, name: str = None):
         """로봇의 이동 속도 레벨(1~9)을 설정합니다."""
-        inst = robot_manager.get_active_instance()
+        name = RobotControlUseCase._active_name(name)
+        inst = RobotControlUseCase._get_instance(name)
         if not inst:
             return False
         try:
@@ -176,11 +260,18 @@ class RobotControlUseCase:
             return False
 
     @staticmethod
-    def set_collision_level(level: int):
+    def set_collision_level(level: int, name: str = None):
         """충돌 감도 레벨(1~5) 설정. 높을수록 민감."""
-        inst = robot_manager.get_active_instance()
+        name = RobotControlUseCase._active_name(name)
+        inst = RobotControlUseCase._get_instance(name)
         if not inst:
             return False
+        now = time.monotonic()
+        with RobotControlUseCase._command_lock:
+            last_level, until = RobotControlUseCase._collision_gate.get(name, (None, 0.0))
+            if last_level == level and now < until:
+                return True
+            RobotControlUseCase._collision_gate[name] = (level, now + 0.5)
         def _do():
             try:
                 inst.set_collision_level(level)
@@ -191,9 +282,9 @@ class RobotControlUseCase:
         return True
 
     @staticmethod
-    def set_blend_radius(radius: float, is_joint: bool = True):
+    def set_blend_radius(radius: float, is_joint: bool = True, name: str = None):
         """블렌딩 반경 설정. Joint: 0~23 deg, Task: 0.02~0.2 m"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst:
             return False
         def _do():
@@ -213,35 +304,49 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
-    def jog_axis(axis: str, step_amount: float):
+    def jog_axis(axis: str, step_amount: float, name: str = None):
         """조그 기동: 주어진 축에 대해 지정된 양만큼 이동."""
-        if not RobotControlUseCase._guard_motion("조그"): return False
-        inst = robot_manager.get_active_instance()
+        name = RobotControlUseCase._active_name(name)
+        if not RobotControlUseCase._guard_motion("조그", name):
+            return False
+        if not RobotControlUseCase._claim_gate(RobotControlUseCase._motion_gate_until, name, "조그", 0.08):
+            return False
+        inst = RobotControlUseCase._get_instance(name)
         if not inst:
             return False
         try:
+            def _run(fn, arg):
+                try:
+                    fn(arg)
+                except Exception as e:
+                    print(f">> [조그 에러] {e}")
+
             if axis in ["J1", "J2", "J3", "J4", "J5", "J6"]:
                 q = [0.0] * 6
                 idx = ["J1", "J2", "J3", "J4", "J5", "J6"].index(axis)
                 q[idx] = step_amount
-                threading.Thread(target=inst.joint_move_by, args=(q,), daemon=True).start()
+                threading.Thread(target=_run, args=(inst.joint_move_by, q), daemon=True).start()
                 return True
             elif axis in ["X", "Y", "Z", "Rx", "Ry", "Rz"]:
                 p = [0.0] * 6
                 idx = ["X", "Y", "Z", "Rx", "Ry", "Rz"].index(axis)
                 p[idx] = step_amount * 0.001 if idx < 3 else step_amount
-                threading.Thread(target=inst.task_move_by, args=(p,), daemon=True).start()
+                threading.Thread(target=_run, args=(inst.task_move_by, p), daemon=True).start()
                 return True
         except Exception as e:
             print(f">> [조그 에러] {e}")
         return False
         
     @staticmethod
-    def move_to_joint(q: list):
+    def move_to_joint(q: list, name: str = None):
         """저장된 6축 관절 좌표로 절대 이동."""
         if not q or len(q) < 6: return False
-        if not RobotControlUseCase._guard_motion("관절 이동"): return False
-        inst = robot_manager.get_active_instance()
+        name = RobotControlUseCase._active_name(name)
+        if not RobotControlUseCase._guard_motion("관절 이동", name):
+            return False
+        if not RobotControlUseCase._claim_gate(RobotControlUseCase._motion_gate_until, name, "관절 이동", 0.8):
+            return False
+        inst = RobotControlUseCase._get_instance(name)
         if not inst:
             return False
         try:
@@ -252,11 +357,15 @@ class RobotControlUseCase:
             return False
 
     @staticmethod
-    def move_to_task(p: list):
+    def move_to_task(p: list, name: str = None):
         """저장된 TCP Task 좌표로 절대 이동."""
         if not p or len(p) < 6: return False
-        if not RobotControlUseCase._guard_motion("태스크 이동"): return False
-        inst = robot_manager.get_active_instance()
+        name = RobotControlUseCase._active_name(name)
+        if not RobotControlUseCase._guard_motion("태스크 이동", name):
+            return False
+        if not RobotControlUseCase._claim_gate(RobotControlUseCase._motion_gate_until, name, "태스크 이동", 0.8):
+            return False
+        inst = RobotControlUseCase._get_instance(name)
         if not inst:
             return False
         try:
@@ -267,28 +376,38 @@ class RobotControlUseCase:
             return False
 
     @staticmethod
-    def move_j(q: list):
+    def move_j(q: list, name: str = None):
         """move_to_joint의 별칭"""
-        return RobotControlUseCase.move_to_joint(q)
+        return RobotControlUseCase.move_to_joint(q, name)
 
     @staticmethod
-    def move_l(p: list):
+    def move_l(p: list, name: str = None):
         """move_to_task의 별칭"""
-        return RobotControlUseCase.move_to_task(p)
+        return RobotControlUseCase.move_to_task(p, name)
 
     @staticmethod
-    def go_home():
+    def go_home(name: str = None):
         """홈 위치(Home Position)로 이동"""
-        inst = robot_manager.get_active_instance()
+        name = RobotControlUseCase._active_name(name)
+        if not RobotControlUseCase._guard_motion("Home 이동", name):
+            return False
+        if not RobotControlUseCase._claim_gate(RobotControlUseCase._motion_gate_until, name, "Home 이동", 0.8):
+            return False
+        inst = RobotControlUseCase._get_instance(name)
         if not inst:
             return False
         threading.Thread(target=inst.go_home, daemon=True).start()
         return True
 
     @staticmethod
-    def go_zero():
+    def go_zero(name: str = None):
         """제로 위치(Zero Position)로 이동"""
-        inst = robot_manager.get_active_instance()
+        name = RobotControlUseCase._active_name(name)
+        if not RobotControlUseCase._guard_motion("Zero 이동", name):
+            return False
+        if not RobotControlUseCase._claim_gate(RobotControlUseCase._motion_gate_until, name, "Zero 이동", 0.8):
+            return False
+        inst = RobotControlUseCase._get_instance(name)
         if not inst:
             return False
         threading.Thread(target=inst.go_zero, daemon=True).start()
@@ -299,40 +418,71 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
-    def stop_robot():
+    def stop_robot(name: str = None):
         """현재 동작 정지"""
-        inst = robot_manager.get_active_instance()
+        name = RobotControlUseCase._active_name(name)
+        RobotControlUseCase._clear_motion_gate(name)
+        inst = RobotControlUseCase._get_instance(name)
         if inst:
             try:
                 threading.Thread(target=inst.stop_motion, daemon=True).start()
-            except: pass
+                return True
+            except:
+                pass
+        return False
 
     @staticmethod
-    def emergency_stop():
+    def emergency_stop(name: str = None):
         """비상 정지 (전 축 즉시 정지)"""
-        inst = robot_manager.get_active_instance()
+        name = RobotControlUseCase._active_name(name)
+        RobotControlUseCase._clear_motion_gate(name)
+        inst = RobotControlUseCase._get_instance(name)
         if inst:
             try:
                 threading.Thread(target=inst.stop_emergency, daemon=True).start()
-            except: pass
+                return True
+            except:
+                pass
+        return False
 
     @staticmethod
-    def reset_robot():
+    def reset_robot(name: str = None):
         """로봇 에러 리셋 (충돌/비상정지 후 복구)"""
-        inst = robot_manager.get_active_instance()
+        name = RobotControlUseCase._active_name(name)
+        RobotControlUseCase._clear_motion_gate(name)
+        inst = RobotControlUseCase._get_instance(name)
         if inst:
+            RobotControlUseCase.request_stop(name)
             try:
-                threading.Thread(target=inst.reset_robot, daemon=True).start()
-            except: pass
+                def _do():
+                    try:
+                        try:
+                            inst.stop_motion()
+                        except Exception:
+                            pass
+                        ret = inst.reset_robot()
+                        if ret not in (None, 0):
+                            print(f">> [리셋 경고] reset_robot 응답 코드={ret}")
+                        else:
+                            print(">> [리셋] 로봇 에러/충돌 리셋 명령 전송 완료")
+                    except Exception as e:
+                        print(f">> [리셋 에러] {e}")
+                    finally:
+                        RobotControlUseCase.clear_stop_request(name)
+                threading.Thread(target=_do, daemon=True).start()
+                return True
+            except Exception as e:
+                print(f">> [리셋 에러] {e}")
+        return False
 
     # =========================================================================
     # 5. 서보 / 브레이크 / 다이렉트 티칭
     # =========================================================================
 
     @staticmethod
-    def set_servo(on: bool = True):
+    def set_servo(on: bool = True, name: str = None):
         """서보 ON/OFF (6축 전체)"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         arr = [on] * 6
         def _do():
@@ -345,9 +495,9 @@ class RobotControlUseCase:
         return True
 
     @staticmethod
-    def set_brake(on: bool = True):
+    def set_brake(on: bool = True, name: str = None):
         """브레이크 ON/OFF (6축 전체)"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         arr = [on] * 6
         def _do():
@@ -360,10 +510,32 @@ class RobotControlUseCase:
         return True
 
     @staticmethod
-    def direct_teaching(enable: bool):
+    def direct_teaching(enable: bool, name: str = None):
         """다이렉트 티칭 모드 ON/OFF"""
-        inst = robot_manager.get_active_instance()
+        name = RobotControlUseCase._active_name(name)
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
+        try:
+            status = inst.get_robot_status()
+            if enable:
+                fault_reason = RobotControlUseCase._fault_reason(status)
+                if fault_reason:
+                    print(f">> 🚫 [다이렉트 티칭] {fault_reason} 상태에서는 시작할 수 없습니다.")
+                    return False
+                if status.get("busy", 0):
+                    print(">> 🚫 [다이렉트 티칭] 로봇 동작 중에는 시작할 수 없습니다.")
+                    return False
+                if status.get("direct_teaching", 0):
+                    print(">> [다이렉트 티칭] 이미 ON 상태입니다.")
+                    return True
+            elif not status.get("direct_teaching", 0) and not status.get("teaching", 0):
+                print(">> [다이렉트 티칭] 이미 OFF 상태입니다.")
+                return True
+        except Exception as e:
+            print(f">> [다이렉트 티칭 상태 확인 에러] {e}")
+            return False
+        if not RobotControlUseCase._claim_gate(RobotControlUseCase._control_gate_until, name, "다이렉트 티칭", 0.6):
+            return False
         def _do():
             try:
                 inst.direct_teaching(enable)
@@ -378,9 +550,9 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
-    def set_do(idx: int, val: int):
+    def set_do(idx: int, val: int, name: str = None):
         """Digital Output 설정 (0: OFF, 1: ON)"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         def _do():
             try:
@@ -391,9 +563,9 @@ class RobotControlUseCase:
         return True
 
     @staticmethod
-    def get_di() -> list:
+    def get_di(name: str = None) -> list:
         """Digital Input 32채널 읽기 (동기 — 폴링용)"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return []
         try:
             return inst.get_di()
@@ -402,9 +574,9 @@ class RobotControlUseCase:
             return []
 
     @staticmethod
-    def get_do() -> list:
+    def get_do(name: str = None) -> list:
         """Digital Output 상태 읽기 (동기 — 폴링용)"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return []
         try:
             return inst.get_do()
@@ -413,9 +585,9 @@ class RobotControlUseCase:
             return []
 
     @staticmethod
-    def set_endtool_do(endtool_type: int, val: int):
+    def set_endtool_do(endtool_type: int, val: int, name: str = None):
         """엔드툴 Digital Output 설정 (0:NPN, 1:PNP, 2:Not use, 3:eModi)"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         def _do():
             try:
@@ -430,9 +602,9 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
-    def set_ao(idx: int, val: int):
+    def set_ao(idx: int, val: int, name: str = None):
         """Analog Output 설정"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         def _do():
             try:
@@ -443,9 +615,9 @@ class RobotControlUseCase:
         return True
 
     @staticmethod
-    def get_ai(idx: int) -> int:
+    def get_ai(idx: int, name: str = None) -> int:
         """Analog Input 1채널 읽기 (동기)"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return 0
         try:
             return inst.get_ai(idx)
@@ -458,9 +630,9 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
-    def set_tcp(tcp: list):
+    def set_tcp(tcp: list, name: str = None):
         """Tool Center Point 설정 [X, Y, Z, Rx, Ry, Rz]"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst or len(tcp) < 6: return False
         def _do():
             try:
@@ -472,9 +644,9 @@ class RobotControlUseCase:
         return True
 
     @staticmethod
-    def reset_tcp():
+    def reset_tcp(name: str = None):
         """Tool Center Point 초기화"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         def _do():
             try:
@@ -486,9 +658,9 @@ class RobotControlUseCase:
         return True
 
     @staticmethod
-    def set_reference_frame(ref: list):
+    def set_reference_frame(ref: list, name: str = None):
         """기준 좌표계 설정 [X, Y, Z, Rx, Ry, Rz]"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst or len(ref) < 6: return False
         def _do():
             try:
@@ -500,9 +672,9 @@ class RobotControlUseCase:
         return True
 
     @staticmethod
-    def reset_reference_frame():
+    def reset_reference_frame(name: str = None):
         """기준 좌표계 초기화"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         def _do():
             try:
@@ -518,12 +690,12 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
-    def execute_waypoint_move(waypoints: list, is_joint: bool = True, blend_radius: float = 0):
+    def execute_waypoint_move(waypoints: list, is_joint: bool = True, blend_radius: float = 0, name: str = None):
         """
         다중 경유점 이동 실행.
         waypoints: [[j1,j2,...,j6], [j1,j2,...,j6], ...] 또는 [[x,y,z,rx,ry,rz], ...]
         """
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst or not waypoints: return False
         
         def _do():
@@ -549,13 +721,13 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
-    def execute_pick_place_sequence(target_p: list, approach_dist_mm: float, approach_dir: str, retract_dist_mm: float, retract_dir: str):
+    def execute_pick_place_sequence(target_p: list, approach_dist_mm: float, approach_dir: str, retract_dist_mm: float, retract_dir: str, name: str = None):
         """
         Pick/Place 동작 시퀀스: 투입(Approach) → 정위치(Target) → 배출(Retract)
         각 단계마다 MoveDoneCheck로 이동 완료 확인 후 다음 단계 진행.
         """
         if not target_p or len(target_p) < 6: return False
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst:
             print(">> 로봇 인스턴스가 활성화되지 않았습니다.")
             return False
@@ -570,21 +742,21 @@ class RobotControlUseCase:
                 # 1단계: 투입위치(Approach)
                 print(f">> [OOD] 1. 투입 위치(Approach) 이동: {[f'{v:.2f}' for v in app_p[:3]]}")
                 inst.task_move_to(app_p)
-                if not RobotControlUseCase.wait_for_move_finish(30.0):
+                if not RobotControlUseCase.wait_for_move_finish(name=name):
                     print(">> [OOD] 투입위치 이동 타임아웃!")
                     return
                 
                 # 2단계: 정위치(Target)
                 print(f">> [OOD] 2. 정위치(Target) 이동: {[f'{v:.2f}' for v in target_p[:3]]}")
                 inst.task_move_to(target_p)
-                if not RobotControlUseCase.wait_for_move_finish(30.0):
+                if not RobotControlUseCase.wait_for_move_finish(name=name):
                     print(">> [OOD] 정위치 이동 타임아웃!")
                     return
                 
                 # 3단계: 배출위치(Retract)
                 print(f">> [OOD] 3. 배출 위치(Retract) 이동: {[f'{v:.2f}' for v in ret_p[:3]]}")
                 inst.task_move_to(ret_p)
-                if not RobotControlUseCase.wait_for_move_finish(30.0):
+                if not RobotControlUseCase.wait_for_move_finish(name=name):
                     print(">> [OOD] 배출위치 이동 타임아웃!")
                     return
                     
@@ -600,41 +772,42 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
-    def start_program():
+    def start_program(name: str = None):
         """현재 로드된 프로그램 실행"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         threading.Thread(target=inst.start_current_program, daemon=True).start()
         return True
 
     @staticmethod
-    def pause_program():
+    def pause_program(name: str = None):
         """현재 실행 중인 프로그램 일시정지"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         threading.Thread(target=inst.pause_current_program, daemon=True).start()
         return True
 
     @staticmethod
-    def resume_program():
+    def resume_program(name: str = None):
         """일시정지된 프로그램 재개"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         threading.Thread(target=inst.resume_current_program, daemon=True).start()
         return True
 
     @staticmethod
-    def stop_program():
+    def stop_program(name: str = None):
         """현재 프로그램 정지"""
-        inst = robot_manager.get_active_instance()
+        RobotControlUseCase.request_stop(name)
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         threading.Thread(target=inst.stop_current_program, daemon=True).start()
         return True
 
     @staticmethod
-    def run_json_program(json_string: str):
+    def run_json_program(json_string: str, name: str = None):
         """JSON 프로그램을 로봇에 전송하고 실행"""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         def _do():
             try:
@@ -803,13 +976,13 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
-    def set_payload(mass: float, center_of_mass: list = None):
+    def set_payload(mass: float, center_of_mass: list = None, name: str = None):
         """
         로봇 끝단 페이로드(질량) 및 무게중심 설정.
         mass: kg
         center_of_mass: [cx, cy, cz] (m) — None이면 [0,0,0]
         """
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         if center_of_mass is None:
             center_of_mass = [0.0, 0.0, 0.0]
@@ -827,13 +1000,13 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
-    def set_workspace_limit(min_pos: list, max_pos: list, enable: bool = True):
+    def set_workspace_limit(min_pos: list, max_pos: list, enable: bool = True, name: str = None):
         """
         작업 공간 직교 좌표 제한.
         min_pos: [x_min, y_min, z_min] (m)
         max_pos: [x_max, y_max, z_max] (m)
         """
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         def _do():
             try:
@@ -866,13 +1039,13 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
-    def set_impedance(stiffness: list, damping: list):
+    def set_impedance(stiffness: list, damping: list, name: str = None):
         """
         임피던스 파라미터 설정 (6축).
         stiffness: [kx, ky, kz, krx, kry, krz] — 강성 (N/m, Nm/rad)
         damping: [dx, dy, dz, drx, dry, drz] — 감쇠 (Ns/m, Nms/rad)
         """
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         def _do():
             try:
@@ -884,9 +1057,9 @@ class RobotControlUseCase:
         return True
 
     @staticmethod
-    def start_impedance_mode():
+    def start_impedance_mode(name: str = None):
         """임피던스 제어 모드 시작."""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         def _do():
             try:
@@ -898,9 +1071,9 @@ class RobotControlUseCase:
         return True
 
     @staticmethod
-    def stop_impedance_mode():
+    def stop_impedance_mode(name: str = None):
         """임피던스 제어 모드 종료."""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         def _do():
             try:
@@ -941,9 +1114,9 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
-    def get_endtool_di() -> list:
+    def get_endtool_di(name: str = None) -> list:
         """엔드툴 Digital Input 읽기 (동기)."""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return []
         try:
             return inst.get_endtool_di()
@@ -952,9 +1125,9 @@ class RobotControlUseCase:
             return []
 
     @staticmethod
-    def set_endtool_do_port(port: int, val: int):
+    def set_endtool_do_port(port: int, val: int, name: str = None):
         """엔드툴 특정 포트 DO 설정."""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         def _do():
             try:
@@ -1039,13 +1212,13 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
-    def call_sub_program(json_path: str):
+    def call_sub_program(json_path: str, name: str = None):
         """
         외부 JSON 프로그램 파일을 로드하여 로봇에서 실행.
         json_path: .json 파일 경로
         """
         import json as _json
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return False
         def _do():
             try:
@@ -1064,42 +1237,50 @@ class RobotControlUseCase:
     # =========================================================================
 
     _user_variables = {}
+    _robot_variables = {}
 
     @classmethod
-    def set_variable(cls, name: str, value: float):
+    def _variable_store(cls, robot_name: str = None) -> dict:
+        if robot_name:
+            return cls._robot_variables.setdefault(robot_name, {})
+        return cls._user_variables
+
+    @classmethod
+    def set_variable(cls, name: str, value: float, robot_name: str = None):
         """사용자 변수 설정."""
-        cls._user_variables[name] = value
+        cls._variable_store(robot_name)[name] = value
 
     @classmethod
-    def get_variable(cls, name: str, default: float = 0.0) -> float:
+    def get_variable(cls, name: str, default: float = 0.0, robot_name: str = None) -> float:
         """사용자 변수 읽기."""
-        return cls._user_variables.get(name, default)
+        return cls._variable_store(robot_name).get(name, default)
 
     @classmethod
-    def get_all_variables(cls) -> dict:
+    def get_all_variables(cls, robot_name: str = None) -> dict:
         """전체 사용자 변수 딕셔너리 반환."""
-        return cls._user_variables.copy()
+        return cls._variable_store(robot_name).copy()
 
     @classmethod
-    def math_operation(cls, var_name: str, operator: str, value: float):
+    def math_operation(cls, var_name: str, operator: str, value: float, robot_name: str = None):
         """변수 수학 연산 (+=, -=, *=, /=, =)."""
-        current = cls._user_variables.get(var_name, 0.0)
+        store = cls._variable_store(robot_name)
+        current = store.get(var_name, 0.0)
         if operator == "=":
-            cls._user_variables[var_name] = value
+            store[var_name] = value
         elif operator == "+=" or operator == "+":
-            cls._user_variables[var_name] = current + value
+            store[var_name] = current + value
         elif operator == "-=" or operator == "-":
-            cls._user_variables[var_name] = current - value
+            store[var_name] = current - value
         elif operator == "*=" or operator == "*":
-            cls._user_variables[var_name] = current * value
+            store[var_name] = current * value
         elif operator == "/=" or operator == "/":
-            cls._user_variables[var_name] = current / value if value != 0 else current
-        print(f">> [변수] {var_name} = {cls._user_variables[var_name]}")
+            store[var_name] = current / value if value != 0 else current
+        print(f">> [변수] {var_name} = {store[var_name]}")
 
     @classmethod
-    def eval_condition(cls, var_name: str, operator: str, value: float) -> bool:
+    def eval_condition(cls, var_name: str, operator: str, value: float, robot_name: str = None) -> bool:
         """조건문 평가."""
-        current = cls._user_variables.get(var_name, 0.0)
+        current = cls._variable_store(robot_name).get(var_name, 0.0)
         if operator == "==": return current == value
         elif operator == "!=": return current != value
         elif operator == ">": return current > value
@@ -1113,9 +1294,9 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
-    def get_joint_pos() -> list:
+    def get_joint_pos(name: str = None) -> list:
         """현재 관절 각도 읽기 [j1, ..., j6] (deg)."""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return [0.0] * 6
         try:
             return inst.get_joint_pos()
@@ -1123,9 +1304,9 @@ class RobotControlUseCase:
             return [0.0] * 6
 
     @staticmethod
-    def get_task_pos() -> list:
+    def get_task_pos(name: str = None) -> list:
         """현재 TCP 좌표 읽기 [x,y,z,rx,ry,rz]."""
-        inst = robot_manager.get_active_instance()
+        inst = RobotControlUseCase._get_instance(name)
         if not inst: return [0.0] * 6
         try:
             return inst.get_task_pos()

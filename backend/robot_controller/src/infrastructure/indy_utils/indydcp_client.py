@@ -558,7 +558,8 @@ class IndyDCPClient:
         return ERR_NONE
 
     def parse_robot_status(self, status):
-        status_str = bin(status).lstrip('0b')
+        self.robot_status_raw = int(status)
+        status_str = format(self.robot_status_raw & 0xFFFFFFFF, "032b")
         # self.robot_status.is_robot_running        = int(status_str[0])
         self.robot_status.is_robot_ready          = int(status_str[1])
         self.robot_status.is_emergency_stop       = int(status_str[2])
@@ -740,7 +741,8 @@ class IndyDCPClient:
                'zero': self.robot_status.is_zero,
                'resetting': self.robot_status.is_in_resetting,
                'teaching': self.robot_status.is_teaching_mode,
-               'direct_teaching': self.robot_status.is_direct_teaching_mode}
+               'direct_teaching': self.robot_status.is_direct_teaching_mode,
+               'raw': getattr(self, 'robot_status_raw', 0)}
         return res
 
     @tcp_command(CMD_IS_CONTY_CONNECTED, 'boolVal')

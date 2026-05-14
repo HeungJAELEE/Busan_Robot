@@ -10,8 +10,9 @@ class IOMonitorPanel:
     I/O 모니터링 대시보드 — DO/DI + EndTool + AI/AO 실시간 상태 표시 및 수동 제어.
     """
     
-    def __init__(self, parent_frame):
+    def __init__(self, parent_frame, robot_name_provider=None):
         self.parent = parent_frame
+        self.robot_name_provider = robot_name_provider
         self.do_btns = []
         self.di_labels = []
         self.et_do_btns = []
@@ -19,6 +20,16 @@ class IOMonitorPanel:
         self._monitoring = False
         self._monitor_thread = None
         self.render()
+
+    def _selected_robot_name(self):
+        try:
+            if callable(self.robot_name_provider):
+                name = self.robot_name_provider()
+                if name:
+                    return name
+        except Exception:
+            pass
+        return None
     
     def render(self):
         main = ctk.CTkFrame(self.parent, fg_color=Theme.BG_BASE, corner_radius=6)
@@ -130,7 +141,7 @@ class IOMonitorPanel:
     def _toggle_do(self, idx):
         self.do_states[idx] = 1 - self.do_states[idx]
         val = self.do_states[idx]
-        RobotControlUseCase.set_do(idx, val)
+        RobotControlUseCase.set_do(idx, val, self._selected_robot_name())
         if val:
             self.do_btns[idx].configure(text=f"DO{idx}\nON", fg_color=Theme.SUCCESS)
         else:
@@ -140,7 +151,7 @@ class IOMonitorPanel:
     def _toggle_endtool_do(self, idx):
         self.et_do_states[idx] = 1 - self.et_do_states[idx]
         val = self.et_do_states[idx]
-        RobotControlUseCase.set_endtool_do_port(idx, val)
+        RobotControlUseCase.set_endtool_do_port(idx, val, self._selected_robot_name())
         if val:
             self.et_do_btns[idx].configure(text=f"ET_DO{idx}\nON", fg_color=Theme.WARNING)
         else:
@@ -149,7 +160,7 @@ class IOMonitorPanel:
     def _on_ao_change(self, idx, val):
         voltage = round(val, 1)
         self.ao_labels[idx].configure(text=f"{voltage}V")
-        RobotControlUseCase.set_ao(idx, int(voltage * 100))  # 0~1000 (0.0~10.0V)
+        RobotControlUseCase.set_ao(idx, int(voltage * 100), self._selected_robot_name())  # 0~1000 (0.0~10.0V)
     
     def _toggle_monitoring(self):
         self._monitoring = not self._monitoring
@@ -164,8 +175,9 @@ class IOMonitorPanel:
         while self._monitoring:
             try:
                 # 제어박스 DI/DO
-                di_vals = RobotControlUseCase.get_di()
-                do_vals = RobotControlUseCase.get_do()
+                robot_name = self._selected_robot_name()
+                di_vals = RobotControlUseCase.get_di(robot_name)
+                do_vals = RobotControlUseCase.get_do(robot_name)
                 
                 if di_vals:
                     for i in range(min(8, len(di_vals))):
@@ -183,7 +195,7 @@ class IOMonitorPanel:
                             self.do_btns[i].configure(text=f"DO{i}\nOFF", fg_color=Theme.BG_SURFACE)
                 
                 # EndTool DI
-                et_di = RobotControlUseCase.get_endtool_di()
+                et_di = RobotControlUseCase.get_endtool_di(robot_name)
                 if et_di:
                     for i in range(min(2, len(et_di))):
                         if et_di[i]:
@@ -193,7 +205,7 @@ class IOMonitorPanel:
                 
                 # AI 읽기
                 for i in range(2):
-                    ai_val = RobotControlUseCase.get_ai(i)
+                    ai_val = RobotControlUseCase.get_ai(i, robot_name)
                     self.ai_labels[i].configure(text=f"{ai_val/100.0:.1f}V")
                     
             except Exception:

@@ -273,7 +273,7 @@ class IfEditor:
     def apply_changes(self, node_data):
         try:
             if "cond" not in node_data: node_data["cond"] = {"right": {}}
-            op_map_rev = {"==": 0, "!=": 1, ">": 2, "<": 3, ">=": 4, "<=": 5}
+            op_map_rev = {"==": 0, "!=": 1, ">": 2, ">=": 3, "<": 4, "<=": 5}
             node_data["cond"]["op"] = op_map_rev.get(self.op_sel.get(), 0)
             node_data["cond"]["right"]["value"] = float(self.val_entry.get())
             # For simplicity, saving the variable part in custom fields
@@ -488,7 +488,7 @@ class WaitForEditor:
         try:
             node_data["condType"] = self.cond_type.get()
             node_data["condVar"] = self.var_entry.get()
-            op_map = {"==": 0, "!=": 1, ">": 2, "<": 3, ">=": 4, "<=": 5}
+            op_map = {"==": 0, "!=": 1, ">": 2, ">=": 3, "<": 4, "<=": 5}
             node_data["condOp"] = op_map.get(self.op_sel.get(), 0)
             node_data["condVal"] = float(self.val_entry.get())
             node_data["timeout"] = float(self.timeout_entry.get())

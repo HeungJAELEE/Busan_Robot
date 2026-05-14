@@ -1,0 +1,14 @@
+# Indy7 HMI Clean - base runtime requirements
+# Python: 3.11+ recommended; verified on Python 3.13.9
+#
+# Install:
+#   python3 -m pip install -r requirements.txt
+#
+# Vision YOLO is intentionally separate because torch/ultralytics are heavy:
+#   python3 -m pip install -r backend/vision_yolo/requirements.txt
+
+-r frontend/requirements.txt
+-r backend/db_worker/requirements.txt
+-r backend/robot_controller/requirements.txt
+-r backend/plc_bridge/requirements.txt
+-r backend/digital_twin/requirements.txt

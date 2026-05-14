@@ -26,6 +26,13 @@ class RobotClientManager:
             self._robots[name] = {"ip": ip, "plc_ip": plc_ip, "instance": None}
             if self._active_robot_name is None:
                 self._active_robot_name = name
+            return
+
+        info = self._robots[name]
+        if ip:
+            info["ip"] = ip
+        if plc_ip is not None:
+            info["plc_ip"] = plc_ip
                 
     def get_robot_info(self, name: str) -> dict:
         return self._robots.get(name)
@@ -45,7 +52,8 @@ class RobotClientManager:
     def get_lock(self):
         return self._robot_lock
         
-    def connect(self, name: str, ip: str = None) -> bool:
+    def connect(self, name: str = None, ip: str = None) -> bool:
+        name = name or self._active_robot_name
         if name not in self._robots:
             return False
         if ip:
@@ -76,7 +84,8 @@ class RobotClientManager:
             self._robots[name]["instance"] = None
             return False
             
-    def disconnect(self, name: str):
+    def disconnect(self, name: str = None):
+        name = name or self._active_robot_name
         if name in self._robots and self._robots[name]["instance"]:
             try:
                 self._robots[name]["instance"].disconnect()
@@ -104,8 +113,9 @@ class RobotClientManager:
         with self._state_lock:
             return self._latest_states.get(name)
     
-    def is_connected(self, name: str) -> bool:
+    def is_connected(self, name: str = None) -> bool:
         """해당 로봇이 연결되어 있는지 확인"""
+        name = name or self._active_robot_name
         info = self._robots.get(name)
         return info is not None and info.get("instance") is not None
     

@@ -4,12 +4,23 @@ from presentation.ui.theme import Theme
 
 
 class PickPlaceEditor:
-    def __init__(self, parent_frame):
+    def __init__(self, parent_frame, robot_name_provider=None):
         self.parent = parent_frame
+        self.robot_name_provider = robot_name_provider
         self.header_label = None
         self.style_seg_var = ctk.StringVar(value="단일 위치 사용")
         self.step3_frame = None
         self.pallet_name_label = None
+
+    def _selected_robot_name(self):
+        try:
+            if callable(self.robot_name_provider):
+                name = self.robot_name_provider()
+                if name:
+                    return name
+        except Exception:
+            pass
+        return None
         
     def render(self):
         for w in self.parent.winfo_children(): w.destroy()
@@ -417,7 +428,7 @@ class PickPlaceEditor:
         """Read current real-time task position into the specified P entry."""
         from core.domains.robot.communication.client_manager import robot_manager
         
-        active_name = robot_manager.get_active_robot_name()
+        active_name = self._selected_robot_name() or robot_manager.get_active_robot_name()
         if not active_name:
             print(">> [경고] 로봇이 선택되지 않았습니다.")
             return
@@ -499,7 +510,7 @@ class PickPlaceEditor:
         try:
             pos = [float(self.p_entries[p_key][ax].get()) for ax in axes]
             print(f">> [이동] 팔레트 기준점 '{p_name}' 좌표로 이동: {pos}")
-            RobotControlUseCase.move_to_task(pos)
+            RobotControlUseCase.move_to_task(pos, self._selected_robot_name())
         except Exception as e:
             print(f">> [에러] 팔레트 이동 실패: {e}")
 
@@ -507,6 +518,7 @@ class PickPlaceEditor:
         """Move robot to Approach, Target, or Retract position based on current settings."""
         from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
         import time
+        robot_name = self._selected_robot_name()
             
         try:
             # 1. 정위치(Target) 좌표 구하기
@@ -546,13 +558,13 @@ class PickPlaceEditor:
 
             if step == "approach":
                 print(f">> [이동] 투입위치(Approach)로 이동: {app_p}")
-                RobotControlUseCase.move_to_task(app_p)
+                RobotControlUseCase.move_to_task(app_p, robot_name)
             elif step == "target":
                 print(f">> [이동] 정위치(Target)로 이동: {target_p}")
-                RobotControlUseCase.move_to_task(target_p)
+                RobotControlUseCase.move_to_task(target_p, robot_name)
             elif step == "retract":
                 print(f">> [이동] 배출위치(Retract)로 이동: {ret_p}")
-                RobotControlUseCase.move_to_task(ret_p)
+                RobotControlUseCase.move_to_task(ret_p, robot_name)
             elif step == "sequence":
                 # 백그라운드 스레드에서 MoveDoneCheck 포함 시퀀스 실행
                 import threading
@@ -586,7 +598,8 @@ class PickPlaceEditor:
                     try:
                         inst = None
                         from core.domains.robot.communication.client_manager import robot_manager
-                        inst = robot_manager.get_active_instance()
+                        info = robot_manager.get_robot_info(robot_name) if robot_name else None
+                        inst = info.get("instance") if info else robot_manager.get_active_instance()
                         if not inst:
                             print(">> [에러] 로봇이 연결되지 않았습니다.")
                             return
@@ -623,20 +636,20 @@ class PickPlaceEditor:
                                     print(f">> ═══════════════════════════════════════")
                                     
                                     # 툴 초기화
-                                    RobotControlUseCase.set_do(g_pin, 0)
+                                    RobotControlUseCase.set_do(g_pin, 0, robot_name)
                                     if not is_suction:
-                                        RobotControlUseCase.set_do(r_pin, 0)
+                                        RobotControlUseCase.set_do(r_pin, 0, robot_name)
                                     time.sleep(0.1)
                                     
                                     # 1. Approach
                                     print(f">> [{count}] 1/3 투입위치(Approach)로 이동...")
                                     inst.task_move_to(cur_app)
-                                    RobotControlUseCase.wait_for_move_finish(30.0)
+                                    RobotControlUseCase.wait_for_move_finish(30.0, robot_name)
                                     
                                     # 2. Target
                                     print(f">> [{count}] 2/3 정위치(Target)로 이동...")
                                     inst.task_move_to(cur_target)
-                                    RobotControlUseCase.wait_for_move_finish(30.0)
+                                    RobotControlUseCase.wait_for_move_finish(30.0, robot_name)
                                     
                                     # 3. Tool action (Pick/Place)
                                     is_place = False
@@ -648,25 +661,25 @@ class PickPlaceEditor:
                                     
                                     if is_place:
                                         # Place (끄기 / 놓기)
-                                        RobotControlUseCase.set_do(g_pin, 0)
+                                        RobotControlUseCase.set_do(g_pin, 0, robot_name)
                                         if not is_suction:
                                             time.sleep(0.1)
-                                            RobotControlUseCase.set_do(r_pin, 1)
+                                            RobotControlUseCase.set_do(r_pin, 1, robot_name)
                                     else:
                                         # Pick (켜기 / 집기)
                                         if is_suction:
-                                            RobotControlUseCase.set_do(g_pin, 1)
+                                            RobotControlUseCase.set_do(g_pin, 1, robot_name)
                                         else:
-                                            RobotControlUseCase.set_do(r_pin, 0)
+                                            RobotControlUseCase.set_do(r_pin, 0, robot_name)
                                             time.sleep(0.1)
-                                            RobotControlUseCase.set_do(g_pin, 1)
+                                            RobotControlUseCase.set_do(g_pin, 1, robot_name)
                                             
                                     time.sleep(0.5)
                                     
                                     # 4. Retract
                                     print(f">> [{count}] 3/3 배출위치(Retract)로 이동...")
                                     inst.task_move_to(cur_ret)
-                                    RobotControlUseCase.wait_for_move_finish(30.0)
+                                    RobotControlUseCase.wait_for_move_finish(30.0, robot_name)
                                     
                                     print(f">> [{count}] ✅ 완료!")
                         
@@ -762,6 +775,20 @@ class PickPlaceEditor:
         if tt == "단일 위치 사용": node_data["target_type"] = 0
         elif tt == "팔레타이징 사용": node_data["target_type"] = 1
         else: node_data["target_type"] = 2
+
+        raw = node_data.get("__raw__", {}) if isinstance(node_data.get("__raw__", {}), dict) else {}
+        target = node_data.get("target") or raw.get("target") or {}
+        target = target.copy() if isinstance(target, dict) else {}
+        target["type"] = node_data["target_type"]
+        target.setdefault("boundary", {"velLevel": 3, "accLevel": 3})
+        target.setdefault("pallet", {})
+        target.setdefault("refFrame", node_data.get("refFrame", {"type": 1, "tref": [0,0,0,0,0,0]}))
+        target.setdefault("tcp", node_data.get("tcp", [0.0]*6))
+        node_data["target"] = target
+        node_data["tcp"] = target.get("tcp", [0.0]*6)
+        node_data["target_tcp"] = node_data["tcp"]
+        node_data["refFrame"] = target.get("refFrame", {"type": 1, "tref": [0,0,0,0,0,0]})
+        node_data["target_refFrame"] = node_data["refFrame"]
         
         # Tool ID — 기존 toolId 보존 (원본 JSON과 불일치 방지)
         if "toolId" not in node_data:
@@ -794,6 +821,8 @@ class PickPlaceEditor:
             p_name = self.pallet_sel.get()
             if p_name != "선택 안 됨":
                 node_data["target_pallet_name"] = p_name
+                target["pallet"] = dict(target.get("pallet") or {})
+                target["pallet"]["palletId"] = node_data.get("target_pallet_id") or p_name
             
             # 🔥 적용 버튼 누를 때마다 무조건 자동 계산 먼저 실행!
             self._auto_calc_p2p3()
@@ -869,6 +898,15 @@ class PickPlaceEditor:
                     
             except Exception as e:
                 print(f"Error applying pallet points: {e}")
+        else:
+            point = (target.get("point") or {}).copy()
+            point.setdefault("q", node_data.get("q", raw.get("q", [0.0]*6)))
+            point.setdefault("p", node_data.get("p", raw.get("p", [0.0]*6)))
+            target["point"] = point
+
+        node_data["target"] = target
+        node_data["tcp"] = target.get("tcp", [0.0]*6)
+        node_data["target_tcp"] = node_data["tcp"]
 
 class VisionEditor:
     def __init__(self, parent_frame):

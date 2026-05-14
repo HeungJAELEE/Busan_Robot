@@ -8,6 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')
 
 from presentation.ui.robot_hmi.robot_hmi_view import RobotHmiView
 from presentation.ui.digital_twin.digital_twin_view import DigitalTwinView
+from presentation.ui.virtual_test.virtual_test_view import VirtualTestView
 from core.domains.robot.communication.client_manager import robot_manager
 from infrastructure.mqtt.mqtt_manager import MqttManager
 from core.service_manager import service_mgr
@@ -63,6 +64,9 @@ class ModernContyApp(ctk.CTk):
         
         self.btn_page2 = ctk.CTkButton(tab_container, text="[Page 2] Setting / Teaching Mode", corner_radius=15, command=lambda: self.switch_page(2), **self.style_active)
         self.btn_page2.pack(side="left", padx=5)
+
+        self.btn_page3 = ctk.CTkButton(tab_container, text="[Page 3] Virtual Test", corner_radius=15, command=lambda: self.switch_page(3), **self.style_inactive)
+        self.btn_page3.pack(side="left", padx=5)
         
         # 우측 연결 버튼
         self.conn_btn = ctk.CTkButton(self.header, text="로봇 통신 연결", fg_color=Theme.SUCCESS, command=self.toggle_connection)
@@ -99,6 +103,11 @@ class ModernContyApp(ctk.CTk):
         self.page2_frame = ctk.CTkFrame(self.pages_container, fg_color="transparent")
         self.page2_frame.grid(row=0, column=0, sticky="nsew")
         self.hmi_view = RobotHmiView(self.page2_frame, on_back=lambda: self.switch_page(1))
+
+        # Page 3 (Virtual Dry Run / DB Recorder)
+        self.page3_frame = ctk.CTkFrame(self.pages_container, fg_color="transparent")
+        self.page3_frame.grid(row=0, column=0, sticky="nsew")
+        self.virtual_test_view = VirtualTestView(self.page3_frame)
         
         # 로봇 기본 설정 (연결은 하지 않음!)
         robot_manager.add_robot("Robot A", "192.168.3.7")
@@ -107,6 +116,9 @@ class ModernContyApp(ctk.CTk):
         
         # 프로그램 실행 중 폴링 일시중지 플래그
         self._program_running = False
+        self._program_running_robots = set()
+        self._virtual_test_sessions = {}
+        self._virtual_last_sample_ts = {}
         
         # 기본 페이지 설정
         self.active_page = 2
@@ -135,11 +147,101 @@ class ModernContyApp(ctk.CTk):
         if page_num == 1:
             self.btn_page1.configure(**self.style_active)
             self.btn_page2.configure(**self.style_inactive)
+            self.btn_page3.configure(**self.style_inactive)
             self.page1_frame.tkraise()
-        else:
+        elif page_num == 2:
             self.btn_page1.configure(**self.style_inactive)
             self.btn_page2.configure(**self.style_active)
+            self.btn_page3.configure(**self.style_inactive)
             self.page2_frame.tkraise()
+        else:
+            self.btn_page1.configure(**self.style_inactive)
+            self.btn_page2.configure(**self.style_inactive)
+            self.btn_page3.configure(**self.style_active)
+            self.page3_frame.tkraise()
+
+    def set_program_running(self, robot_name, is_running):
+        """Track Page 1/Page 2 program execution without stopping telemetry polling."""
+        if is_running:
+            self._program_running_robots.add(robot_name)
+        else:
+            self._program_running_robots.discard(robot_name)
+        self._program_running = bool(self._program_running_robots)
+
+    def start_virtual_test_tracking(self, robot_name, session_id, target_cycles, sample_interval_ms, program_path):
+        self._virtual_test_sessions[robot_name] = {
+            "active": True,
+            "session_id": session_id,
+            "target_cycles": int(target_cycles or 0),
+            "sample_interval_ms": max(20, int(sample_interval_ms or 100)),
+            "program_path": program_path,
+            "cycle_index": 0,
+            "sample_index": 0,
+            "status": "running",
+        }
+        self._virtual_last_sample_ts[robot_name] = 0.0
+
+    def update_virtual_test_progress(self, robot_name, session_id, event, cycle_index, target_cycles, status):
+        state = self._virtual_test_sessions.get(robot_name)
+        if state and state.get("session_id") == session_id:
+            state["cycle_index"] = int(cycle_index or 0)
+            state["target_cycles"] = int(target_cycles or state.get("target_cycles", 0) or 0)
+            state["status"] = status
+            if event == "session_done":
+                state["active"] = False
+        payload = {
+            "session_id": session_id,
+            "robot_id": robot_name,
+            "event": event,
+            "status": status,
+            "cycle_index": int(cycle_index or 0),
+            "target_cycles": int(target_cycles or 0),
+            "total_samples": int((state or {}).get("sample_index", 0) or 0),
+            "sample_interval_ms": int((state or {}).get("sample_interval_ms", 100) or 100),
+            "program_path": (state or {}).get("program_path", ""),
+            "dry_run": True,
+        }
+        try:
+            def _apply_virtual_progress(p=payload):
+                if p.get("event") not in ("session_start", "session_done"):
+                    self.virtual_test_view.record_virtual_event(p)
+                self.virtual_test_view.update_session_progress(
+                    robot_name, session_id, event, cycle_index, target_cycles, status
+                )
+            self.after(0, _apply_virtual_progress)
+        except Exception:
+            pass
+
+    def stop_virtual_test_tracking(self, robot_name, status="stopped"):
+        state = self._virtual_test_sessions.get(robot_name)
+        if state:
+            state["active"] = False
+            state["status"] = status
+
+    def _build_virtual_test_sample(self, robot_name, j_pos, t_pos, torque, robot_status):
+        state = self._virtual_test_sessions.get(robot_name)
+        if not state or not state.get("active"):
+            return None
+        now = time.time()
+        interval_sec = float(state.get("sample_interval_ms", 100)) / 1000.0
+        last = self._virtual_last_sample_ts.get(robot_name, 0.0)
+        if now - last < interval_sec:
+            return None
+        self._virtual_last_sample_ts[robot_name] = now
+        state["sample_index"] = int(state.get("sample_index", 0) or 0) + 1
+        return {
+            "session_id": state.get("session_id", ""),
+            "robot_id": robot_name,
+            "cycle_index": int(state.get("cycle_index", 0) or 0),
+            "target_cycles": int(state.get("target_cycles", 0) or 0),
+            "sample_index": state["sample_index"],
+            "sample_interval_ms": int(state.get("sample_interval_ms", 100) or 100),
+            "q": list(j_pos or [])[:6],
+            "p": list(t_pos or [])[:6],
+            "torque": list(torque or [])[:6],
+            "busy": robot_status.get("busy", 0) if isinstance(robot_status, dict) else 0,
+            "captured_at": time.time(),
+        }
             
     def toggle_connection(self):
         def _bg():
@@ -185,10 +287,6 @@ class ModernContyApp(ctk.CTk):
         IndyDCP 내부 lock에 의해 자동으로 폴링이 대기한 뒤 재개된다.
         """
         while True:
-            # 프로그램 실행 중에는 폴링 중지 (소켓 Lock 경합 방지)
-            if self._program_running:
-                time.sleep(0.5)
-                continue
             try:
                 active = robot_manager.get_active_robot_name()
                 
@@ -225,11 +323,24 @@ class ModernContyApp(ctk.CTk):
                             status_data = {
                                 "robot_id": name,
                                 "q": j_pos,
+                                "p": t_pos,
                                 "torque": torque,
                                 "busy": robot_status.get('busy', 0) if robot_status else 0
                             }
                             # DB Repository 직접 호출 대신 MQTT로 브로드캐스트
                             self.mqtt_broker.publish("robot/realtime", status_data)
+
+                            vt_payload = self._build_virtual_test_sample(name, j_pos, t_pos, torque, robot_status)
+                            if vt_payload:
+                                try:
+                                    self.virtual_test_view.record_virtual_sample(vt_payload)
+                                    self.mqtt_broker.publish("robot/virtual_test_sample", vt_payload)
+                                except Exception:
+                                    pass
+                            try:
+                                self.after(0, lambda n=name, q=j_pos, p=t_pos, tq=torque: self.virtual_test_view.update_robot_snapshot(n, q, p, tq))
+                            except Exception:
+                                pass
                             
                             # Page 1일 때만 3D 뷰어 UI 갱신
                             if self.active_page == 1:
@@ -274,7 +385,7 @@ class ModernContyApp(ctk.CTk):
             lbl.configure(text=f"{name} X: {t_pos[0]:.1f} Y: {t_pos[1]:.1f} Z: {t_pos[2]:.1f}")
         
         # 3D 뷰어 그래프 업데이트 (모든 연결된 로봇)
-        self.dt_view.update_3d_graph(name, j_pos)
+        self.dt_view.update_3d_graph(name, j_pos, t_pos)
     
     # ─────────────────────────────────────────
     # 서비스 관리 패널 (ON/OFF 토글)

@@ -1,18 +1,39 @@
 import customtkinter as ctk
 from .base_editor import BaseNodeEditor
 from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
-import threading
 from core.domains.robot.communication.client_manager import robot_manager
 from presentation.ui.theme import Theme
 
 
 class JogController:
-    def __init__(self, parent_frame):
+    def __init__(self, parent_frame, robot_name_provider=None):
         self.parent = parent_frame
+        self.robot_name_provider = robot_name_provider
         self.entries = {}
         self.target_q = None
         self.target_p = None
         self.target_labels = {}
+        self.is_jogging = False
+        self._jog_robot_name = None
+
+    def _selected_robot_name(self):
+        try:
+            if callable(self.robot_name_provider):
+                name = self.robot_name_provider()
+                if name:
+                    return name
+        except Exception:
+            pass
+        return robot_manager.get_active_robot_name()
+
+    def _activate_selected_robot(self):
+        name = self._selected_robot_name()
+        if name:
+            try:
+                robot_manager.set_active_robot(name)
+            except Exception:
+                pass
+        return name
         
     def render(self):
         for w in self.parent.winfo_children(): w.destroy()
@@ -41,7 +62,7 @@ class JogController:
             if not self.parent.winfo_exists():
                 return
             
-            active_name = robot_manager.get_active_robot_name()
+            active_name = self._selected_robot_name()
             if active_name:
                 state = robot_manager.get_robot_state(active_name)
                 
@@ -85,11 +106,11 @@ class JogController:
 
         
         self.jog_loops = {}
-        self.is_jogging = False
 
-        
         def start_jog(event, ax, amount):
-            """누르는 동안 계속 움직이도록 큰 값으로 기동 시작"""
+            """누르는 동안 계속 움직이도록 큰 상대 이동을 시작한다."""
+            if self.is_jogging:
+                return
             self.is_jogging = True
             try:
                 # 1. 속도 설정 (슬라이더 1~100 -> 레벨 1~9)
@@ -97,11 +118,18 @@ class JogController:
                 vel_level = max(1, min(9, int(speed_val / 11) + 1))
                 is_joint = "J" in ax
                 from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
-                RobotControlUseCase.set_velocity_level(vel_level, is_joint)
+                self._jog_robot_name = self._activate_selected_robot()
+                if not RobotControlUseCase.set_velocity_level(vel_level, is_joint, self._jog_robot_name):
+                    self.is_jogging = False
+                    return
                 
-                # 2. 아주 큰 거리로 기동 (누르는 동안 계속 가도록)
+                # 2. 기존 방식: 긴 상대 이동을 한 번 보내고 버튼 release에서 stop_motion으로 끊는다.
                 large_amount = amount * 180.0 if is_joint else amount * 1000.0
-                RobotControlUseCase.jog_axis(ax, large_amount)
+                move_axis = ax[1:] if ax.startswith("t") else ax
+                if not RobotControlUseCase.jog_axis(move_axis, large_amount, self._jog_robot_name):
+                    self.is_jogging = False
+                    self._jog_robot_name = None
+                    return
                 
                 # 3. 조깅 중 좌표 갱신 빠르게 (100ms)
                 if hasattr(self, "jog_sync_id"):
@@ -112,17 +140,26 @@ class JogController:
                 
         def stop_jog(event, ax):
             """버튼을 떼면 즉시 정지"""
+            if not self.is_jogging and not self._jog_robot_name:
+                return
             self.is_jogging = False
             try:
                 from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
-                RobotControlUseCase.stop_robot()
+                RobotControlUseCase.stop_robot(getattr(self, "_jog_robot_name", None))
             except:
                 pass
+            self._jog_robot_name = None
             
             # 갱신 주기를 평소(500ms)로 원복
             if hasattr(self, "jog_sync_id"):
                 self.parent.after_cancel(self.jog_sync_id)
             _sync_robot_pos()
+
+        if not getattr(self, "_jog_global_release_bound", False):
+            self._jog_global_release_bound = True
+            top = self.parent.winfo_toplevel()
+            top.bind_all("<ButtonRelease-1>", lambda e: stop_jog(e, None), add="+")
+            top.bind("<FocusOut>", lambda e: stop_jog(e, None), add="+")
 
         for t, axes in [("조인트 (Joint)", ["J1","J2","J3","J4","J5","J6"]), 
                         ("서버(Base)", ["X","Y","Z","Rx","Ry","Rz"]),
@@ -222,7 +259,7 @@ class JogController:
         
         # === I/O 모니터링 패널 ===
         from .io_monitor import IOMonitorPanel
-        self.io_monitor = IOMonitorPanel(self.parent)
+        self.io_monitor = IOMonitorPanel(self.parent, robot_name_provider=self._selected_robot_name)
 
     def set_target(self, q, p):
         self.target_q = q
@@ -238,41 +275,42 @@ class JogController:
             self.t_p_lbl.configure(text="P: 미설정", text_color=Theme.TEXT_SECONDARY)
             
     def _move_to_target(self):
+        robot_name = self._activate_selected_robot()
         if self.target_q and len(self.target_q) >= 6 and not all(v == 0.0 for v in self.target_q):
             try:
-                RobotControlUseCase.move_j(self.target_q)
+                RobotControlUseCase.move_j(self.target_q, robot_name)
             except Exception as e:
                 print(f">> [조그] 타겟 이동 실패: {e}")
         elif self.target_p and len(self.target_p) >= 6 and not all(v == 0.0 for v in self.target_p):
             try:
-                RobotControlUseCase.move_l(self.target_p)
+                RobotControlUseCase.move_l(self.target_p, robot_name)
             except Exception as e:
                 print(f">> [조그] 타겟 이동 실패: {e}")
 
     def _move_to_home(self):
-        """Move robot to Home position (0, 0, -90, 0, -90, 0)."""
+        """Move robot to the controller-defined Home position."""
         try:
-            print(">> [이동] Home 위치로 이동합니다: [0, 0, -90, 0, -90, 0]")
-            RobotControlUseCase.move_to_joint([0.0, 0.0, -90.0, 0.0, -90.0, 0.0])
+            robot_name = self._activate_selected_robot()
+            print(">> [이동] 컨트롤러 Home 위치로 이동합니다.")
+            RobotControlUseCase.go_home(robot_name)
         except Exception as e:
             print(f">> [에러] Home 이동 실패: {e}")
     
     def _move_to_zero(self):
-        """Move robot to Zero position (all joints 0)."""
+        """Move robot to the controller-defined Zero position."""
         try:
-            print(">> [이동] Zero 위치로 이동합니다: [0, 0, 0, 0, 0, 0]")
-            RobotControlUseCase.move_to_joint([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            robot_name = self._activate_selected_robot()
+            print(">> [이동] 컨트롤러 Zero 위치로 이동합니다.")
+            RobotControlUseCase.go_zero(robot_name)
         except Exception as e:
             print(f">> [에러] Zero 이동 실패: {e}")
     
     def _error_reset(self):
         """로봇 에러/충돌 리셋."""
         try:
-            from core.domains.robot.communication.client_manager import robot_manager
-            inst = robot_manager.get_active_instance()
-            if inst:
-                inst.reset_robot()
-                print(">> [에러리셋] 로봇 에러/충돌이 리셋되었습니다.")
+            robot_name = self._activate_selected_robot()
+            if RobotControlUseCase.reset_robot(robot_name):
+                print(">> [에러리셋] 로봇 에러/충돌 리셋 명령을 전송했습니다.")
             else:
                 print(">> [에러] 로봇이 연결되지 않았습니다.")
         except Exception as e:
@@ -281,10 +319,8 @@ class JogController:
     def _emergency_stop(self):
         """비상정지."""
         try:
-            from core.domains.robot.communication.client_manager import robot_manager
-            inst = robot_manager.get_active_instance()
-            if inst:
-                inst.stop_emergency()
+            robot_name = self._activate_selected_robot()
+            if RobotControlUseCase.emergency_stop(robot_name):
                 print(">> 🚨 [비상정지] 로봇이 긴급 정지되었습니다!")
             else:
                 print(">> [에러] 로봇이 연결되지 않았습니다.")
@@ -293,9 +329,12 @@ class JogController:
 
     def _toggle_direct_teaching(self):
         """다이렉트 티칭 모드 ON/OFF 토글."""
-        self._dt_on = not self._dt_on
-        RobotControlUseCase.direct_teaching(self._dt_on)
-        if self._dt_on:
+        next_state = not self._dt_on
+        robot_name = self._activate_selected_robot()
+        if not RobotControlUseCase.direct_teaching(next_state, robot_name):
+            return
+        self._dt_on = next_state
+        if next_state:
             self.dt_btn.configure(text="✋ 직접교시 ON", fg_color=Theme.WARNING)
             print(">> [직접교시] ON — 로봇을 손으로 움직여 위치를 기록하세요.")
         else:
@@ -305,7 +344,8 @@ class JogController:
     def _toggle_servo(self):
         """서보 ON/OFF 토글."""
         self._servo_on = not self._servo_on
-        RobotControlUseCase.set_servo(self._servo_on)
+        robot_name = self._activate_selected_robot()
+        RobotControlUseCase.set_servo(self._servo_on, robot_name)
         if self._servo_on:
             self.servo_btn.configure(text="⚡ 서보 ON", fg_color="#00695C")
         else:
@@ -313,14 +353,16 @@ class JogController:
     
     def _reset_robot(self):
         """로봇 에러/충돌/비상정지 리셋."""
-        RobotControlUseCase.reset_robot()
-        print(">> [리셋] 로봇 에러 리셋 완료")
+        robot_name = self._activate_selected_robot()
+        if RobotControlUseCase.reset_robot(robot_name):
+            print(">> [리셋] 로봇 에러 리셋 명령 전송")
     
     def _on_collision_change(self, val):
         """충돌 감도 레벨 변경."""
         level = int(round(val))
         self.collision_lbl.configure(text=f"Lv.{level}")
-        RobotControlUseCase.set_collision_level(level)
+        robot_name = self._activate_selected_robot()
+        RobotControlUseCase.set_collision_level(level, robot_name)
     def update_coordinates(self, q=None, p=None):
         if q and len(q) >= 6:
             for i, ax in enumerate(["J1","J2","J3","J4","J5","J6"]):

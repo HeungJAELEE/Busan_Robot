@@ -8,8 +8,9 @@ class RobotConfigDialog(ctk.CTkToplevel):
     로봇 설정 다이얼로그 — 페이로드, TCP, 작업공간 제한, 임피던스 파라미터 설정.
     """
     
-    def __init__(self, parent):
+    def __init__(self, parent, robot_name_provider=None):
         super().__init__(parent)
+        self.robot_name_provider = robot_name_provider
         self.title("⚙️ 로봇 설정")
         self.geometry("500x620")
         self.resizable(False, False)
@@ -17,6 +18,16 @@ class RobotConfigDialog(ctk.CTkToplevel):
         
         self.grab_set()
         self._build_ui()
+
+    def _selected_robot_name(self):
+        try:
+            if callable(self.robot_name_provider):
+                name = self.robot_name_provider()
+                if name:
+                    return name
+        except Exception:
+            pass
+        return None
     
     def _build_ui(self):
         scroll = ctk.CTkScrollableFrame(self, fg_color=Theme.BG_BASE)
@@ -134,9 +145,9 @@ class RobotConfigDialog(ctk.CTkToplevel):
         ctk.CTkButton(imp_btns, text="파라미터 적용", width=90, height=28, fg_color="#6A1B9A",
                        command=self._apply_impedance).pack(side="left", padx=3)
         ctk.CTkButton(imp_btns, text="임피던스 ON", width=80, height=28, fg_color=Theme.SUCCESS,
-                       command=RobotControlUseCase.start_impedance_mode).pack(side="left", padx=3)
+                       command=lambda: RobotControlUseCase.start_impedance_mode(self._selected_robot_name())).pack(side="left", padx=3)
         ctk.CTkButton(imp_btns, text="임피던스 OFF", width=80, height=28, fg_color=Theme.DANGER,
-                       command=RobotControlUseCase.stop_impedance_mode).pack(side="left", padx=3)
+                       command=lambda: RobotControlUseCase.stop_impedance_mode(self._selected_robot_name())).pack(side="left", padx=3)
         
         # ===== 5. 사용자 변수 =====
         self._section(scroll, "📝 사용자 변수")
@@ -171,25 +182,25 @@ class RobotConfigDialog(ctk.CTkToplevel):
             cx = float(self.com_x.get() or 0)
             cy = float(self.com_y.get() or 0)
             cz = float(self.com_z.get() or 0)
-            RobotControlUseCase.set_payload(mass, [cx, cy, cz])
+            RobotControlUseCase.set_payload(mass, [cx, cy, cz], self._selected_robot_name())
         except ValueError:
             print(">> [설정] 숫자를 입력하세요.")
     
     def _apply_tcp(self):
         try:
             tcp = [float(e.get() or 0) for e in self.tcp_entries]
-            RobotControlUseCase.set_tcp(tcp)
+            RobotControlUseCase.set_tcp(tcp, self._selected_robot_name())
         except ValueError:
             print(">> [설정] 숫자를 입력하세요.")
     
     def _reset_tcp(self):
-        RobotControlUseCase.reset_tcp()
+        RobotControlUseCase.reset_tcp(self._selected_robot_name())
         for e in self.tcp_entries:
             e.delete(0, "end")
             e.insert(0, "0.0")
     
     def _read_current_tcp(self):
-        p = RobotControlUseCase.get_task_pos()
+        p = RobotControlUseCase.get_task_pos(self._selected_robot_name())
         if p and len(p) >= 6:
             for i, e in enumerate(self.tcp_entries):
                 e.delete(0, "end")
@@ -199,7 +210,7 @@ class RobotConfigDialog(ctk.CTkToplevel):
         try:
             min_pos = [float(e.get() or -1.0) for e in self.ws_min]
             max_pos = [float(e.get() or 1.0) for e in self.ws_max]
-            RobotControlUseCase.set_workspace_limit(min_pos, max_pos, enable)
+            RobotControlUseCase.set_workspace_limit(min_pos, max_pos, enable, self._selected_robot_name())
         except ValueError:
             print(">> [설정] 숫자를 입력하세요.")
     
@@ -209,7 +220,7 @@ class RobotConfigDialog(ctk.CTkToplevel):
             stiffness += [100, 100, 100]  # 회전축 기본값
             damping = [float(e.get() or 50) for e in self.damping_entries]
             damping += [10, 10, 10]
-            RobotControlUseCase.set_impedance(stiffness, damping)
+            RobotControlUseCase.set_impedance(stiffness, damping, self._selected_robot_name())
         except ValueError:
             print(">> [설정] 숫자를 입력하세요.")
     

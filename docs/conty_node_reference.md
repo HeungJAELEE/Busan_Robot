@@ -1,5 +1,10 @@
 # Conty JSON 노드 타입 사전 (AI-Readable Reference)
 
+> 최신 호환성 기준은 `docs/conty_json_compatibility_spec.md`를 우선합니다.
+> 이 문서는 초안 성격의 참고 자료이며, 실제 APK Teaching Pendant 샘플 225개 및 제조사 `JsonProgramComponent`와 다른 타입 해석이 일부 포함되어 있습니다.
+> 코드 수정 및 APK 왕복 호환 검증에는 `conty_json_compatibility_spec.md`의 타입 사전과 저장 정책을 기준으로 사용하세요.
+> 예: `type=1`은 JointMovePoint가 아니라 Stop이고, `type=23`은 WaitFor입니다.
+
 > 이 문서는 Indy7 로봇의 Conty 프로그램 JSON 구조를 설명합니다.
 > AI가 사용자 JSON 파일을 분석할 때 참조하는 공식 레퍼런스입니다.
 

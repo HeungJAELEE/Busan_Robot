@@ -25,6 +25,8 @@ class Motion3DViewer:
     C_TEXT     = "#e0e0e0"
     C_HIGHLIGHT= "#FFFFFF"
     C_FLOOR    = "#1a1a3e"
+    C_ROBOT    = "#00E5FF"
+    C_PLAN     = "#5C6BC0"
 
     def __init__(self, parent, node_data_dict, tree_widget):
         self.parent = parent
@@ -39,12 +41,28 @@ class Motion3DViewer:
         self.drag_start = None
         self.pan_x = 0
         self.pan_y = 0
+        self.di_state = [0] * 32
+        self.do_state = [0] * 32
+        self.display_do_state = [0] * 32
+        self.display_vars = {}
+        self.loop_preview_count = 12
+        self.autoplay = False
+        self._auto_job = None
+        self.di_buttons = []
+        self.do_labels = []
+        self.var_label = None
+        self.auto_btn = None
+        self.loop_entry = None
+        self.dh_params = [
+            {"a": 0.0,    "alpha": 0.0,       "d": 0.3,    "theta_offset": 0.0},
+            {"a": 0.0,    "alpha": math.pi/2,  "d": 0.0,    "theta_offset": math.pi/2},
+            {"a": 0.45,   "alpha": 0.0,       "d": 0.0035, "theta_offset": math.pi/2},
+            {"a": 0.0,    "alpha": math.pi/2,  "d": 0.35,   "theta_offset": math.pi},
+            {"a": 0.0,    "alpha": math.pi/2,  "d": 0.1835, "theta_offset": 0.0},
+            {"a": 0.0,    "alpha": -math.pi/2, "d": 0.228,  "theta_offset": 0.0},
+        ]
 
         self._build_steps()
-        if not self.steps:
-            from tkinter import messagebox
-            messagebox.showwarning("3D 시각화", "시각화할 동작이 없습니다.\n프로그램을 먼저 구성하세요.")
-            return
 
         # 데이터 범위 기반 자동 뷰 최적화
         self._auto_view()
@@ -85,6 +103,129 @@ class Motion3DViewer:
         """
         self.steps = []
         self.pallet_grids = []  # [(label, color, grid_points, size)]
+        sim_vars = {}
+        sim_do = [0] * 32
+        last_xyz = [0.0, 0.0, 0.0]
+
+        class _WaitBlocked(Exception):
+            pass
+
+        def _to_number(value, default=0.0):
+            try:
+                if isinstance(value, str):
+                    value = value.strip()
+                return float(value)
+            except (TypeError, ValueError):
+                return default
+
+        def _get_var_or_number(token):
+            name = str(token)
+            if name in sim_vars:
+                return sim_vars[name]
+            return _to_number(token, 0.0)
+
+        def _eval_expr(expr):
+            import ast
+            if isinstance(expr, (int, float)):
+                return float(expr)
+            expr = str(expr).strip()
+            try:
+                return float(expr)
+            except ValueError:
+                pass
+            tree = ast.parse(expr, mode="eval")
+
+            def _eval(node):
+                if isinstance(node, ast.Expression):
+                    return _eval(node.body)
+                if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+                    return float(node.value)
+                if isinstance(node, ast.Name):
+                    return float(sim_vars.get(node.id, 0.0))
+                if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+                    value = _eval(node.operand)
+                    return value if isinstance(node.op, ast.UAdd) else -value
+                if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div)):
+                    left = _eval(node.left)
+                    right = _eval(node.right)
+                    if isinstance(node.op, ast.Add):
+                        return left + right
+                    if isinstance(node.op, ast.Sub):
+                        return left - right
+                    if isinstance(node.op, ast.Mult):
+                        return left * right
+                    if isinstance(node.op, ast.Div):
+                        return left / right if right != 0 else left
+                raise ValueError(expr)
+
+            return _eval(tree)
+
+        def _apply_var_list(var_list):
+            if not isinstance(var_list, list):
+                return
+            for entry in var_list:
+                if not isinstance(entry, dict):
+                    continue
+                name = str(entry.get("name", "")).strip()
+                if not name:
+                    continue
+                try:
+                    sim_vars[name] = _eval_expr(entry.get("value", 0))
+                except Exception:
+                    sim_vars[name] = _get_var_or_number(entry.get("value", 0))
+
+        def _operand_value(operand):
+            if isinstance(operand, dict):
+                value = operand.get("value", 0)
+                if operand.get("type", -1) == 10:
+                    return _get_var_or_number(value)
+                return _to_number(value, 0.0)
+            return _get_var_or_number(operand)
+
+        def _eval_condition(cond):
+            if not cond:
+                return False
+            left = _operand_value(cond.get("left", {}))
+            right = _operand_value(cond.get("right", {}))
+            op = cond.get("op", 0)
+            if op == 0:
+                return left == right
+            if op == 1:
+                return left != right
+            if op == 2:
+                return left > right
+            if op == 3:
+                return left >= right
+            if op == 4:
+                return left < right
+            if op == 5:
+                return left <= right
+            return False
+
+        def _eval_di_list(di_list):
+            if not di_list:
+                return True
+            for cond in di_list:
+                try:
+                    idx = int(cond.get("idx", 0))
+                except (TypeError, ValueError):
+                    return False
+                expected = int(cond.get("value", 1))
+                if idx < 0 or idx >= len(self.di_state):
+                    return False
+                if int(self.di_state[idx]) != expected:
+                    return False
+            return True
+
+        def _di_text(di_list):
+            if not di_list:
+                return "DI 미지정"
+            parts = []
+            for cond in di_list:
+                idx = cond.get("idx", 0)
+                val = "ON" if cond.get("value", 1) else "OFF"
+                parts.append(f"DI{int(idx):02d}={val}")
+            return ", ".join(parts)
 
         def _grid_of(pd):
             """팔레트 p_data에서 (grid_pts, total) 계산. 없으면 ([], 0).
@@ -134,7 +275,36 @@ class Motion3DViewer:
             return 0
 
         def emit_step(label, xyz, color, meta):
-            self.steps.append((label, xyz, color, meta))
+            nonlocal last_xyz
+            step_meta = dict(meta or {})
+            step_meta["di"] = list(self.di_state)
+            step_meta["do"] = list(sim_do)
+            step_meta["vars"] = dict(sim_vars)
+            step_meta.setdefault("p_mm", list(xyz))
+            self.steps.append((label, xyz, color, step_meta))
+            last_xyz = list(xyz)
+
+        def emit_io_step(label, color="#FFB74D"):
+            emit_step(label, list(last_xyz), color, {"type": "io"})
+
+        def apply_do_list(do_list):
+            if not isinstance(do_list, list):
+                return
+            changed = []
+            for item in do_list:
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    idx = int(item.get("idx", 0))
+                except (TypeError, ValueError):
+                    continue
+                if idx < 0 or idx >= len(sim_do):
+                    continue
+                value = 1 if int(item.get("value", 0)) else 0
+                sim_do[idx] = value
+                changed.append(f"DO{idx:02d}={'ON' if value else 'OFF'}")
+            if changed:
+                emit_io_step(" ".join(changed), "#FFA726")
 
         def emit_pick_or_place(item, slot_idx=None):
             """슬롯 인덱스가 주어지면 그 슬롯 하나만, None이면 전체 그리드 전개."""
@@ -165,21 +335,47 @@ class Motion3DViewer:
                     gpt = grid_pts[idx]
                     app_pt = [gpt[0], gpt[1], gpt[2] + app_dist]
                     ret_pt = [gpt[0], gpt[1], gpt[2] + ret_dist]
-                    emit_step(f"{icon} {label} [{idx+1}/{total}] 접근", app_pt, color, {"type": "approach"})
-                    emit_step(f"{icon} {label} [{idx+1}/{total}] 동작", gpt[:], color, {"type": "action"})
-                    emit_step(f"{icon} {label} [{idx+1}/{total}] 후퇴", ret_pt, color, {"type": "retract"})
+                    q_meta = d.get("q") if d.get("q") and any(v != 0 for v in d.get("q", [])) else None
+                    emit_step(f"{icon} {label} [{idx+1}/{total}] 접근", app_pt, color, {"type": "approach", "q": q_meta})
+                    emit_step(f"{icon} {label} [{idx+1}/{total}] 동작", gpt[:], color, {"type": "action", "q": q_meta})
+                    emit_step(f"{icon} {label} [{idx+1}/{total}] 후퇴", ret_pt, color, {"type": "retract", "q": q_meta})
             else:
                 if any(v != 0 for v in p):
                     xyz = [p[0]*1000, p[1]*1000, p[2]*1000]
-                    emit_step(f"{icon} {label}", xyz, color, {})
+                    q_meta = d.get("q") if d.get("q") and any(v != 0 for v in d.get("q", [])) else None
+                    emit_step(f"{icon} {label}", xyz, color, {"q": q_meta})
 
         def walk(parent="", iter_slot=None):
             """iter_slot: 부모 Loop이 정한 현재 팔레트 슬롯 인덱스. None이면 비루프 컨텍스트."""
-            for item in self.tree.get_children(parent):
+            children = list(self.tree.get_children(parent))
+            skip_indices = set()
+            for child_idx, item in enumerate(children):
+                if child_idx in skip_indices:
+                    continue
                 d = self.node_data.get(item, {})
                 raw = d.get("__raw__", {})
                 t = raw.get("type", -1)
                 p = d.get("p", [0]*6)
+
+                if t in (24, 25, 26):
+                    chain = []
+                    scan_idx = child_idx
+                    while scan_idx < len(children):
+                        sd = self.node_data.get(children[scan_idx], {})
+                        sr = sd.get("__raw__", {})
+                        if sr.get("type", -1) not in (24, 25, 26):
+                            break
+                        chain.append(children[scan_idx])
+                        scan_idx += 1
+                    skip_indices.update(range(child_idx + 1, child_idx + len(chain)))
+                    for branch_item in chain:
+                        bd = self.node_data.get(branch_item, {})
+                        br = bd.get("__raw__", {})
+                        bt = br.get("type", -1)
+                        if bt == 26 or _eval_condition(bd.get("cond", br.get("cond", {}))):
+                            walk(branch_item, iter_slot)
+                            break
+                    continue
 
                 if t == 100:  # Home
                     if p and any(v != 0 for v in p):
@@ -192,15 +388,44 @@ class Motion3DViewer:
                     if wps:
                         for wi, wp in enumerate(wps):
                             wp_p = wp.get("p", p)
+                            wp_q = wp.get("q")
                             xyz = [wp_p[0]*1000, wp_p[1]*1000, wp_p[2]*1000]
                             lbl = f"{'J' if t==102 else 'F'}Move" + (f" WP{wi+1}" if len(wps) > 1 else "")
-                            emit_step(f"🔵 {lbl}", xyz, self.C_MOVE, {})
+                            emit_step(f"🔵 {lbl}", xyz, self.C_MOVE, {"q": wp_q})
                     elif any(v != 0 for v in p):
                         xyz = [p[0]*1000, p[1]*1000, p[2]*1000]
-                        emit_step("🔵 FrameMove", xyz, self.C_MOVE, {})
+                        q_meta = d.get("q") if d.get("q") and any(v != 0 for v in d.get("q", [])) else None
+                        emit_step("🔵 FrameMove", xyz, self.C_MOVE, {"q": q_meta})
 
                 elif t in (201, 202):  # Pick / Place
                     emit_pick_or_place(item, slot_idx=iter_slot)
+
+                elif t == 2:  # Variables
+                    _apply_var_list(d.get("varList", raw.get("varList", [])))
+
+                elif t == 3:  # Math / variable assignment
+                    _apply_var_list(d.get("varList", raw.get("varList", [])))
+
+                elif t == 4:  # SmartDO
+                    apply_do_list(d.get("doList", raw.get("doList", [])))
+
+                elif t == 6:  # EndToolDO
+                    apply_do_list(d.get("endtoolDoList", raw.get("endtoolDoList", [])))
+
+                elif t in (28, 29, 30):  # Wait/If by DI
+                    di_list = d.get("diList", raw.get("diList", []))
+                    passed = _eval_di_list(di_list)
+                    if t == 28:
+                        emit_io_step(f"DI 대기 {'충족' if passed else '대기중'} ({_di_text(di_list)})", "#66BB6A" if passed else "#EF5350")
+                        if not passed:
+                            raise _WaitBlocked()
+                        walk(item, iter_slot)
+                    else:
+                        if passed:
+                            emit_io_step(f"If DI TRUE ({_di_text(di_list)})", "#66BB6A")
+                            walk(item, iter_slot)
+                        else:
+                            emit_io_step(f"If DI FALSE ({_di_text(di_list)})", "#78909C")
 
                 elif t == 20:  # Loop — 자식들을 count만큼 반복하면서 팔레트 슬롯 진행
                     cnt = d.get("count")
@@ -212,29 +437,38 @@ class Motion3DViewer:
                         cnt = -1
                     pallet_total = _pallet_size_under_loop(item)
                     if cnt <= 0:
-                        # 무한 → 자식에 팔레트가 있으면 슬롯 수만큼, 없으면 1회만 가상 실행
-                        effective = pallet_total if pallet_total > 0 else 1
+                        effective = max(1, int(getattr(self, "loop_preview_count", 12) or 12))
                     else:
                         effective = cnt
                     for i in range(effective):
                         slot = i if pallet_total > 0 else iter_slot
                         # ★ 마커 스텝은 emit하지 않는다 — [0,0,0] 위치가 Home으로 가는 것처럼
                         # 보이는 시각적 혼동을 일으킴. 자식 walk만 실행.
-                        walk(item, slot)
+                        try:
+                            walk(item, slot)
+                        except _WaitBlocked:
+                            break
 
                 else:
                     # 그 외 노드는 자식 탐색만 (Wait, DO, If 등은 3D에서 의미 없음)
                     walk(item, iter_slot)
 
-        walk()
+        try:
+            walk()
+        except _WaitBlocked:
+            pass
+        self.do_state = list(sim_do)
+        self.display_do_state = list(sim_do)
+        self.display_vars = dict(sim_vars)
 
     # ─────────── UI 생성 ───────────
     def _create_window(self):
         self.win = ctk.CTkToplevel(self.parent)
         self.win.title("🎯 3D Motion Step Viewer")
-        self.win.geometry("1000x750")
+        self.win.geometry("1280x780")
         self.win.configure(fg_color=self.C_BG)
         self.win.transient(self.parent)
+        self.win.protocol("WM_DELETE_WINDOW", self._close)
 
         # 상단 컨트롤
         ctrl = ctk.CTkFrame(self.win, fg_color="#1a1a2e", height=60)
@@ -263,13 +497,25 @@ class Motion3DViewer:
         ctk.CTkButton(btn_frame, text="끝 ⏭", width=60, height=32,
                        command=self._go_last,
                        fg_color="#333", hover_color="#555").pack(side="left", padx=2)
+        self.auto_btn = ctk.CTkButton(btn_frame, text="연속 ▶", width=70, height=32,
+                                      command=self._toggle_autoplay,
+                                      fg_color="#6A5ACD", hover_color="#5143A8")
+        self.auto_btn.pack(side="left", padx=2)
         ctk.CTkButton(btn_frame, text="🔄 리셋", width=60, height=32,
                        command=self._reset_view,
                        fg_color="#444", hover_color="#666").pack(side="left", padx=5)
 
-        # 캔버스
-        self.canvas = tk.Canvas(self.win, bg=self.C_BG, highlightthickness=0)
-        self.canvas.pack(fill="both", expand=True, padx=5, pady=5)
+        # 본문: 3D 캔버스 + 가상 I/O 패널
+        body = ctk.CTkFrame(self.win, fg_color=self.C_BG)
+        body.pack(fill="both", expand=True, padx=5, pady=(0, 5))
+
+        self.canvas = tk.Canvas(body, bg=self.C_BG, highlightthickness=0)
+        self.canvas.pack(side="left", fill="both", expand=True, padx=(0, 5), pady=0)
+
+        io_panel = ctk.CTkFrame(body, fg_color="#15152b", width=320, corner_radius=8)
+        io_panel.pack(side="right", fill="y", padx=(5, 0), pady=0)
+        io_panel.pack_propagate(False)
+        self._build_io_panel(io_panel)
 
         # 마우스 이벤트
         self.canvas.bind("<ButtonPress-1>", self._on_drag_start)
@@ -285,6 +531,154 @@ class Motion3DViewer:
 
         self._draw()
 
+    def _close(self):
+        self.autoplay = False
+        if self._auto_job:
+            try:
+                self.win.after_cancel(self._auto_job)
+            except Exception:
+                pass
+            self._auto_job = None
+        self.win.destroy()
+
+    def _build_io_panel(self, parent):
+        header = ctk.CTkFrame(parent, fg_color="#1f1f3d", corner_radius=8)
+        header.pack(fill="x", padx=8, pady=(8, 6))
+        ctk.CTkLabel(header, text="가상 I/O 시뮬레이터", font=("Pretendard", 15, "bold"),
+                     text_color=self.C_TEXT).pack(pady=(8, 4))
+
+        loop_row = ctk.CTkFrame(header, fg_color="transparent")
+        loop_row.pack(fill="x", padx=8, pady=(0, 8))
+        ctk.CTkLabel(loop_row, text="무한 Loop 표시:", text_color="#bbb",
+                     font=("Pretendard", 11)).pack(side="left")
+        self.loop_entry = ctk.CTkEntry(loop_row, width=48, height=26, justify="center")
+        self.loop_entry.insert(0, str(self.loop_preview_count))
+        self.loop_entry.pack(side="left", padx=6)
+        ctk.CTkButton(loop_row, text="재계산", width=62, height=26,
+                      command=self._rebuild_simulation,
+                      fg_color="#455A64", hover_color="#546E7A").pack(side="left")
+
+        ctk.CTkButton(header, text="DI/DO 초기화", height=28,
+                      command=self._reset_io,
+                      fg_color="#424242", hover_color="#616161").pack(fill="x", padx=8, pady=(0, 8))
+
+        ctk.CTkLabel(parent, text="DI 입력 (외부 신호)", font=("Pretendard", 13, "bold"),
+                     text_color="#81D4FA").pack(anchor="w", padx=10, pady=(8, 2))
+        di_grid = ctk.CTkFrame(parent, fg_color="transparent")
+        di_grid.pack(fill="x", padx=8, pady=(0, 8))
+        self.di_buttons = []
+        for idx in range(32):
+            btn = ctk.CTkButton(di_grid, text=f"{idx:02d}", width=34, height=24,
+                                font=("Consolas", 10, "bold"),
+                                fg_color="#263238", hover_color="#37474F",
+                                command=lambda i=idx: self._toggle_di(i))
+            btn.grid(row=idx // 4, column=idx % 4, padx=2, pady=2, sticky="ew")
+            self.di_buttons.append(btn)
+
+        ctk.CTkLabel(parent, text="DO 출력 (프로그램 결과)", font=("Pretendard", 13, "bold"),
+                     text_color="#A5D6A7").pack(anchor="w", padx=10, pady=(8, 2))
+        do_grid = ctk.CTkFrame(parent, fg_color="transparent")
+        do_grid.pack(fill="x", padx=8, pady=(0, 8))
+        self.do_labels = []
+        for idx in range(32):
+            lbl = ctk.CTkLabel(do_grid, text=f"{idx:02d}", width=34, height=24,
+                               font=("Consolas", 10, "bold"),
+                               fg_color="#263238", text_color="#9E9E9E", corner_radius=5)
+            lbl.grid(row=idx // 4, column=idx % 4, padx=2, pady=2, sticky="ew")
+            self.do_labels.append(lbl)
+
+        ctk.CTkLabel(parent, text="변수 / 카운터", font=("Pretendard", 13, "bold"),
+                     text_color="#FFE082").pack(anchor="w", padx=10, pady=(8, 2))
+        self.var_label = ctk.CTkLabel(parent, text="-", justify="left", anchor="w",
+                                      text_color="#ddd", font=("Consolas", 11))
+        self.var_label.pack(fill="x", padx=10, pady=(0, 8))
+        self._refresh_io_widgets()
+
+    def _toggle_di(self, idx):
+        self.di_state[idx] = 0 if self.di_state[idx] else 1
+        self._rebuild_simulation()
+
+    def _reset_io(self):
+        self.di_state = [0] * 32
+        self.do_state = [0] * 32
+        self.display_do_state = [0] * 32
+        self.display_vars = {}
+        self.current_step = 0
+        self._rebuild_simulation()
+
+    def _read_loop_preview_count(self):
+        try:
+            value = int(self.loop_entry.get()) if self.loop_entry else self.loop_preview_count
+        except (TypeError, ValueError):
+            value = self.loop_preview_count
+        self.loop_preview_count = max(1, min(999, value))
+        if self.loop_entry:
+            self.loop_entry.delete(0, "end")
+            self.loop_entry.insert(0, str(self.loop_preview_count))
+
+    def _rebuild_simulation(self):
+        self._read_loop_preview_count()
+        self._build_steps()
+        if self.current_step >= len(self.steps):
+            self.current_step = max(0, len(self.steps) - 1)
+        self._auto_view()
+        self._refresh_io_widgets()
+        self._draw()
+
+    def _refresh_io_widgets(self, step_meta=None):
+        if step_meta:
+            self.display_do_state = list(step_meta.get("do", self.display_do_state))
+            self.display_vars = dict(step_meta.get("vars", self.display_vars))
+        for idx, btn in enumerate(getattr(self, "di_buttons", [])):
+            on = bool(self.di_state[idx])
+            btn.configure(fg_color="#00C853" if on else "#263238",
+                          hover_color="#00A043" if on else "#37474F",
+                          text_color="#111111" if on else "#B0BEC5")
+        for idx, lbl in enumerate(getattr(self, "do_labels", [])):
+            on = bool(self.display_do_state[idx])
+            lbl.configure(fg_color="#69F0AE" if on else "#263238",
+                          text_color="#101010" if on else "#9E9E9E")
+        if self.var_label:
+            visible = {
+                key: value for key, value in sorted(self.display_vars.items())
+                if str(key) not in ("0", "1")
+            }
+            if visible:
+                text = "\n".join(f"{key}: {value:g}" for key, value in visible.items())
+            else:
+                text = "-"
+            self.var_label.configure(text=text)
+
+    def _toggle_autoplay(self):
+        self.autoplay = not self.autoplay
+        if self.auto_btn:
+            self.auto_btn.configure(text="정지 ❚❚" if self.autoplay else "연속 ▶",
+                                    fg_color="#D84315" if self.autoplay else "#6A5ACD")
+        if self.autoplay:
+            self._schedule_autoplay()
+        elif self._auto_job:
+            try:
+                self.win.after_cancel(self._auto_job)
+            except Exception:
+                pass
+            self._auto_job = None
+
+    def _schedule_autoplay(self):
+        if not self.autoplay:
+            return
+        self._auto_job = self.win.after(550, self._autoplay_step)
+
+    def _autoplay_step(self):
+        if not self.autoplay:
+            return
+        if self.steps:
+            if self.current_step >= len(self.steps) - 1:
+                self.current_step = 0
+            else:
+                self.current_step += 1
+            self._draw()
+        self._schedule_autoplay()
+
     def _reset_view(self):
         self._auto_view()
         self.scale = 1.0
@@ -292,12 +686,51 @@ class Motion3DViewer:
         self.pan_y = 0
         self._draw()
 
+    def _fk_points_mm(self, joint_angles):
+        """Return Indy7 link points in millimeters from J1~J6 degrees."""
+        if not joint_angles or len(joint_angles) < 6:
+            return []
+        try:
+            import numpy as np
+            t_mat = np.eye(4)
+            points = [t_mat[:3, 3].copy()]
+            for idx in range(6):
+                theta = math.radians(float(joint_angles[idx])) + self.dh_params[idx]["theta_offset"]
+                a = self.dh_params[idx]["a"]
+                alpha = self.dh_params[idx]["alpha"]
+                d = self.dh_params[idx]["d"]
+                ct, st = math.cos(theta), math.sin(theta)
+                ca, sa = math.cos(alpha), math.sin(alpha)
+                t_i = np.array([
+                    [ct, -st, 0, a],
+                    [st * ca, ct * ca, -sa, -d * sa],
+                    [st * sa, ct * sa, ca, d * ca],
+                    [0, 0, 0, 1],
+                ])
+                t_mat = t_mat @ t_i
+                points.append(t_mat[:3, 3].copy())
+            return [[float(p[0] * 1000), float(p[1] * 1000), float(p[2] * 1000)] for p in points]
+        except Exception:
+            return []
+
+    def _current_or_previous_q(self):
+        if not self.steps:
+            return None
+        for idx in range(min(self.current_step, len(self.steps) - 1), -1, -1):
+            q = self.steps[idx][3].get("q")
+            if q and len(q) >= 6 and any(v != 0 for v in q):
+                return q
+        return None
+
     # ─────────── 정규화 & 투영 ───────────
     def _compute_norm_params(self):
         """모든 포인트를 수집하여 정규화 파라미터를 계산합니다."""
         all_pts = [s[1] for s in self.steps]
         for _, _, gpts, _ in self.pallet_grids:
             all_pts.extend(gpts)
+        for _, _, _, meta in self.steps:
+            q = meta.get("q") if isinstance(meta, dict) else None
+            all_pts.extend(self._fk_points_mm(q))
         if not all_pts:
             return None
         xs = [p[0] for p in all_pts]
@@ -346,6 +779,17 @@ class Motion3DViewer:
         w = c.winfo_width()
         h = c.winfo_height()
         if w < 10 or h < 10:
+            return
+        if not self.steps:
+            c.create_text(w / 2, h / 2 - 10, text="표시할 동작이 없습니다.",
+                          fill=self.C_TEXT, font=("Pretendard", 16, "bold"))
+            c.create_text(w / 2, h / 2 + 18, text="오른쪽 DI 입력을 켜고 재계산해 보세요.",
+                          fill="#777", font=("Pretendard", 11))
+            if self.step_label:
+                self.step_label.configure(text="Step 0/0")
+            if self.info_label:
+                self.info_label.configure(text="DI 입력 대기")
+            self._refresh_io_widgets()
             return
 
         params = self._compute_norm_params()
@@ -398,15 +842,42 @@ class Motion3DViewer:
                 # 번호 (큰 폰트)
                 c.create_text(sx, sy, text=str(gi+1), fill=pcolor, font=("Consolas", 7))
 
-        # ── 경로 선 (현재 스텝까지) ──
-        if self.current_step > 0:
-            path_coords = []
-            for si in range(self.current_step + 1):
-                np = norm(self.steps[si][1])
-                sx, sy, _ = self._project(*np)
-                path_coords.extend([sx, sy])
-            if len(path_coords) >= 4:
-                c.create_line(path_coords, fill=self.C_PATH, width=1.5, dash=(4, 4))
+        # ── 전체 예정 궤적 + 현재까지 실제 진행 궤적 ──
+        if len(self.steps) > 1:
+            full_path = []
+            done_path = []
+            for si, (_, point, _, _) in enumerate(self.steps):
+                npt = norm(point)
+                sx, sy, _ = self._project(*npt)
+                full_path.extend([sx, sy])
+                if si <= self.current_step:
+                    done_path.extend([sx, sy])
+            if len(full_path) >= 4:
+                c.create_line(full_path, fill=self.C_PLAN, width=1.0, dash=(2, 5))
+            if len(done_path) >= 4:
+                c.create_line(done_path, fill=self.C_PATH, width=2.4)
+
+        # ── 관절값 기반 로봇 팔 형상 ──
+        robot_q = self._current_or_previous_q()
+        robot_pts = self._fk_points_mm(robot_q)
+        if len(robot_pts) >= 2:
+            arm_coords = []
+            for point in robot_pts:
+                npt = norm(point)
+                sx, sy, _ = self._project(*npt)
+                arm_coords.extend([sx, sy])
+            if len(arm_coords) >= 4:
+                c.create_line(arm_coords, fill=self.C_ROBOT, width=4)
+            for ji, point in enumerate(robot_pts):
+                npt = norm(point)
+                sx, sy, _ = self._project(*npt)
+                r = 5 if ji < len(robot_pts) - 1 else 8
+                c.create_oval(sx-r, sy-r, sx+r, sy+r, fill=self.C_ROBOT, outline="white", width=1)
+            tcp = robot_pts[-1]
+            npt = norm(tcp)
+            sx, sy, _ = self._project(*npt)
+            c.create_text(sx + 10, sy - 12, text="Robot TCP(FK)", fill=self.C_ROBOT,
+                          font=("Consolas", 9, "bold"), anchor="w")
 
         # ── 모든 스텝 점 ──
         for si, (slabel, spt, scolor, sextra) in enumerate(self.steps):
@@ -442,18 +913,24 @@ class Motion3DViewer:
         # ── 스텝 정보 업데이트 ──
         if self.steps:
             cur = self.steps[self.current_step]
+            self._refresh_io_widgets(cur[3])
             self.step_label.configure(
                 text=f"Step {self.current_step+1}/{len(self.steps)}: {cur[0]}"
             )
+            cur_q = cur[3].get("q") if isinstance(cur[3], dict) else None
+            q_text = ""
+            if cur_q and len(cur_q) >= 6:
+                q_text = f" | J1:{cur_q[0]:.1f} J2:{cur_q[1]:.1f} J3:{cur_q[2]:.1f}"
             self.info_label.configure(
-                text=f"X:{cur[1][0]:.0f} Y:{cur[1][1]:.0f} Z:{cur[1][2]:.0f} mm"
+                text=f"X:{cur[1][0]:.0f} Y:{cur[1][1]:.0f} Z:{cur[1][2]:.0f} mm{q_text}"
             )
 
         # ── 범례 (오른쪽 상단) ──
         legend_y = 20
         for label, color in [("Home", self.C_HOME), ("Move", self.C_MOVE),
                               ("Pick", self.C_PICK), ("Place", self.C_PLACE),
-                              ("경로", self.C_PATH)]:
+                              ("진행 궤적", self.C_PATH), ("예정 궤적", self.C_PLAN),
+                              ("로봇 FK", self.C_ROBOT)]:
             c.create_oval(w-120, legend_y, w-110, legend_y+10, fill=color, outline="")
             c.create_text(w-105, legend_y+5, text=label, fill=self.C_TEXT,
                           font=("Pretendard", 10), anchor="w")

@@ -163,8 +163,14 @@ class ContyProgram:
             node.attach_waypoint(wp_id, waypoint)
         elif internal_type == 20: # Loop
             node.count = 3
-        elif internal_type in [22, 28, 30]: # Wait Time / Wait DI / Wait AI
+        elif internal_type in [22, 23, 28]: # Wait Time / WaitFor / Wait DI
             node.time = 1.0
+            if internal_type == 23:
+                node.cond = {
+                    "left": {"type": 10, "value": "var1"},
+                    "right": {"type": 1, "value": 1},
+                    "op": 0,
+                }
         elif internal_type == 24: # If Condition
             node.cond_var_name = "var1"
             node.cond_operator = "=="

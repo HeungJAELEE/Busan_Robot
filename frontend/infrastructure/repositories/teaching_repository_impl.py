@@ -53,13 +53,13 @@ class TeachingRepositoryImpl:
             node.enable = raw_node.get("enable", True)
             
             # ─── Conty 실제 타입 매핑 (학습파일 120+ 분석 기반) ─────────
-            # 999=ProgramSettings, 2=Variables, 3=Variables(alt)
+            # 999=ProgramSettings, 2=Variables, 3=VarAssign
             # 102=JointMove, 103=FrameMove (핵심! moveList→wpList 3단계 참조)
             # 100=Folder/Home, 4=SmartDO, 20=Loop, 22=Wait(시간), 28=Wait(DI)
             # 29=If/WaitFor(DI), 201=Pick, 202=Place, 200=PickGroup
-            # 1=JointMove(legacy), 5=SmartAO, 6=EndToolDO
+            # 1=Stop, 5=SmartAO, 6=EndToolDO
             # 24=If(조건), 25=Else, 26=If(변수)
-            # 30=WaitFor, 21=LoopBreak, 23=ToolSensing
+            # 23=WaitFor, 30=Elif(DI), 21=LoopBreak, 41=ToolSensing
             
             if t in [102, 103]:
                 # ★ JointMove(102) / FrameMove(103): 3단계 참조 해석
@@ -121,20 +121,8 @@ class TeachingRepositoryImpl:
                     node.blending_radius = 0
             
             elif t in [1]:
-                # Legacy JointMove (거의 안 씀, 하위호환)
-                if "wpList" in raw_node and len(raw_node["wpList"]) > 0:
-                    wp_ref = raw_node["wpList"][0]
-                    w_id = str(wp_ref.get("id", ""))
-                    wp_raw = wp_map.get(w_id, {})
-                    if wp_raw:
-                        wp = WaypointVO(t_pos=wp_raw.get("p", [0]*6), j_pos=wp_raw.get("q", [0]*6))
-                        node.target_q = wp.j_pos
-                        node.target_p = wp.t_pos
-                elif "target" in raw_node:
-                    target = raw_node["target"]
-                    point = target.get("point", {})
-                    node.target_q = point.get("q", [0]*6)
-                    node.target_p = point.get("p", [0]*6)
+                # Stop
+                pass
                     
             elif t == 4:
                 # SmartDO (디지털 출력)
@@ -169,7 +157,7 @@ class TeachingRepositoryImpl:
                 node.endtoolDiList = raw_node.get("endtoolDiList", [])
                 
             elif t == 23:
-                # Switch / 조건부 대기 (time + cond)
+                # WaitFor (time + cond)
                 node.time = raw_node.get("time", 0)
                 node.cond = raw_node.get("cond", {})
                 
@@ -197,7 +185,7 @@ class TeachingRepositoryImpl:
                 node.endtoolDiList = raw_node.get("endtoolDiList", [])
                 
             elif t == 30:
-                # WaitFor (조건 대기)
+                # Elif[DI]
                 node.diList = raw_node.get("diList", [])
                 node.endtoolDiList = raw_node.get("endtoolDiList", [])
                 
@@ -220,6 +208,11 @@ class TeachingRepositoryImpl:
                 node.toolId = raw_node.get("toolId", 1)
                 node.sensName = raw_node.get("sensName", "")
                 target = raw_node.get("target", {})
+                node.target = target
+                node.target_tcp = target.get("tcp", [0.0]*6)
+                node.target_refFrame = target.get("refFrame", {"type": 1, "tref": [0,0,0,0,0,0]})
+                node.tcp = node.target_tcp
+                node.refFrame = node.target_refFrame
                 node.target_type = target.get("type", None)
                 
                 # ★ target.type이 없거나 None이면 __raw__ 최상위에서 fallback
@@ -275,11 +268,13 @@ class TeachingRepositoryImpl:
                 # Variables
                 node.varList = raw_node.get("varList", [])
                 
-            elif t == 250:  # Call
-                pass
+            elif t == 250:  # SpeedRatio
+                node.prgSpdRatio = raw_node.get("prgSpdRatio", 100)
             elif t in [104, 105]:  # PalletDef
                 pass
-            elif t == 302:  # indyCARE / Force
+            elif t == 302:  # TaktTime / care
+                node.careTackTime = raw_node.get("careTackTime", 0)
+                node.targetTakt = raw_node.get("targetTakt", 10.0)
                 pass
             elif t == 32:   # SpeedRatio
                 node.prgSpdRatio = raw_node.get("prgSpdRatio", 100)
@@ -342,21 +337,8 @@ class TeachingRepositoryImpl:
                         existing_wp["q"] = wp_vo.j_pos
                         existing_wp["p"] = wp_vo.t_pos
                         
-            elif node.type in [1]:  # Legacy JointMove
-                if node.wp_id is not None and node.waypoint is not None:
-                    n_dict["wpList"] = [{"t": 2, "id": node.wp_id}]
-                    existing_wp = next((w for w in data["wpList"] if w.get("id") == node.wp_id), None)
-                    if not existing_wp:
-                        data["wpList"].append({
-                            "tBase": 0, "type": 0, "p": node.waypoint.t_pos,
-                            "stopBlend": True, "q": node.waypoint.j_pos,
-                            "blendRadius": node.waypoint.blend_radius,
-                            "name": f"WP_{node.wp_id}", "id": node.wp_id
-                        })
-                    else:
-                        existing_wp["p"] = node.waypoint.t_pos
-                        existing_wp["q"] = node.waypoint.j_pos
-                        existing_wp["blendRadius"] = node.waypoint.blend_radius
+            elif node.type in [1]:  # Stop
+                pass
                     
             elif node.type == 20:  # Loop
                 # ★ count는 _build_nodes에서 이미 __raw__에 올바르게 설정됨
@@ -638,6 +620,25 @@ class TeachingRepositoryImpl:
                     "name": name, "id": new_id,
                 })
 
+            elif t == 1:  # Stop
+                out["program"].append({
+                    "type": 1, "enable": True, "pId": parent_id, "id": new_id,
+                })
+
+            elif t == 3:  # Var assignment / Math
+                var_list = raw.get("varList")
+                if not var_list:
+                    name = raw.get("mathVar", "var1")
+                    op = raw.get("mathOp", "=")
+                    val = raw.get("mathVal", 0)
+                    value = val if op == "=" else f"{name}{op.replace('=', '')}{val}"
+                    var_list = [{"name": name, "type": 1, "value": value}]
+                out["program"].append({
+                    "type": 3, "enable": True, "pId": parent_id,
+                    "varList": var_list,
+                    "id": new_id,
+                })
+
             elif t == 20:  # Loop
                 cnt = raw.get("count")
                 try:
@@ -752,6 +753,21 @@ class TeachingRepositoryImpl:
                     "id": new_id,
                 })
 
+            elif t == 23:  # WaitFor
+                cond = raw.get("cond")
+                if not cond:
+                    cond = {
+                        "left": {"type": 10, "value": raw.get("condVar", "var1")},
+                        "right": {"type": 1, "value": raw.get("condVal", 1)},
+                        "op": raw.get("condOp", 0),
+                    }
+                out["program"].append({
+                    "type": 23, "enable": True, "pId": parent_id,
+                    "time": raw.get("time", raw.get("timeout", 0)),
+                    "cond": cond,
+                    "id": new_id,
+                })
+
             elif t == 28:  # Wait (DI)
                 out["program"].append({
                     "type": 28, "enable": True, "pId": parent_id,
@@ -818,9 +834,9 @@ class TeachingRepositoryImpl:
                     "id": new_id,
                 })
 
-            elif t == 32:  # Speed Ratio
+            elif t in (32, 250):  # Speed Ratio
                 out["program"].append({
-                    "type": 32, "enable": True, "pId": parent_id,
+                    "type": 250, "enable": True, "pId": parent_id,
                     "prgSpdRatio": raw.get("prgSpdRatio", 100),
                     "id": new_id,
                 })
@@ -832,9 +848,20 @@ class TeachingRepositoryImpl:
                     "id": new_id,
                 })
 
-            elif t == 41:  # Stop
+            elif t == 41:  # Tool Sensing
                 out["program"].append({
-                    "type": 41, "enable": True, "pId": parent_id, "id": new_id,
+                    "type": 41, "enable": True, "pId": parent_id,
+                    "toolCmd": raw.get("toolCmd", {}),
+                    "sensName": raw.get("sensName", ""),
+                    "id": new_id,
+                })
+
+            elif t == 302:  # TaktTime / care
+                out["program"].append({
+                    "type": 302, "enable": True, "pId": parent_id,
+                    "careTackTime": raw.get("careTackTime", 0),
+                    "targetTakt": raw.get("targetTakt", 10.0),
+                    "id": new_id,
                 })
 
             else:
