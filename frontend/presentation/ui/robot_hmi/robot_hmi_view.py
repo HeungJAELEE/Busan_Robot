@@ -2192,6 +2192,10 @@ class ProgramTreeEditor:
                         
                         # Loop이 자식으로 이 Pick/Place를 호출했고 self._pallet_loop_idx가 설정돼 있으면
                         # 전체 팔레트 그리드를 펼치지 않고 그 슬롯 하나만 처리한다.
+                        # 슬롯 인덱싱 규약: layer(L) outermost → row(M) middle → col(N) innermost.
+                        #   → col(N) 방향이 가장 빠르게 증가, layer(L)가 가장 느리게 증가.
+                        # 사용자가 [M(행)=X, N(열)=Y, L(층)=Z] 컨벤션으로 입력했다면
+                        # auto-calc 결과 P1→P2=X, P1→P3=Y, P1→P4=Z 방향이 됨.
                         loop_slot = getattr(self, "_pallet_loop_idx", None)
                         if loop_slot is not None and 0 <= loop_slot < total:
                             target_layer = loop_slot // (m * n)
@@ -2199,7 +2203,7 @@ class ProgramTreeEditor:
                             target_row = in_layer // n
                             target_col = in_layer % n
                             slot_iter = [(target_layer, target_row, target_col)]
-                            print(f">>   🎯 Loop 슬롯 모드: {action_label} 슬롯 {loop_slot+1}/{total}만 실행")
+                            print(f">>   🎯 Loop 슬롯 모드: {action_label} 슬롯 {loop_slot+1}/{total}만 실행 (M={target_row+1}/{m}, N={target_col+1}/{n}, L={target_layer+1}/{l_val})")
                         else:
                             slot_iter = [
                                 (layer, row, col)
@@ -2207,6 +2211,11 @@ class ProgramTreeEditor:
                                 for row in range(m)
                                 for col in range(n)
                             ]
+                        # 디버그: 첫 슬롯 좌표 미리보기 (단위 검증용)
+                        if slot_iter:
+                            _l0, _r0, _c0 = slot_iter[0]
+                            _preview = MotionMath.compute_pallet_point(p1, p2, p3, m, n, _r0, _c0, p4=p4, size_l=l_val, current_l=_l0)
+                            print(f">>   📐 팔레트 dim: m={m}(M/행=X) × n={n}(N/열=Y) × l={l_val}(L/층=Z) | P1={[round(v,3) for v in p1[:3]]}m  P2={[round(v,3) for v in p2[:3]]}m  P3={[round(v,3) for v in p3[:3]]}m  P4={[round(v,3) for v in (p4 or [0]*6)[:3]]}m | 첫 슬롯 → {[round(v*1000,1) for v in _preview[:3]]}mm")
 
                         pallet_count = 0
                         for (layer, row, col) in slot_iter:

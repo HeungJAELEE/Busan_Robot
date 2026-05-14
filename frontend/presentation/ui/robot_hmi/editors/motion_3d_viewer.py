@@ -87,7 +87,13 @@ class Motion3DViewer:
         self.pallet_grids = []  # [(label, color, grid_points, size)]
 
         def _grid_of(pd):
-            """팔레트 p_data에서 (grid_pts, total) 계산. 없으면 ([], 0)."""
+            """팔레트 p_data에서 (grid_pts, total) 계산. 없으면 ([], 0).
+
+            ★ 실 실행(_run_program)이 쓰는 MotionMath.compute_pallet_point와 동일한
+            풀-벡터 보간을 사용한다. 이전 버전은 layer 보간을 Z 성분에만 적용하고
+            X/Y/Rx/Ry/Rz는 무시했다 → P4가 비-Z 축정렬이거나 사용자가 P2/P3에 Z 변화를
+            준 경우(기울어진/회전된 팔레트) 가상 표시가 실제 동작과 어긋났다.
+            """
             if not pd or not isinstance(pd, dict):
                 return [], 0
             size = pd.get("size", [1, 1])
@@ -98,22 +104,20 @@ class Motion3DViewer:
             p1 = points[0].get("p", [0]*6) if len(points) >= 1 else [0]*6
             p2 = points[1].get("p", p1) if len(points) >= 2 else p1
             p3 = points[2].get("p", p1) if len(points) >= 3 else p1
-            p4 = points[3].get("p", p1) if len(points) >= 4 else p1
-            base = [p1[0]*1000, p1[1]*1000, p1[2]*1000]
-            row_end = [p2[0]*1000, p2[1]*1000, p2[2]*1000]
-            col_end = [p3[0]*1000, p3[1]*1000, p3[2]*1000]
-            top = [p4[0]*1000, p4[1]*1000, p4[2]*1000]
+            p4 = points[3].get("p", p1) if len(points) >= 4 else None
+
             grid_pts = []
             for layer in range(layers):
-                lf = layer / (layers - 1) if layers > 1 else 0
-                lz = base[2] + (top[2] - base[2]) * lf
                 for r in range(rows):
-                    rf = r / max(rows - 1, 1) if rows > 1 else 0
                     for c in range(cols):
-                        cf = c / max(cols - 1, 1) if cols > 1 else 0
-                        gx = base[0] + rf * (row_end[0] - base[0]) + cf * (col_end[0] - base[0])
-                        gy = base[1] + rf * (row_end[1] - base[1]) + cf * (col_end[1] - base[1])
-                        grid_pts.append([gx, gy, lz])
+                        # 실 실행과 동일한 보간 — 모든 축(X,Y,Z,Rx,Ry,Rz) 동기 보간
+                        from core.domains.robot.use_cases.motion_math import MotionMath
+                        pos = MotionMath.compute_pallet_point(
+                            p1, p2, p3, rows, cols, r, c,
+                            p4=p4, size_l=layers, current_l=layer
+                        )
+                        # 미터 → 밀리미터, X/Y/Z만 사용
+                        grid_pts.append([pos[0]*1000, pos[1]*1000, pos[2]*1000])
             return grid_pts, rows * cols * layers
 
         def _pallet_size_under_loop(loop_item):
