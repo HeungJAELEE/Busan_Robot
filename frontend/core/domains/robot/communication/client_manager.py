@@ -63,11 +63,16 @@ class RobotClientManager:
         try:
             from indy_utils import indydcp_client as client
             r = client.IndyDCPClient(target_ip, "NRMK-Indy7")
-            r.connect()
+            is_connected = r.connect()
+            if not is_connected:
+                print(f">> {name} 소켓 연결 실패 (IP: {target_ip})")
+                self._robots[name]["instance"] = None
+                return False
+                
             self._robots[name]["instance"] = r
             return True
         except Exception as e:
-            print(f">> {name} 연결 실패: {e}")
+            print(f">> {name} 연결 실패 예외 발생: {e}")
             self._robots[name]["instance"] = None
             return False
             
