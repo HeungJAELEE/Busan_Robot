@@ -126,7 +126,8 @@ class LoopEditor:
         if hasattr(self, 'count_entry'):
             self.count_entry.configure(state="normal")
             self.count_entry.delete(0, "end")
-            if count is not None:
+            # count가 None, -1, 0 이하이면 무한 반복
+            if count is not None and count > 0:
                 self.count_entry.insert(0, str(count))
                 self.infinite_var.set("off")
                 self.inf_check.deselect()

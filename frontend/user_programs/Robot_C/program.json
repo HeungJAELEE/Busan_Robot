@@ -1,60 +1,60 @@
 {
-  "info": {
-    "name": "T1"
-  },
-  "wpList": [],
-  "program": [
-    {
-      "indyCareInfo": {
-        "useIndyCare": false,
-        "ipAddr": "0.0.0.0",
-        "dataConfig": [
-          {
-            "name": "",
-            "type": 0
-          },
-          {
-            "name": "",
-            "type": 0
-          },
-          {
-            "name": "",
-            "type": 0
-          },
-          {
-            "name": "",
-            "type": 0
-          },
-          {
-            "name": "",
-            "type": 0
-          }
-        ]
-      },
-      "type": 999,
-      "conveyorConfigInfo": {
-        "conveyorConfig": []
-      },
-      "toolInfo": [],
-      "visionInfo": {
-        "useVision": false
-      },
-      "collisionPolicy": {
-        "policy": 0,
-        "time": 2
-      },
-      "enable": true,
-      "pId": 0,
-      "palletInfo": [],
-      "id": 1
+    "info": {
+        "name": "T1"
     },
-    {
-      "varList": [],
-      "enable": true,
-      "type": 2,
-      "pId": 0,
-      "id": 2
-    }
-  ],
-  "moveList": []
+    "wpList": [],
+    "program": [
+        {
+            "indyCareInfo": {
+                "useIndyCare": false,
+                "ipAddr": "0.0.0.0",
+                "dataConfig": [
+                    {
+                        "name": "",
+                        "type": 0
+                    },
+                    {
+                        "name": "",
+                        "type": 0
+                    },
+                    {
+                        "name": "",
+                        "type": 0
+                    },
+                    {
+                        "name": "",
+                        "type": 0
+                    },
+                    {
+                        "name": "",
+                        "type": 0
+                    }
+                ]
+            },
+            "type": 999,
+            "conveyorConfigInfo": {
+                "conveyorConfig": []
+            },
+            "toolInfo": [],
+            "visionInfo": {
+                "useVision": false
+            },
+            "collisionPolicy": {
+                "policy": 0,
+                "time": 2
+            },
+            "enable": true,
+            "pId": 0,
+            "palletInfo": [],
+            "id": 1
+        },
+        {
+            "varList": [],
+            "enable": true,
+            "type": 2,
+            "pId": 0,
+            "id": 2
+        }
+    ],
+    "moveList": []
 }

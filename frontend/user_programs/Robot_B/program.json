@@ -1,60 +1,508 @@
 {
-  "info": {
-    "name": "T1"
-  },
-  "wpList": [],
-  "program": [
-    {
-      "indyCareInfo": {
-        "useIndyCare": false,
-        "ipAddr": "0.0.0.0",
-        "dataConfig": [
-          {
-            "name": "",
-            "type": 0
-          },
-          {
-            "name": "",
-            "type": 0
-          },
-          {
-            "name": "",
-            "type": 0
-          },
-          {
-            "name": "",
-            "type": 0
-          },
-          {
-            "name": "",
-            "type": 0
-          }
-        ]
-      },
-      "type": 999,
-      "conveyorConfigInfo": {
-        "conveyorConfig": []
-      },
-      "toolInfo": [],
-      "visionInfo": {
-        "useVision": false
-      },
-      "collisionPolicy": {
-        "policy": 0,
-        "time": 2
-      },
-      "enable": true,
-      "pId": 0,
-      "palletInfo": [],
-      "id": 1
+    "info": {
+        "name": "ExportedProgram"
     },
-    {
-      "varList": [],
-      "enable": true,
-      "type": 2,
-      "pId": 0,
-      "id": 2
-    }
-  ],
-  "moveList": []
+    "wpList": [
+        {
+            "id": 0,
+            "type": 0,
+            "tBase": 0,
+            "stopBlend": true,
+            "blendRadius": 0.0,
+            "name": "FrameMove-00",
+            "q": [
+                25.79,
+                6.52,
+                -96.09,
+                0.03,
+                -90.48,
+                25.79
+            ],
+            "p": [
+                0.35,
+                -0.04,
+                0.52,
+                -0.01,
+                -179.95,
+                0.0
+            ]
+        },
+        {
+            "id": 1,
+            "type": 0,
+            "tBase": 0,
+            "stopBlend": true,
+            "blendRadius": 0.0,
+            "name": "FrameMove-01",
+            "q": [
+                2.93,
+                1.12,
+                -91.18,
+                0.01,
+                -90.01,
+                2.94
+            ],
+            "p": [
+                0.35,
+                -0.17,
+                0.52,
+                180.0,
+                -0.07,
+                179.99
+            ]
+        }
+    ],
+    "program": [
+        {
+            "enable": true,
+            "type": 999,
+            "pId": 0,
+            "indyCareInfo": {
+                "useIndyCare": false,
+                "ipAddr": "0.0.0.0",
+                "dataConfig": [
+                    {
+                        "name": "",
+                        "type": 0
+                    },
+                    {
+                        "name": "",
+                        "type": 0
+                    },
+                    {
+                        "name": "",
+                        "type": 0
+                    },
+                    {
+                        "name": "",
+                        "type": 0
+                    },
+                    {
+                        "name": "",
+                        "type": 0
+                    }
+                ]
+            },
+            "conveyorConfigInfo": {
+                "conveyorConfig": []
+            },
+            "toolInfo": [],
+            "visionInfo": {
+                "useVision": false
+            },
+            "collisionPolicy": {
+                "policy": 0,
+                "time": 2
+            },
+            "palletInfo": [
+                {
+                    "id": "PLT_6",
+                    "name": "PLT_6",
+                    "m": 1,
+                    "n": 1,
+                    "l": 8,
+                    "points": [
+                        {
+                            "p": [
+                                0.35,
+                                0.3158,
+                                0.5215,
+                                179.993,
+                                -0.0754,
+                                179.9917
+                            ],
+                            "q": [
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0
+                            ]
+                        },
+                        {
+                            "p": [
+                                0.35,
+                                0.3158,
+                                0.5215,
+                                179.993,
+                                -0.0754,
+                                179.9917
+                            ],
+                            "q": [
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0
+                            ]
+                        },
+                        {
+                            "p": [
+                                0.35,
+                                0.3158,
+                                0.5215,
+                                179.993,
+                                -0.0754,
+                                179.9917
+                            ],
+                            "q": [
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0
+                            ]
+                        },
+                        {
+                            "p": [
+                                0.35,
+                                0.3158,
+                                0.6615,
+                                179.993,
+                                -0.0754,
+                                179.9917
+                            ],
+                            "q": [
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "id": "PLT_7",
+                    "name": "PLT_7",
+                    "m": 1,
+                    "n": 3,
+                    "l": 3,
+                    "points": [
+                        {
+                            "p": [
+                                0.35,
+                                -0.3205,
+                                0.5218,
+                                179.9996,
+                                -0.0315,
+                                179.9898
+                            ],
+                            "q": [
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0
+                            ]
+                        },
+                        {
+                            "p": [
+                                0.35,
+                                -0.3205,
+                                0.5218,
+                                179.9996,
+                                -0.0315,
+                                179.9898
+                            ],
+                            "q": [
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0
+                            ]
+                        },
+                        {
+                            "p": [
+                                0.35,
+                                -0.1005,
+                                0.5218,
+                                179.9996,
+                                -0.0315,
+                                179.9898
+                            ],
+                            "q": [
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0
+                            ]
+                        },
+                        {
+                            "p": [
+                                0.35,
+                                -0.3205,
+                                0.6018,
+                                179.9996,
+                                -0.0315,
+                                179.9898
+                            ],
+                            "q": [
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "id": 1
+        },
+        {
+            "enable": true,
+            "type": 2,
+            "pId": 0,
+            "varList": [],
+            "id": 2
+        },
+        {
+            "type": 100,
+            "enable": true,
+            "pId": 0,
+            "id": 3,
+            "name": "Home"
+        },
+        {
+            "type": 20,
+            "enable": true,
+            "pId": 0,
+            "count": 9,
+            "id": 4
+        },
+        {
+            "type": 103,
+            "enable": true,
+            "pId": 4,
+            "name": "FrameMove",
+            "id": 5
+        },
+        {
+            "type": 201,
+            "enable": true,
+            "pId": 4,
+            "id": 6,
+            "toolId": 1,
+            "sensName": "",
+            "approach": {
+                "direction": 0,
+                "distance": 0.05,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0.0
+                }
+            },
+            "retract": {
+                "direction": 0,
+                "distance": 0.05,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0.0
+                }
+            },
+            "target": {
+                "type": 1,
+                "boundary": {
+                    "velLevel": 5,
+                    "accLevel": 5
+                },
+                "pallet": {
+                    "palletId": "PLT_6"
+                },
+                "point": {
+                    "q": [
+                        65.32,
+                        -10.66,
+                        -78.11,
+                        0.07,
+                        -91.25,
+                        65.33
+                    ],
+                    "p": [
+                        0.35,
+                        0.32,
+                        0.52,
+                        179.99,
+                        -0.08,
+                        179.99
+                    ]
+                },
+                "refFrame": {
+                    "type": 1,
+                    "tref": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                "tcp": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "name": "Pick"
+        },
+        {
+            "type": 202,
+            "enable": true,
+            "pId": 4,
+            "id": 7,
+            "toolId": 1,
+            "sensName": "",
+            "approach": {
+                "direction": 0,
+                "distance": 0.05,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0.0
+                }
+            },
+            "retract": {
+                "direction": 0,
+                "distance": 0.05,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0.0
+                }
+            },
+            "target": {
+                "type": 1,
+                "boundary": {
+                    "velLevel": 5,
+                    "accLevel": 5
+                },
+                "pallet": {
+                    "palletId": "PLT_7"
+                },
+                "point": {
+                    "q": [
+                        87.49,
+                        3.28,
+                        -93.2,
+                        0.08,
+                        -90.07,
+                        87.5
+                    ],
+                    "p": [
+                        0.2,
+                        0.32,
+                        0.52,
+                        179.99,
+                        -0.08,
+                        179.99
+                    ]
+                },
+                "refFrame": {
+                    "type": 1,
+                    "tref": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                "tcp": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "name": "Place"
+        }
+    ],
+    "moveList": [
+        {
+            "type": 103,
+            "name": "FrameMove",
+            "intpl": 0,
+            "tcp": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "refFrame": {
+                "type": 1,
+                "tref": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "boundary": {
+                "velLevel": 5,
+                "accLevel": 5
+            },
+            "blendOpt": {
+                "processLoop": false,
+                "constant": false
+            },
+            "wpList": [
+                {
+                    "t": 2,
+                    "id": 0
+                },
+                {
+                    "t": 2,
+                    "id": 1
+                }
+            ],
+            "offset": {
+                "type": 0,
+                "pos": [
+                    0,
+                    0,
+                    0
+                ]
+            }
+        }
+    ]
 }

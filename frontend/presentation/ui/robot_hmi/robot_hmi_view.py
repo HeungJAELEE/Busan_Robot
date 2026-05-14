@@ -97,6 +97,54 @@ class ProgramTreeEditor:
         except Exception as e:
             print(f">> [경고] custom_paths 복원 실패: {e}")
         
+    # 표시 텍스트에서 자기-감싸기를 판별하기 위한 타입→레이블 매핑
+    _TYPE_LABEL_MAP = {
+        1: "JointMove", 100: "Home", 102: "JointMove", 103: "FrameMove",
+        200: "Pick Group", 201: "Pick", 202: "Place", 250: "Call",
+    }
+
+    @staticmethod
+    def _strip_nested_name(name: str) -> str:
+        """중첩된 이름에서 핵심 이름만 추출합니다.
+        예: 'Pick (Pick (Pick Node))' → 'Pick Node'
+            'Home (Home (Home Node))' → 'Home Node'
+            'FrameMove (FrameMove Node) [X0 Y0 Z0]' → 'FrameMove Node'
+            'FrameMove (FrameMove Node, 2pts) [X350 Y-190 Z520]' → 'FrameMove Node'
+            'Pick Group (Pick Group Node)' → 'Pick Group Node'
+            'Loop (무한)' → 'Loop (무한)'  (중첩 아님)
+        """
+        import re
+        if not isinstance(name, str):
+            return ""
+        result = name
+        for _ in range(10):  # 무한 루프 방지
+            new_result = result
+            # "[X... Y... Z...]" 좌표 접미사 제거
+            new_result = re.sub(r'\s*\[X[\d.\-]+\s+Y[\d.\-]+\s+Z[\d.\-]+\]', '', new_result).strip()
+            # ", Npts" 웨이포인트 개수 접미사 제거 (디스플레이 텍스트 잔재)
+            new_result = re.sub(r',\s*\d+\s*pts\b', '', new_result).strip()
+            # "Type (inner)" 또는 "Type Word (inner)" — prefix가 inner의 시작과 같으면 중첩 해제
+            m = re.match(r'^([A-Za-z][A-Za-z0-9]*(?:\s+[A-Za-z][A-Za-z0-9]*)?)\s*\((.+)\)\s*$', new_result)
+            if m:
+                prefix = m.group(1)
+                inner = m.group(2)
+                if inner.startswith(prefix):
+                    new_result = inner.strip()
+            if new_result == result:
+                break
+            result = new_result
+        return result.strip()
+
+    @classmethod
+    def _canonical_node_name(cls, raw_name: str, node_type) -> str:
+        """저장된 name을 정리하고, 타입 레이블과 동일한 잔재("Home", "Home Node")는 빈 문자열로 만든다.
+        디스플레이 텍스트가 `f" Home ({name})"` 형태이므로, 이 이름이 빈 문자열이면 더 이상 자기-감싸기가 발생하지 않는다."""
+        clean = cls._strip_nested_name(raw_name or "")
+        type_lbl = cls._TYPE_LABEL_MAP.get(node_type)
+        if type_lbl and clean in (type_lbl, f"{type_lbl} Node"):
+            return ""
+        return clean
+    
     def save_program(self, silent=False):
         robot = self.robot_sel.get()
         if not silent:
@@ -132,6 +180,17 @@ class ProgramTreeEditor:
         
         path = custom_path if custom_path else default_path
         
+        # ★ 저장 전 현재 에디터의 설정값을 node_data에 자동 반영
+        try:
+            selected = self.tree.selection()
+            if selected and hasattr(self, 'current_editor') and self.current_editor and hasattr(self.current_editor, 'apply_changes'):
+                item = selected[0]
+                if item not in self.node_data:
+                    self.node_data[item] = {}
+                self.current_editor.apply_changes(self.node_data[item])
+        except Exception as e:
+            print(f">> [경고] 에디터 자동 적용 중 오류: {e}")
+        
         try:
             from core.domains.teaching_management.entities import ContyProgram, TeachingNode
             from infrastructure.repositories.teaching_repository_impl import TeachingRepositoryImpl
@@ -148,46 +207,68 @@ class ProgramTreeEditor:
                 for child in self.tree.get_children(parent_item):
                     node_name = self.tree.item(child, "text").strip()
                     if "Main Program" in node_name:
+                        # Main Program은 래퍼 — 자식만 재귀 처리
+                        child_nodes = _build_nodes(child, p_id)
+                        nodes.extend(child_nodes)
                         continue
                         
                     n = TeachingNode(len(prog.nodes) + len(nodes) + 1, p_id, 100)
-                    n.name = node_name
+                    # ★ 이름 중첩 방지: 트리 디스플레이 텍스트/이전 저장본 모두에서 중첩 잔재를 제거.
+                    #    Fallback도 반드시 _strip_nested_name을 통과시켜야 디스플레이 텍스트가
+                    #    그대로 name으로 저장되는 사고를 막을 수 있다.
+                    d_check = self.node_data.get(child, {})
+                    raw_check = d_check.get("__raw__", {})
+                    original_name = raw_check.get("name", "") or node_name
+                    n.name = self._strip_nested_name(original_name)
                     
-                    # ─── Conty 실제 타입 매핑 (새 노드 생성 시) ─────
-                    if "Move J" in node_name: n.type = 1        # JointMove
-                    elif "Move L" in node_name: n.type = 2      # FrameMove
-                    elif "Move C" in node_name: n.type = 3      # CircularMove
-                    elif "Move B" in node_name: n.type = 5      # MoveB
-                    elif "Move By" in node_name: n.type = 6     # frameMove:Relative
-                    elif "Move Home" in node_name: n.type = 4   # MoveHome
-                    elif "Smart DO" in node_name: n.type = 4    # smartDO (type=4+doList)
-                    elif "Pick" in node_name: n.type = 200      # Pick (그룹)
-                    elif "Pallet" in node_name: n.type = 202    # Pallet
-                    elif "Place" in node_name: n.type = 201     # Place
-                    elif "Wait DI" in node_name: n.type = 29    # WaitPeriod (DI)
-                    elif "Wait" in node_name: n.type = 28       # Wait (시간)
-                    elif "Loop" in node_name: n.type = 103      # Loop
-                    elif "Else" in node_name: n.type = 26       # Else
-                    elif "If Var" in node_name: n.type = 25     # If(변수)
-                    elif "If" in node_name: n.type = 102        # If(DI)
-                    elif "Set DO" in node_name: n.type = 20     # toolCommand
-                    elif "EndTool" in node_name: n.type = 24    # endToolDO
-                    elif "Set AO" in node_name: n.type = 22     # smartAO
-                    elif "Call" in node_name: n.type = 250      # Call
-                    elif "Force" in node_name: n.type = 302     # Force
-                    elif "Folder" in node_name: n.type = 100    # Folder
-                    elif "Comment" in node_name: n.type = 40    # Comment
-                    elif "Stop" in node_name: n.type = 41       # Stop
-                    elif "Math" in node_name: n.type = 21       # assignment
-                    elif "Wait For" in node_name: n.type = 30   # waitFor (조건 대기)
-                    elif "Loop Break" in node_name: n.type = 31 # loopBreak
-                    elif "Speed Ratio" in node_name: n.type = 32 # speedRatio
-                    elif "Tool Sensing" in node_name: n.type = 23 # toolSensing
-                    elif "Conveyor" in node_name: n.type = 300   # conveyorTracking
-                    elif "TaktTime" in node_name: n.type = 303   # indyCARE:TaktTime
-                    elif "Detect" in node_name: n.type = 400     # detect
-                    elif "Retrieve" in node_name: n.type = 401   # retrieve
-                    elif "Python Script" in node_name: n.type = 500 # pythonScript
+                    # ─── 타입 결정: __raw__에 원본 type이 있으면 그것을 우선 사용 ─────
+                    if child in self.node_data and "__raw__" in self.node_data[child]:
+                        raw_type = self.node_data[child]["__raw__"].get("type")
+                        if raw_type is not None:
+                            n.type = raw_type
+                    else:
+                        # 새로 만든 노드: 이름 기반 추측 매핑
+                        if "Program Settings" in node_name: n.type = 999
+                        elif "Variables" in node_name: n.type = 2
+                        elif "JointMove" in node_name: n.type = 102
+                        elif "FrameMove" in node_name: n.type = 103
+                        elif "Move J" in node_name: n.type = 1
+                        elif "Move L" in node_name: n.type = 2
+                        elif "Move C" in node_name: n.type = 3
+                        elif "Move B" in node_name: n.type = 5
+                        elif "Move By" in node_name: n.type = 6
+                        elif "Move Home" in node_name: n.type = 4
+                        elif "Home" in node_name: n.type = 100
+                        elif "DO 출력" in node_name or "Smart DO" in node_name: n.type = 4
+                        elif "Pick Group" in node_name: n.type = 200
+                        elif "Pick" in node_name: n.type = 201
+                        elif "Pallet" in node_name: n.type = 202
+                        elif "Place" in node_name: n.type = 202
+                        elif "Wait DI" in node_name: n.type = 29
+                        elif "Wait For" in node_name: n.type = 30
+                        elif "Wait" in node_name: n.type = 22
+                        elif "Loop Break" in node_name or "Break" in node_name: n.type = 21
+                        elif "Loop" in node_name: n.type = 20
+                        elif "Elif" in node_name: n.type = 25
+                        elif "Else" in node_name: n.type = 26
+                        elif "If Var" in node_name: n.type = 24
+                        elif "If" in node_name: n.type = 29
+                        elif "Set DO" in node_name: n.type = 4
+                        elif "EndTool" in node_name: n.type = 6
+                        elif "AO 출력" in node_name or "Set AO" in node_name: n.type = 5
+                        elif "Call" in node_name: n.type = 250
+                        elif "Force" in node_name or "indyCARE" in node_name: n.type = 302
+                        elif "Folder" in node_name: n.type = 100
+                        elif "Comment" in node_name: n.type = 40
+                        elif "Stop" in node_name: n.type = 41
+                        elif "Math" in node_name: n.type = 21
+                        elif "Speed" in node_name: n.type = 32
+                        elif "Tool" in node_name: n.type = 23
+                        elif "Conveyor" in node_name: n.type = 300
+                        elif "TaktTime" in node_name: n.type = 303
+                        elif "Detect" in node_name: n.type = 400
+                        elif "Retrieve" in node_name: n.type = 401
+                        elif "Python Script" in node_name: n.type = 500
                     
                     # Conty 호환 __raw__ 기본 템플릿 생성
                     _ref = {"type": 1, "tref": [0,0,0,0,0,0]}
@@ -198,7 +279,7 @@ class ProgramTreeEditor:
                         3:   {"wpList": [], "enable": True, "type": 3, "pId": p_id},   # CircularMove
                         4:   {"enable": True, "type": 4, "pId": p_id},                 # MoveHome
                         5:   {"wpList": [], "enable": True, "type": 5, "pId": p_id},   # MoveB
-                        20:  {"count": -1, "enable": True, "type": 20, "pId": p_id},   # DO
+                        20:  {"count": -1, "enable": True, "type": 20, "pId": p_id},   # Loop (count=-1 → 무한, N>0 → N회)
                         21:  {"endtoolDiList": [], "enable": True, "type": 21, "diList": [], "pId": p_id},  # WaitDI
                         22:  {"enable": True, "type": 22, "pId": p_id},                # AO
                         24:  {"enable": True, "type": 24, "pId": p_id},                # EndToolDO
@@ -239,14 +320,47 @@ class ProgramTreeEditor:
                     
                     if child in self.node_data:
                         d = self.node_data[child]
-                        # 기본 템플릿에서 시작하고, 기존 __raw__와 node_data를 덮어씌움
+                        # 기본 템플릿에서 시작하고, 기존 __raw__를 복원
                         base_raw = raw_templates.get(n.type, {"enable": True, "type": n.type, "pId": p_id})
+                        existing_raw = d.get("__raw__", {})
                         n.__raw__ = base_raw.copy()
-                        n.__raw__.update(d)
-                        if d.get("q") is not None:
+                        # 기존 raw 데이터 복원 (원본 Conty 데이터)
+                        if existing_raw:
+                            n.__raw__.update(existing_raw)
+                        n.__raw__["pId"] = p_id
+                        n.__raw__["type"] = n.type
+                        
+                        # JSON 직렬화 불가능한 키 제외하고 안전한 데이터만 복사
+                        _skip_keys = {"__raw__", "waypoints", "wp", "move_data", "resolved_waypoints"}
+                        for k, v in d.items():
+                            if k in _skip_keys:
+                                continue
+                            # 기본 타입만 복사 (dict, list, str, int, float, bool, None)
+                            if isinstance(v, (dict, list, str, int, float, bool, type(None))):
+                                n.__raw__[k] = v
+                        
+                        # 웨이포인트 좌표를 q/p로 저장 (★ 전체 WP 저장)
+                        wps = d.get("waypoints", [])
+                        if wps:
+                            from core.domains.teaching_management.entities import WaypointVO
+                            # 첫 번째 WP를 대표 좌표로
+                            first_wp = wps[0]
+                            n.__raw__["q"] = first_wp.get("q", [0.0]*6)
+                            n.__raw__["p"] = first_wp.get("p", [0.0]*6)
+                            # ★ 모든 WP를 저장 (다중 웨이포인트 보존)
+                            n.__raw__["all_waypoints"] = [
+                                {"q": wp.get("q", [0]*6), "p": wp.get("p", [0]*6), "id": wp.get("id", f"wp_{i}")}
+                                for i, wp in enumerate(wps)
+                            ]
+                            n.waypoints = {}
+                            for i, wp_data in enumerate(wps):
+                                wp = WaypointVO(j_pos=wp_data["q"], t_pos=wp_data.get("p", [0]*6))
+                                n.waypoints[i] = wp
+                        elif d.get("q") is not None:
                             from core.domains.teaching_management.entities import WaypointVO
                             wp = WaypointVO(j_pos=d["q"], t_pos=d.get("p", [0]*6))
                             n.waypoints = {0: wp}
+                            
                         if n.type in [201, 202]: # Pick / Place
                             try:
                                 sel = self.tree.selection()
@@ -273,6 +387,24 @@ class ProgramTreeEditor:
                         if "cond" in d: n.__raw__["cond"] = d["cond"]
                         if "time" in d: n.__raw__["time"] = d["time"]
                         if "diList" in d: n.__raw__["diList"] = d["diList"]
+                        # Loop count 명시적 저장 (★ raw update 이후 덮어씌움)
+                        # Conty 표준: 무한 = -1, 유한 = 양의 정수.
+                        # 우리 앱은 내부적으로 None/-1 둘 다 무한으로 해석하지만 디스크에는 표준 형식인 -1을 쓴다.
+                        if "count" in d:
+                            count_val = d["count"]
+                            if count_val is None or (isinstance(count_val, int) and count_val <= 0):
+                                n.__raw__["count"] = -1
+                            else:
+                                n.__raw__["count"] = int(count_val)
+                        # SpeedRatio 명시적 저장
+                        if "prgSpdRatio" in d:
+                            n.__raw__["prgSpdRatio"] = d["prgSpdRatio"]
+                        # doList 명시적 저장
+                        if "doList" in d: n.__raw__["doList"] = d["doList"]
+                        # endtoolDoList 명시적 저장
+                        if "endtoolDoList" in d: n.__raw__["endtoolDoList"] = d["endtoolDoList"]
+                        # aoList 명시적 저장
+                        if "aoList" in d: n.__raw__["aoList"] = d["aoList"]
                         if "offset" in d: 
                             n.offset_dx = d["offset"].get("dx", 0)
                             n.offset_dy = d["offset"].get("dy", 0)
@@ -289,14 +421,17 @@ class ProgramTreeEditor:
                 return nodes
                 
             prog.nodes = _build_nodes("", 0)
-            repo.save_to_json(prog, path)
-            
+            # ★ 표준 Conty(APK 호환) 포맷으로 직접 저장한다.
+            # 같은 파일을 우리 앱(▶ 실행)과 펜던트가 공유하기 위해 단일 저장 경로로 통일.
+            # 우리 앱은 load_from_json이 wpList/moveList 3단 참조도 정상 복원하므로 round-trip 안전.
+            repo.save_to_conty_json(prog, path)
+
             # user_programs 기본 경로에도 백업 저장 (유실 방지)
             if path != default_path:
                 try:
-                    repo.save_to_json(prog, default_path)
-                except:
-                    pass
+                    repo.save_to_conty_json(prog, default_path)
+                except Exception as _e:
+                    print(f">> [경고] 백업 저장 실패: {_e}")
             
             # 현재 경로 기록
             self.custom_paths[robot] = path
@@ -310,6 +445,119 @@ class ProgramTreeEditor:
             print(f">> [실패] 저장 중 에러 발생: {e}")
             import traceback
             traceback.print_exc()
+
+    def export_to_conty(self):
+        """현재 트리를 표준 Conty(APK 티칭펜던트 호환) 포맷으로 내보낸다.
+        저장 경로를 묻고 save_to_conty_json()을 호출. 우리 내부 저장은 건드리지 않는다."""
+        from tkinter import messagebox
+        robot = self.robot_sel.get()
+        all_children = self.tree.get_children()
+        if not all_children:
+            messagebox.showwarning("내보내기 불가", "트리가 비어있습니다.")
+            return
+
+        # 1) 현재 에디터의 설정값을 node_data에 자동 반영 (save_program과 동일한 가드)
+        try:
+            selected = self.tree.selection()
+            if selected and hasattr(self, 'current_editor') and self.current_editor and hasattr(self.current_editor, 'apply_changes'):
+                item = selected[0]
+                if item not in self.node_data:
+                    self.node_data[item] = {}
+                self.current_editor.apply_changes(self.node_data[item])
+        except Exception as e:
+            print(f">> [경고] 에디터 자동 적용 중 오류: {e}")
+
+        # 2) 저장 경로 선택 — USB/네트워크 이동용 사본 저장.
+        # 본 앱의 일반 "저장"도 같은 표준 Conty 포맷이지만, 다른 경로/파일명이 필요할 때 사용.
+        import datetime
+        default_name = f"{robot}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.7.json"
+        export_path = fd.asksaveasfilename(
+            title="사본 내보내기 — 펜던트/USB로 옮길 표준 Conty JSON",
+            defaultextension=".7.json",
+            initialfile=default_name,
+            filetypes=[("Conty JSON", "*.json *.7.json"), ("All files", "*.*")]
+        )
+        if not export_path:
+            return
+
+        # 3) save_program과 동일한 방식으로 ContyProgram을 빌드한 뒤 표준 직렬화
+        try:
+            from core.domains.teaching_management.entities import ContyProgram, TeachingNode
+            from infrastructure.repositories.teaching_repository_impl import TeachingRepositoryImpl
+
+            prog = ContyProgram("ExportedProgram")
+            prog._raw_full_data = getattr(self, "_current_raw_data", {})
+            if hasattr(self, "all_pallets"):
+                prog.pallets = self.all_pallets
+
+            # save_program 내부의 _build_nodes를 그대로 재사용하기 위해 임시 helper
+            # save_program 함수 본체를 호출하는 대신 같은 빌더 패턴을 인라인.
+            from core.domains.teaching_management.entities import WaypointVO
+
+            def _build_nodes(parent_item, p_id):
+                nodes = []
+                for child in self.tree.get_children(parent_item):
+                    node_name = self.tree.item(child, "text").strip()
+                    if "Main Program" in node_name:
+                        nodes.extend(_build_nodes(child, p_id))
+                        continue
+                    n = TeachingNode(len(prog.nodes) + len(nodes) + 1, p_id, 100)
+                    d_check = self.node_data.get(child, {})
+                    raw_check = d_check.get("__raw__", {})
+                    original_name = raw_check.get("name", "") or node_name
+                    n.name = self._strip_nested_name(original_name)
+                    # 타입 결정
+                    if child in self.node_data and "__raw__" in self.node_data[child]:
+                        raw_type = self.node_data[child]["__raw__"].get("type")
+                        if raw_type is not None:
+                            n.type = raw_type
+                    n.__raw__ = (d_check.get("__raw__", {}) or {}).copy()
+                    n.__raw__["type"] = n.type
+                    n.__raw__["pId"] = p_id
+                    # node_data → __raw__ 복사 (Loop count, doList 등 에디터 결과 반영)
+                    _skip = {"__raw__", "waypoints", "wp", "move_data", "resolved_waypoints"}
+                    for k, v in d_check.items():
+                        if k in _skip:
+                            continue
+                        if isinstance(v, (dict, list, str, int, float, bool, type(None))):
+                            n.__raw__[k] = v
+                    # waypoints → resolved_waypoints (move 노드)
+                    wps = d_check.get("waypoints", [])
+                    if wps:
+                        n.resolved_waypoints = [
+                            {"id": wp.get("id", f"wp_{i}"),
+                             "wp": WaypointVO(j_pos=wp.get("q", [0]*6),
+                                              t_pos=wp.get("p", [0]*6),
+                                              blend_radius=wp.get("blendRadius", 0))}
+                            for i, wp in enumerate(wps)
+                        ]
+                    # Loop count 명시 변환 (Conty 표준)
+                    if "count" in d_check:
+                        cv = d_check["count"]
+                        if cv is None or (isinstance(cv, int) and cv <= 0):
+                            n.__raw__["count"] = -1
+                        else:
+                            n.__raw__["count"] = int(cv)
+                    nodes.append(n)
+                    nodes.extend(_build_nodes(child, n.id))
+                return nodes
+
+            prog.nodes = _build_nodes("", 0)
+
+            repo = TeachingRepositoryImpl()
+            repo.save_to_conty_json(prog, export_path)
+
+            print(f">> [성공] 사본 내보내기 완료: {export_path}")
+            messagebox.showinfo(
+                "사본 내보내기 완료",
+                f"표준 Conty 포맷으로 사본이 저장되었습니다.\n"
+                f"이 파일은 우리 앱과 APK 티칭펜던트 양쪽 모두에서 직접 로드할 수 있습니다.\n\n{export_path}"
+            )
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("내보내기 실패", f"오류:\n{e}")
+
     def _get_all_children(self, item):
         result = []
         for child in self.tree.get_children(item):
@@ -380,10 +628,16 @@ class ProgramTreeEditor:
                     if hasattr(program, 'nodes'):
                         for node in program.nodes:
                             t = node.type
-                            name = getattr(node, "name", "")
+                            # ★ 로드 시 즉시 중첩 이름 정리: JSON에 누적된 "Home (Home (Home ...))" 류 잔재를 즉시 풀어내야
+                            #    트리 디스플레이가 또 한 겹 감싸는 것을 막을 수 있다.
+                            raw_loaded_name = getattr(node, "name", "")
+                            name = self._canonical_node_name(raw_loaded_name, t)
+                            node.name = name  # 다음 저장 사이클에서 사용될 깨끗한 이름
+                            if hasattr(node, "__raw__") and isinstance(node.__raw__, dict):
+                                node.__raw__["name"] = name
                             cid = getattr(node, "id", 0)
                             pid = getattr(node, "pId", 0)
-                            
+
                             parent_item = node_map.get(pid, main_node)
                             node_str = f" Node ({name})"
                             # ─── Conty 실제 타입 매핑 (120+ 학습파일 기반) ───
@@ -393,8 +647,9 @@ class ProgramTreeEditor:
                                 node_str = f" Variables ({len(vl)}개)" if vl else " Variables"
                             elif t == 102:  # ★ JointMove
                                 wp_count = len(getattr(node, "resolved_waypoints", []))
-                                q = getattr(node, "target_q", [0]*6)
-                                p = getattr(node, "target_p", [0]*6)
+                                raw_n = getattr(node, "__raw__", {})
+                                q = getattr(node, "target_q", None) or raw_n.get("q", [0]*6)
+                                p = getattr(node, "target_p", None) or raw_n.get("p", [0]*6)
                                 # XYZ 좌표 표시 (mm 단위)
                                 try:
                                     xyz = f"X{p[0]*1000:.0f} Y{p[1]*1000:.0f} Z{p[2]*1000:.0f}"
@@ -408,8 +663,9 @@ class ProgramTreeEditor:
                                     node_str = f" JointMove [{xyz}]"
                             elif t == 103:  # ★ FrameMove
                                 wp_count = len(getattr(node, "resolved_waypoints", []))
-                                q = getattr(node, "target_q", [0]*6)
-                                p = getattr(node, "target_p", [0]*6)
+                                raw_n = getattr(node, "__raw__", {})
+                                q = getattr(node, "target_q", None) or raw_n.get("q", [0]*6)
+                                p = getattr(node, "target_p", None) or raw_n.get("p", [0]*6)
                                 try:
                                     xyz = f"X{p[0]*1000:.0f} Y{p[1]*1000:.0f} Z{p[2]*1000:.0f}"
                                 except:
@@ -500,11 +756,27 @@ class ProgramTreeEditor:
                                 node_str = f" Tool Command ({cmd})" if cmd else " Tool Command"
                             elif t == 41:  # Stop
                                 node_str = " Stop"
-                            elif t == 100:  # Folder
-                                node_str = f" Folder ({name})" if name else " Folder"
+                            elif t == 100:  # Home (Conty type=100)
+                                node_str = f" Home ({name})" if name else " Home"
                             elif t == 200: node_str = f" Pick Group ({name})" if name else " Pick Group"
-                            elif t == 201: node_str = f" Pick ({name})" if name else " Pick"
-                            elif t == 202: node_str = f" Place ({name})" if name else " Place"
+                            elif t in (201, 202):  # Pick / Place: 기준 좌표 표시
+                                raw_n = getattr(node, "__raw__", {})
+                                p = getattr(node, "target_p", None) or raw_n.get("p", None)
+                                xyz = ""
+                                try:
+                                    if p and any(v != 0 for v in p):
+                                        xyz = f"X{p[0]*1000:.0f} Y{p[1]*1000:.0f} Z{p[2]*1000:.0f}"
+                                except Exception:
+                                    xyz = ""
+                                label = "Pick" if t == 201 else "Place"
+                                if xyz and name:
+                                    node_str = f" {label} ({name}) [{xyz}]"
+                                elif xyz:
+                                    node_str = f" {label} [{xyz}]"
+                                elif name:
+                                    node_str = f" {label} ({name})"
+                                else:
+                                    node_str = f" {label}"
                             elif t == 250:
                                 spd = getattr(node, "__raw__", {}).get("prgSpdRatio", "")
                                 node_str = f" Call ({name})" if name else f" Call (spd={spd}%)"
@@ -518,86 +790,147 @@ class ProgramTreeEditor:
                             node_map[cid] = n_id
                             
                             # node_data에 raw 정보 저장 (에디터/실행 엔진용)
+                            raw = getattr(node, "__raw__", {})
+                            # q/p: repo 해석 우선, 없으면 __raw__에서 직접 읽기
+                            node_q = getattr(node, "target_q", None)
+                            node_p = getattr(node, "target_p", None)
+                            if not node_q or not any(v != 0 for v in node_q):
+                                node_q = raw.get("q", [0.0]*6)
+                            if not node_p or not any(v != 0 for v in node_p):
+                                node_p = raw.get("p", [0.0]*6)
                             self.node_data[n_id] = {
-                                "q": getattr(node, "target_q", getattr(node, "joint_pos", [0.0]*6)),
-                                "p": getattr(node, "target_p", getattr(node, "task_pos", [0.0]*6)),
-                                "__raw__": getattr(node, "__raw__", {}),
+                                "q": node_q,
+                                "p": node_p,
+                                "__raw__": raw,
                             }
                             
                             # ─── Conty 실제 타입별 데이터 (120+ 학습파일 기반) ─────────
                             if t in [102, 103]:  # ★ JointMove / FrameMove
                                 self.node_data[n_id]["t_type"] = "move"
                                 self.node_data[n_id]["name"] = name
-                                self.node_data[n_id]["boundary"] = getattr(node, "boundary", {"velLevel": 5, "accLevel": 5})
-                                self.node_data[n_id]["tcp"] = getattr(node, "tcp", [0,0,0,0,0,0])
-                                self.node_data[n_id]["refFrame"] = getattr(node, "refFrame", {"type": 1, "tref": [0,0,0,0,0,0]})
-                                self.node_data[n_id]["intpl"] = getattr(node, "intpl", 0)
+                                self.node_data[n_id]["boundary"] = getattr(node, "boundary", raw.get("boundary", {"velLevel": 5, "accLevel": 5}))
+                                self.node_data[n_id]["tcp"] = getattr(node, "tcp", raw.get("tcp", [0,0,0,0,0,0]))
+                                self.node_data[n_id]["refFrame"] = getattr(node, "refFrame", raw.get("refFrame", {"type": 1, "tref": [0,0,0,0,0,0]}))
+                                self.node_data[n_id]["intpl"] = getattr(node, "intpl", raw.get("intpl", 0))
                                 self.node_data[n_id]["move_type"] = t  # 102=Joint, 103=Frame
                                 # 다중 웨이포인트 저장
                                 resolved = getattr(node, "resolved_waypoints", [])
-                                self.node_data[n_id]["waypoints"] = [
-                                    {"id": wp["id"], "q": wp["wp"].j_pos, "p": wp["wp"].t_pos}
-                                    for wp in resolved
-                                ]
+                                if resolved:
+                                    self.node_data[n_id]["waypoints"] = [
+                                        {"id": wp["id"], "q": wp["wp"].j_pos, "p": wp["wp"].t_pos}
+                                        for wp in resolved
+                                    ]
+                                else:
+                                    # ★ moveList/wpList 참조 실패 시 __raw__에서 좌표 직접 복원
+                                    wp_q = raw.get("q", node_q)
+                                    wp_p = raw.get("p", node_p)
+                                    if any(v != 0 for v in wp_q):
+                                        self.node_data[n_id]["waypoints"] = [
+                                            {"id": "raw_0", "q": wp_q, "p": wp_p}
+                                        ]
+                                    else:
+                                        self.node_data[n_id]["waypoints"] = []
                             
                             elif t == 1:  # Legacy JointMove
                                 self.node_data[n_id]["t_type"] = "move"
                                 self.node_data[n_id]["move_type"] = 102
 
                             elif t in [2, 3]:  # Variables
-                                raw = getattr(node, "__raw__", {})
-                                self.node_data[n_id]["varList"] = raw.get("varList", getattr(node, "varList", []))
+                                self.node_data[n_id]["varList"] = getattr(node, "varList", raw.get("varList", []))
 
                             elif t == 4:  # SmartDO
-                                do_list = getattr(node, "doList", getattr(node, "__raw__", {}).get("doList", []))
-                                self.node_data[n_id]["doList"] = do_list
+                                self.node_data[n_id]["doList"] = getattr(node, "doList", raw.get("doList", []))
 
                             elif t == 5:  # SmartAO
-                                raw = getattr(node, "__raw__", {})
-                                self.node_data[n_id]["aoList"] = raw.get("aoList", [])
+                                self.node_data[n_id]["aoList"] = getattr(node, "aoList", raw.get("aoList", []))
 
                             elif t == 6:  # EndTool DO
-                                raw = getattr(node, "__raw__", {})
-                                self.node_data[n_id]["endtoolDoList"] = raw.get("endtoolDoList", [])
+                                self.node_data[n_id]["endtoolDoList"] = getattr(node, "endtoolDoList", raw.get("endtoolDoList", []))
 
                             elif t == 20:  # Loop
-                                self.node_data[n_id]["count"] = getattr(node, "count", getattr(node, "__raw__", {}).get("count", -1))
+                                # count: None/null/-1/<=0 → 무한, 양의 정수 → N회 반복
+                                c = getattr(node, "count", raw.get("count", None))
+                                if c is None or (isinstance(c, (int, float)) and int(c) <= 0):
+                                    self.node_data[n_id]["count"] = None
+                                else:
+                                    self.node_data[n_id]["count"] = int(c)
                                 
                             elif t == 21:  # LoopBreak
                                 pass
 
-                            elif t in [22, 23, 28]:  # Wait (시간/DI) / Switch
-                                self.node_data[n_id]["time"] = getattr(node, "time", getattr(node, "__raw__", {}).get("time", 0))
-                                self.node_data[n_id]["diList"] = getattr(node, "diList", getattr(node, "__raw__", {}).get("diList", []))
-                                self.node_data[n_id]["cond"] = getattr(node, "cond", getattr(node, "__raw__", {}).get("cond", {}))
+                            elif t in [22, 28]:  # Wait (시간/DI 대기)
+                                self.node_data[n_id]["time"] = getattr(node, "time", raw.get("time", 0))
+                                self.node_data[n_id]["diList"] = getattr(node, "diList", raw.get("diList", []))
+                                self.node_data[n_id]["endtoolDiList"] = getattr(node, "endtoolDiList", raw.get("endtoolDiList", []))
 
-                            elif t in [24, 25]:  # If / Else If (변수 조건)
-                                self.node_data[n_id]["cond"] = getattr(node, "cond", getattr(node, "__raw__", {}).get("cond", {}))
+                            elif t == 23:  # Switch
+                                self.node_data[n_id]["time"] = getattr(node, "time", raw.get("time", 0))
+                                self.node_data[n_id]["cond"] = getattr(node, "cond", raw.get("cond", {}))
+
+                            elif t in [24, 25]:  # If / Elif (변수 조건)
+                                self.node_data[n_id]["cond"] = getattr(node, "cond", raw.get("cond", {}))
                                 
-                            elif t == 26:  # Else (무조건)
+                            elif t == 26:  # Else
                                 pass
                                 
-                            elif t in [29, 30]:  # If[DI] / WaitFor[DI] / Else[DI]
-                                self.node_data[n_id]["diList"] = getattr(node, "diList", getattr(node, "__raw__", {}).get("diList", []))
-                                self.node_data[n_id]["endtoolDiList"] = getattr(node, "endtoolDiList", getattr(node, "__raw__", {}).get("endtoolDiList", []))
+                            elif t in [29, 30]:  # If[DI] / WaitFor[DI]
+                                self.node_data[n_id]["diList"] = getattr(node, "diList", raw.get("diList", []))
+                                self.node_data[n_id]["endtoolDiList"] = getattr(node, "endtoolDiList", raw.get("endtoolDiList", []))
 
-                            elif t in [40, 41]:  # ToolCommand / ToolSensing
-                                raw = getattr(node, "__raw__", {})
+                            elif t == 32:  # SpeedRatio
+                                self.node_data[n_id]["prgSpdRatio"] = getattr(node, "prgSpdRatio", raw.get("prgSpdRatio", 100))
+
+                            elif t in [40, 41]:  # ToolCommand / Stop
                                 self.node_data[n_id]["toolCmd"] = raw.get("toolCmd", "")
                                 self.node_data[n_id]["sensName"] = raw.get("sensName", "")
 
+                            elif t == 100:  # Home / Folder
+                                pass
+
+                            elif t == 200:  # Pick Group
+                                self.node_data[n_id]["groupName"] = getattr(node, "groupName", raw.get("groupName", ""))
+
                             elif t in [201, 202]:  # Pick / Place
-                                self.node_data[n_id]["target_type"] = getattr(node, "target_type", 0)
-                                self.node_data[n_id]["t_type"] = getattr(node, "target_type", 0)
-                                self.node_data[n_id]["target_pallet_name"] = getattr(node, "target_pallet_name", "")
-                                self.node_data[n_id]["target_pallet_id"] = getattr(node, "target_pallet_id", "")
-                                self.node_data[n_id]["p_name"] = getattr(node, "target_pallet_name", "")
-                                self.node_data[n_id]["p_data"] = getattr(node, "p_data", getattr(node, "target_pallet_data", None))
-                                self.node_data[n_id]["toolId"] = getattr(node, "toolId", 1)
-                                self.node_data[n_id]["app_data"] = getattr(node, "__raw__", {}).get("approach", getattr(node, "approach", {}))
-                                self.node_data[n_id]["ret_data"] = getattr(node, "__raw__", {}).get("retract", getattr(node, "retract", {}))
+                                # target_type: repo 해석 → __raw__ fallback
+                                self.node_data[n_id]["target_type"] = getattr(node, "target_type", raw.get("target_type", 0))
+                                self.node_data[n_id]["t_type"] = self.node_data[n_id]["target_type"]
+                                self.node_data[n_id]["target_pallet_name"] = getattr(node, "target_pallet_name", raw.get("target_pallet_name", ""))
+                                self.node_data[n_id]["target_pallet_id"] = getattr(node, "target_pallet_id", raw.get("target_pallet_id", ""))
+                                self.node_data[n_id]["p_name"] = self.node_data[n_id]["target_pallet_name"]
+                                # p_data: repo 해석 → __raw__ fallback
+                                self.node_data[n_id]["p_data"] = getattr(node, "p_data", None) or raw.get("p_data", None)
+                                self.node_data[n_id]["toolId"] = getattr(node, "toolId", raw.get("toolId", 1))
+                                self.node_data[n_id]["app_data"] = raw.get("approach", getattr(node, "approach", {}))
+                                self.node_data[n_id]["ret_data"] = raw.get("retract", getattr(node, "retract", {}))
                                 self.node_data[n_id]["approach"] = self.node_data[n_id]["app_data"]
                                 self.node_data[n_id]["retract"] = self.node_data[n_id]["ret_data"]
+
+                            elif t == 250:  # Call
+                                self.node_data[n_id]["subProgram"] = raw.get("subProgram", "")
+
+                            elif t == 300:  # ConveyorTracking
+                                self.node_data[n_id]["trackMode"] = raw.get("trackMode", 0)
+                                self.node_data[n_id]["convSpeed"] = raw.get("convSpeed", 100)
+                                self.node_data[n_id]["encoderCh"] = raw.get("encoderCh", 0)
+
+                            elif t == 302:  # indyCARE / Force
+                                pass
+
+                            elif t == 303:  # TaktTime
+                                self.node_data[n_id]["careTackTime"] = raw.get("careTackTime", 0)
+                                self.node_data[n_id]["targetTakt"] = raw.get("targetTakt", 10.0)
+
+                            elif t == 400:  # Detect
+                                self.node_data[n_id]["detectSource"] = raw.get("detectSource", "")
+                                self.node_data[n_id]["detectResult"] = raw.get("detectResult", "")
+
+                            elif t == 401:  # Retrieve
+                                self.node_data[n_id]["retrieveSource"] = raw.get("retrieveSource", "")
+                                self.node_data[n_id]["retrieveVar"] = raw.get("retrieveVar", "")
+
+                            elif t == 500:  # PythonScript
+                                self.node_data[n_id]["scriptFile"] = raw.get("scriptFile", "")
+                                self.node_data[n_id]["scriptCode"] = raw.get("scriptCode", "")
 
                 print(f">> [성공] {file_path} 에서 프로그램을 로드했습니다.")
                 self.custom_paths[self.current_robot] = file_path
@@ -606,6 +939,43 @@ class ProgramTreeEditor:
             except Exception as e:
                 traceback.print_exc()
                 print(f">> [실패] JSON 파싱 오류: {e}")
+
+    def new_program(self):
+        """새 프로그램 생성: 이름 입력 → 기본 템플릿 저장 → 로드"""
+        from tkinter import simpledialog
+        robot = self.robot_sel.get()
+        name = simpledialog.askstring("새 프로그램", "프로그램 이름을 입력하세요:", parent=self.parent.winfo_toplevel())
+        if not name or not name.strip():
+            return
+        name = name.strip()
+        
+        # 기본 템플릿 (Program Settings + Variables)
+        template = {
+            "info": {"name": name, "type": 7},
+            "wpList": [],
+            "program": [
+                {"indyCareInfo":{"useIndyCare":False,"ipAddr":"0.0.0.0","dataConfig":[{"name":"","type":0},{"name":"","type":0},{"name":"","type":0},{"name":"","type":0},{"name":"","type":0}]},
+                 "type":999,"conveyorConfigInfo":{"conveyorConfig":[]},"toolInfo":[],"visionInfo":{"useVision":False},
+                 "collisionPolicy":{"policy":0,"time":2},"enable":True,"pId":0,"palletInfo":[],"id":1},
+                {"varList":[],"enable":True,"type":2,"pId":0,"id":2}
+            ],
+            "moveList": []
+        }
+        
+        # 저장
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+        dir_path = os.path.join(base_dir, 'user_programs', robot.replace(' ', '_'))
+        os.makedirs(dir_path, exist_ok=True)
+        file_path = os.path.join(dir_path, f"{name}.json")
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(template, f, ensure_ascii=False, indent=2)
+        
+        # 경로 등록 후 로드
+        self.custom_paths[robot] = file_path
+        self._save_custom_paths()
+        self._load_from_path(file_path)
+        print(f">> [새파일] '{name}' 프로그램이 생성되었습니다: {file_path}")
 
     def load_program(self):
         robot = self.robot_sel.get()
@@ -634,275 +1004,9 @@ class ProgramTreeEditor:
             self.info_label.configure(text=f"저장된 프로그램이 없습니다. (경로: {path})", text_color=Theme.TEXT_SECONDARY)
             
     def play_simulation(self):
-        # 가상 시뮬레이션 창 띄우기 (요구사항 4)
-        sim_win = ctk.CTkToplevel(self.parent)
-        sim_win.title("가상 프로그래밍 시뮬레이션")
-        sim_win.geometry("700x800")
-        sim_win.attributes('-topmost', True)
-        
-        ctk.CTkLabel(sim_win, text="🖥️ VIRTUAL EXECUTION MODE", font=Theme.font(size=18, weight="bold"), text_color="#F57C00").pack(pady=10)
-        
-        # 3D 뷰어 컨테이너 (상단)
-        viewer_container = ctk.CTkFrame(sim_win, height=350, fg_color="black")
-        viewer_container.pack(fill="x", padx=10, pady=5)
-        viewer_container.pack_propagate(False)
-        
-        import matplotlib.pyplot as plt
-        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-        import numpy as np
-        import random
-        
-        fig = plt.Figure(figsize=(6, 4), facecolor=Theme.BG_BASE)
-        fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
-        ax = fig.add_subplot(111, projection='3d')
-        ax.set_facecolor(Theme.BG_BASE)
-        for pane in (ax.xaxis, ax.yaxis, ax.zaxis): pane.set_pane_color((0.09, 0.09, 0.11, 1.0))
-        ax.grid(color='#2A2A35', linestyle=':', linewidth=0.5)
-        ax.tick_params(colors=Theme.TEXT_SECONDARY, labelsize=8)
-        ax.set_xlim([-0.8, 0.8]); ax.set_ylim([-0.8, 0.8]); ax.set_zlim([0, 1.2])
-        ax.view_init(elev=20, azim=45)
-        
-        robot_line, = ax.plot([], [], [], '-', color="#00FF41", lw=3)
-        robot_dots, = ax.plot([], [], [], 'o', color="#00FF41", markersize=6, markerfacecolor='white', markeredgecolor="#00FF41", markeredgewidth=2)
-        
-        canvas = FigureCanvasTkAgg(fig, master=viewer_container)
-        canvas.get_tk_widget().pack(fill="both", expand=True)
-        
-        # 순운동학용 파라미터
-        dh_params = [
-            {"a": 0.0, "alpha": 0.0, "d": 0.3, "theta_offset": 0.0},
-            {"a": 0.0, "alpha": np.pi/2, "d": 0.0, "theta_offset": np.pi/2},
-            {"a": 0.45, "alpha": 0.0, "d": 0.0035, "theta_offset": np.pi/2},
-            {"a": 0.0, "alpha": np.pi/2, "d": 0.35, "theta_offset": np.pi},
-            {"a": 0.0, "alpha": np.pi/2, "d": 0.1835, "theta_offset": 0.0},
-            {"a": 0.0, "alpha": -np.pi/2, "d": 0.228, "theta_offset": 0.0}
-        ]
-        
-        def _draw_robot(j_angles, tool_color="#00FF41"):
-            T = np.eye(4)
-            T_matrices = [T]
-            for i in range(6):
-                theta = np.radians(j_angles[i]) + dh_params[i]['theta_offset']
-                a = dh_params[i]['a']; alpha = dh_params[i]['alpha']; d = dh_params[i]['d']
-                ct, st = np.cos(theta), np.sin(theta); ca, sa = np.cos(alpha), np.sin(alpha)
-                T_i = np.array([[ct, -st, 0, a], [st*ca, ct*ca, -sa, -d*sa], [st*sa, ct*sa, ca, d*ca], [0, 0, 0, 1]])
-                T = T @ T_i
-                T_matrices.append(T)
-            P0 = T_matrices[0][:3, 3]
-            P1 = T_matrices[1][:3, 3]
-            P2 = (T_matrices[2] @ np.array([0, 0, 0.1835, 1]))[:3]
-            P3 = (T_matrices[3] @ np.array([0, 0, 0.1835, 1]))[:3]
-            P3_c = T_matrices[3][:3, 3]
-            P4 = T_matrices[4][:3, 3]
-            P5 = T_matrices[5][:3, 3]
-            # Apply TCP offset (0.21m in Z-axis of tool frame)
-            P6 = (T_matrices[6] @ np.array([0, 0, 0.21, 1]))[:3]
-            
-            line_xs = [P0[0], P1[0], P2[0], P3[0], P3_c[0], P4[0], P5[0], P6[0]]
-            line_ys = [P0[1], P1[1], P2[1], P3[1], P3_c[1], P4[1], P5[1], P6[1]]
-            line_zs = [P0[2], P1[2], P2[2], P3[2], P3_c[2], P4[2], P5[2], P6[2]]
-            robot_line.set_data(line_xs, line_ys)
-            robot_line.set_3d_properties(line_zs)
-            robot_line.set_color(tool_color)
-            
-            j_xs = [P0[0], P2[0], P3[0], P4[0], P5[0], P6[0]]
-            j_ys = [P0[1], P2[1], P3[1], P4[1], P5[1], P6[1]]
-            j_zs = [P0[2], P2[2], P3[2], P4[2], P5[2], P6[2]]
-            robot_dots.set_data(j_xs, j_ys)
-            robot_dots.set_3d_properties(j_zs)
-            robot_dots.set_markeredgecolor(tool_color)
-            
-            canvas.draw_idle()
-            
-        # 초기 렌더링
-        current_j = [0.0, 0.0, -90.0, 0.0, -90.0, 0.0]
-        _draw_robot(current_j)
-
-        # 텍스트 로그 (하단)
-        log_box = ctk.CTkTextbox(sim_win, fg_color=Theme.BG_BASE, text_color="#00E5FF", font=ctk.CTkFont(family="Consolas"))
-        log_box.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        # 트리 구조 재귀 수집
-        def _collect_tree(parent_item):
-            result = []
-            for child in self.tree.get_children(parent_item):
-                text = self.tree.item(child, "text").strip()
-                data = self.node_data.get(child, {})
-                raw = data.get("__raw__", {})
-                children = _collect_tree(child)
-                result.append({"id": child, "text": text, "data": data, "raw": raw, "children": children})
-            return result
-        
-        tree_nodes = _collect_tree("")
-        if not tree_nodes:
-            log_box.insert("end", "[경고] 프로그램 트리가 비어있습니다.\n")
-            return
-        
-        class _SimBreak(Exception): pass
-        sim_stop = [False]
-        sim_max_loops = 3  # 가상 모드: 무한루프는 3회로 제한
-            
-        def _run_sim():
-            log_box.insert("end", "[시스템] 트리 구조 기반 시뮬레이션 시작\n")
-            log_box.insert("end", f"[설정] 무한루프 최대 {sim_max_loops}회 제한\n")
-            log_box.insert("end", "-"*40 + "\n")
-            
-            nonlocal current_j
-            
-            def _animate_node(text, item_id, color="#00FF41"):
-                """노드 애니메이션 + 하이라이트"""
-                nonlocal current_j
-                target_j = None
-                if hasattr(self, 'node_joint_targets') and item_id in self.node_joint_targets:
-                    target_j = self.node_joint_targets[item_id]
-                
-                data = self.node_data.get(item_id, {})
-                q = data.get("q", None)
-                if target_j is None and q and not all(v == 0.0 for v in q):
-                    target_j = list(q)
-                
-                if target_j:
-                    steps = 12
-                    for step in range(steps):
-                        interp_j = [current_j[k] + (target_j[k] - current_j[k]) * (step / steps) for k in range(6)]
-                        _draw_robot(interp_j, tool_color=color)
-                        time.sleep(0.03)
-                    current_j = target_j
-                else:
-                    _draw_robot(current_j, tool_color=color)
-                    time.sleep(0.3)
-            
-            def _exec_sim_nodes(node_list, depth=0):
-                """트리 구조 재귀 시뮬레이션"""
-                nonlocal current_j
-                indent = "  " * depth
-                
-                for node in node_list:
-                    if sim_stop[0]: return
-                    text = node["text"]
-                    raw = node["raw"]
-                    data = node["data"]
-                    item_id = node["id"]
-                    node_type = raw.get("type", -1)
-                    
-                    # 트리 하이라이트
-                    try:
-                        self.tree.selection_set(item_id)
-                        self.tree.see(item_id)
-                    except: pass
-                    
-                    if "Main Program" in text or "Program Settings" in text or node_type == 999:
-                        _exec_sim_nodes(node["children"], depth)
-                        continue
-                    
-                    if "Variables" in text or node_type in [2, 3]:
-                        log_box.insert("end", f"{indent}📋 Variables (스킵)\n")
-                        log_box.see("end")
-                        continue
-                    
-                    # ─── Loop (type=20) ───
-                    if node_type == 20 or "Loop" in text:
-                        count = data.get("count", raw.get("count", -1))
-                        max_iter = count if count > 0 else sim_max_loops
-                        label = f"{count}회" if count > 0 else f"무한→{sim_max_loops}회 제한"
-                        log_box.insert("end", f"{indent}🔄 Loop 시작 ({label})\n")
-                        log_box.see("end")
-                        
-                        for iteration in range(1, max_iter + 1):
-                            if sim_stop[0]: return
-                            log_box.insert("end", f"{indent}  ── 반복 #{iteration}/{max_iter} ──\n")
-                            log_box.see("end")
-                            try:
-                                _exec_sim_nodes(node["children"], depth + 1)
-                            except _SimBreak:
-                                log_box.insert("end", f"{indent}  ⏹️ Loop Break → 루프 탈출\n")
-                                log_box.see("end")
-                                break
-                        
-                        log_box.insert("end", f"{indent}🔄 Loop 종료\n")
-                        log_box.see("end")
-                        continue
-                    
-                    # ─── loopBreak (type=21) ───
-                    if node_type == 21 or "Loop Break" in text:
-                        log_box.insert("end", f"{indent}⏹️ Loop Break!\n")
-                        log_box.see("end")
-                        raise _SimBreak()
-                    
-                    # ─── if[DI] (type=29, 자식 있음) ───
-                    if node_type == 29 and node["children"]:
-                        log_box.insert("end", f"{indent}🔀 If [DI] → TRUE (시뮬레이션)\n")
-                        log_box.see("end")
-                        _exec_sim_nodes(node["children"], depth + 1)
-                        continue
-                    
-                    # ─── Home (type=100) ───
-                    if node_type == 100 or "Home" in text:
-                        log_box.insert("end", f"{indent}🏠 Home 이동\n")
-                        log_box.see("end")
-                        _animate_node(text, item_id, "#00BCD4")
-                        continue
-                    
-                    # ─── Pick (type=201) ───
-                    if node_type == 201 or "Pick" in text:
-                        log_box.insert("end", f"{indent}🫳 Pick: 접근→하강→Hold(잡기)→후퇴\n")
-                        log_box.see("end")
-                        _animate_node(text, item_id, "#FF1744")
-                        continue
-                    
-                    # ─── Place (type=202) ───
-                    if node_type == 202 or "Place" in text:
-                        log_box.insert("end", f"{indent}📦 Place: 접근→하강→Release(놓기)→후퇴\n")
-                        log_box.see("end")
-                        _animate_node(text, item_id, Theme.INFO)
-                        continue
-                    
-                    # ─── SmartDO (type=4) ───
-                    if node_type == 4 or "Smart DO" in text:
-                        do_list = data.get("doList", raw.get("doList", []))
-                        pins = ", ".join(f"DO{d['idx']}={'ON' if d['value'] else 'OFF'}" for d in do_list) if do_list else "none"
-                        log_box.insert("end", f"{indent}⚡ Smart DO ({pins})\n")
-                        log_box.see("end")
-                        _draw_robot(current_j, tool_color="#FFC107")
-                        time.sleep(0.3)
-                        continue
-                    
-                    # ─── Wait / WaitFor[DI] (type=28) ───
-                    if node_type == 28 or "Wait For" in text:
-                        log_box.insert("end", f"{indent}⏳ Wait For [DI] (시뮬: 0.5초)\n")
-                        log_box.see("end")
-                        time.sleep(0.5)
-                        continue
-                    
-                    # ─── FrameMove (type=102, 103) ───
-                    if node_type in [102, 103] or "FrameMove" in text:
-                        log_box.insert("end", f"{indent}➡️ FrameMove: {text}\n")
-                        log_box.see("end")
-                        _animate_node(text, item_id, "#4CAF50")
-                        continue
-                    
-                    # ─── JointMove (type=1) ───
-                    if node_type == 1 or "JointMove" in text:
-                        log_box.insert("end", f"{indent}➡️ JointMove: {text}\n")
-                        log_box.see("end")
-                        _animate_node(text, item_id, "#2196F3")
-                        continue
-                    
-                    # ─── 기타 노드 ───
-                    log_box.insert("end", f"{indent}▶ {text}\n")
-                    log_box.see("end")
-                    _draw_robot(current_j, tool_color="#00FF41")
-                    time.sleep(0.3)
-            
-            _exec_sim_nodes(tree_nodes)
-            
-            time.sleep(0.5)
-            _draw_robot(current_j, tool_color="#00FF41")
-            log_box.insert("end", "-"*40 + "\n")
-            log_box.insert("end", "[시스템] 시뮬레이션 완료!\n")
-            log_box.see("end")
-            
-        threading.Thread(target=_run_sim, daemon=True).start()
+        """3D 단계별 동작 시각화 뷰어를 엽니다."""
+        from presentation.ui.robot_hmi.editors.motion_3d_viewer import Motion3DViewer
+        Motion3DViewer(self.parent, self.node_data, self.tree)
 
     def render(self):
         for w in self.parent.winfo_children(): w.destroy()
@@ -1001,30 +1105,42 @@ class ProgramTreeEditor:
         center = ctk.CTkFrame(self.parent, fg_color=Theme.BG_SURFACE)
         center.grid(row=0, column=1, sticky="nsew", padx=2, pady=2)
         
+        # ─── Row 1: 파일 작업 (로봇 선택 / 새파일 / 불러오기 / 저장 / 사본 내보내기) ───
+        # 저장 자체가 이미 표준 Conty 포맷이라 펜던트에도 그대로 사용 가능.
+        # "사본 내보내기"는 같은 표준 JSON을 다른 경로/이름으로 저장하는 편의 기능.
         h = ctk.CTkFrame(center, fg_color="transparent")
-        h.pack(fill="x", padx=10, pady=5)
-        
+        h.pack(fill="x", padx=10, pady=(5, 2))
+
         self.robot_sel = ctk.CTkOptionMenu(h, values=["Robot A", "Robot B", "Robot C"], width=100, command=self._on_robot_changed,
                                             fg_color=Theme.BG_BASE, button_color=Theme.ACCENT_PRIMARY)
         self.robot_sel.pack(side="left", padx=5)
-        
+
         ctk.CTkButton(h, text="🔄", width=30, command=self.refresh_info, **Theme.get_button_style("secondary")).pack(side="left", padx=(0,5))
-        
-        ctk.CTkButton(h, text="불러오기", width=60, font=Theme.font(size=12), command=self.load_program, **Theme.get_button_style("secondary")).pack(side="left", padx=5)
-        ctk.CTkButton(h, text="저장", width=60, font=Theme.font(size=12), command=self.save_program, **Theme.get_button_style("primary")).pack(side="left", padx=5)
-        ctk.CTkButton(h, text="삭제", width=50, font=Theme.font(size=12), command=self.delete_node, **Theme.get_button_style("danger")).pack(side="left", padx=2)
-        ctk.CTkButton(h, text="▲", width=30, command=self._move_node_up, **Theme.get_button_style("secondary")).pack(side="left", padx=1)
-        ctk.CTkButton(h, text="▼", width=30, command=self._move_node_down, **Theme.get_button_style("secondary")).pack(side="left", padx=1)
-        ctk.CTkButton(h, text="복사", width=40, font=Theme.font(size=12), command=self._copy_node, **Theme.get_button_style("secondary")).pack(side="left", padx=2)
-        ctk.CTkButton(h, text="▶ Play (가상)", width=80, font=Theme.font(size=12), command=self.play_simulation, **Theme.get_button_style("success")).pack(side="right", padx=5)
-        
-        self._exec_stop = False
-        self.stop_btn = ctk.CTkButton(h, text="⏹ 정지", width=60, font=Theme.font(size=12), command=self._stop_execution, **Theme.get_button_style("danger"))
-        self.stop_btn.pack(side="right", padx=2)
-        self.exec_btn = ctk.CTkButton(h, text="▶ 실행", width=60, font=Theme.font(size=12), command=self._run_program, **Theme.get_button_style("success"))
-        self.exec_btn.pack(side="right", padx=2)
-        
+
+        ctk.CTkButton(h, text="📄 새파일", width=70, font=Theme.font(size=12), command=self.new_program, **Theme.get_button_style("secondary")).pack(side="left", padx=2)
+        ctk.CTkButton(h, text="불러오기", width=65, font=Theme.font(size=12), command=self.load_program, **Theme.get_button_style("secondary")).pack(side="left", padx=2)
+        ctk.CTkButton(h, text="저장", width=55, font=Theme.font(size=12), command=self.save_program, **Theme.get_button_style("primary")).pack(side="left", padx=2)
+        ctk.CTkButton(h, text="📤 사본 내보내기", width=130, font=Theme.font(size=12), command=self.export_to_conty, **Theme.get_button_style("secondary")).pack(side="left", padx=2)
+
         ctk.CTkButton(h, text="⚙️ 설정", width=60, font=Theme.font(size=12), command=self._open_config_dialog, **Theme.get_button_style("secondary")).pack(side="right", padx=2)
+
+        # ─── Row 2: 편집 + 실행 (삭제/이동/복사 / ▶실행 / ⏹정지 / ▶Play) ───
+        h2 = ctk.CTkFrame(center, fg_color="transparent")
+        h2.pack(fill="x", padx=10, pady=(0, 5))
+
+        ctk.CTkButton(h2, text="🗑 삭제", width=55, font=Theme.font(size=12), command=self.delete_node, **Theme.get_button_style("danger")).pack(side="left", padx=2)
+        ctk.CTkButton(h2, text="▲", width=30, command=self._move_node_up, **Theme.get_button_style("secondary")).pack(side="left", padx=1)
+        ctk.CTkButton(h2, text="▼", width=30, command=self._move_node_down, **Theme.get_button_style("secondary")).pack(side="left", padx=1)
+        ctk.CTkButton(h2, text="📋 복사", width=55, font=Theme.font(size=12), command=self._copy_node, **Theme.get_button_style("secondary")).pack(side="left", padx=2)
+
+        # 실행 영역 (우측)
+        ctk.CTkButton(h2, text="▶ Play (가상)", width=95, font=Theme.font(size=12, weight="bold"), command=self.play_simulation, **Theme.get_button_style("success")).pack(side="right", padx=3)
+
+        self._exec_stop = False
+        self.stop_btn = ctk.CTkButton(h2, text="⏹ 정지", width=70, font=Theme.font(size=12, weight="bold"), command=self._stop_execution, **Theme.get_button_style("danger"))
+        self.stop_btn.pack(side="right", padx=3)
+        self.exec_btn = ctk.CTkButton(h2, text="▶ 실행", width=70, font=Theme.font(size=12, weight="bold"), command=self._run_program, **Theme.get_button_style("success"))
+        self.exec_btn.pack(side="right", padx=3)
         
         self.info_label = ctk.CTkLabel(center, text="준비됨", text_color=Theme.TEXT_SECONDARY, font=Theme.font(size=11))
         self.info_label.pack(fill="x", padx=15, pady=2)
@@ -1104,6 +1220,13 @@ class ProgramTreeEditor:
         self.jog_controller.render()
         if hasattr(self.jog_controller, "move_btn"):
             self.jog_controller.move_btn.configure(command=self._on_move_btn_clicked)
+        # JOG 패널 단축 버튼 연결
+        if hasattr(self.jog_controller, 'sc_teach_btn'):
+            self.jog_controller.sc_teach_btn.configure(command=self._on_teach_btn_clicked)
+        if hasattr(self.jog_controller, 'sc_delete_btn'):
+            self.jog_controller.sc_delete_btn.configure(command=self._on_delete_wp_clicked)
+        if hasattr(self.jog_controller, 'sc_cycle_btn'):
+            self.jog_controller.sc_cycle_btn.configure(command=self._on_single_cycle_clicked)
         def _on_node_selected(q, p, t_type, item_text, p_name=None, p_data=None, all_pallets=None, b_radius=0.0, app_data=None, ret_data=None, d=None):
             if d is None: d = {}
             # 조그 패널에 현재 타겟 좌표 표시
@@ -1131,6 +1254,8 @@ class ProgramTreeEditor:
                 self.move_editor.teach_btn.configure(command=self._on_teach_btn_clicked)
                 self.move_editor.load_btn.configure(command=self._on_load_btn_clicked)
                 self.move_editor.move_btn.configure(command=self._on_move_btn_clicked)
+                self.move_editor.delete_btn.configure(command=self._on_delete_wp_clicked)
+                self.move_editor.cycle_btn.configure(command=self._on_single_cycle_clicked)
                 
             elif conty_type == 1:  # Legacy JointMove
                 _clear_pp()
@@ -1141,6 +1266,8 @@ class ProgramTreeEditor:
                 self.move_editor.teach_btn.configure(command=self._on_teach_btn_clicked)
                 self.move_editor.load_btn.configure(command=self._on_load_btn_clicked)
                 self.move_editor.move_btn.configure(command=self._on_move_btn_clicked)
+                self.move_editor.delete_btn.configure(command=self._on_delete_wp_clicked)
+                self.move_editor.cycle_btn.configure(command=self._on_single_cycle_clicked)
                 
             elif conty_type == 4:  # SmartDO (DO 출력)
                 _clear_pp()
@@ -1218,11 +1345,14 @@ class ProgramTreeEditor:
                 self.tool_sensing_editor.render()
                 self.tool_sensing_editor.update_ui(item_text)
                 
-            elif conty_type == 100:  # Folder
+            elif conty_type == 100:  # Home
                 _clear_pp()
-                self.current_editor = self.folder_editor
-                self.folder_editor.render()
-                self.folder_editor.update_ui(item_text)
+                self.current_editor = self.move_home_editor
+                self.move_home_editor.render()
+                self.move_home_editor.update_ui(item_text)
+                # 홈 이동 버튼 연결
+                if hasattr(self.move_home_editor, 'home_move_btn'):
+                    self.move_home_editor.home_move_btn.configure(command=self._on_move_btn_clicked)
                 
             elif conty_type in [201, 202]:  # Pick / Place
                 _clear_pp()
@@ -1293,56 +1423,169 @@ class ProgramTreeEditor:
             
         if item not in self.node_data:
             self.node_data[item] = {}
-            
-        self.node_data[item]["q"] = current_q
-        self.node_data[item]["p"] = current_p
+        
+        # 웨이포인트 리스트에 누적 추가
+        if "waypoints" not in self.node_data[item]:
+            self.node_data[item]["waypoints"] = []
+        
+        self.node_data[item]["waypoints"].append({"q": list(current_q), "p": list(current_p)})
+        
+        # 첫 번째 WP를 대표 좌표로 유지 (하위 호환)
+        self.node_data[item]["q"] = self.node_data[item]["waypoints"][0]["q"]
+        self.node_data[item]["p"] = self.node_data[item]["waypoints"][0]["p"]
         
         item_text = self.tree.item(item, "text")
-        # 피드백 UI 갱신
-        msg = f"(갱신됨) J1: {current_q[0]:.1f}, J2: {current_q[1]:.1f} ..."
-        if "Pick" in item_text or "Place" in item_text:
-            if hasattr(self.pp_editor, 'pos_info_label'):
-                self.pp_editor.pos_info_label.configure(text=msg, text_color="#00FF41")
-        elif "Move" in item_text:
-            if hasattr(self.move_editor, 'pos_info_label'):
-                self.move_editor.pos_info_label.configure(text=msg, text_color="#00FF41")
+        wp_count = len(self.node_data[item]["waypoints"])
+        
+        # 우측 에디터 웨이포인트 리스트 즉시 갱신
+        raw = self.node_data[item].get("__raw__", {})
+        conty_type = raw.get("type", 102)
+        if conty_type in [1, 102, 103] and hasattr(self.move_editor, 'update_waypoint_info'):
+            self.move_editor.update_waypoint_info(self.node_data[item]["waypoints"], conty_type)
+        
+        # 조그 패널 타겟 좌표도 갱신
+        if hasattr(self.jog_controller, 'set_target'):
+            self.jog_controller.set_target(current_q, current_p)
                 
-        print(f">> [위치 업데이트] 노드('{item_text.strip()}')의 목적지 좌표가 갱신되었습니다.")
+        print(f">> [WP{wp_count} 추가] '{item_text.strip()}' → J1:{current_q[0]:.1f} J2:{current_q[1]:.1f} J3:{current_q[2]:.1f} (총 {wp_count}개)")
         
     def _on_load_btn_clicked(self):
+        """선택된 웨이포인트의 좌표를 JOG 패널로 불러오기"""
         selected = self.tree.selection()
         if not selected: return
         item = selected[0]
-        if item in self.node_data:
-            d = self.node_data[item]
-            q = d.get("q", [0.0]*6)
-            p = d.get("p", [0.0]*6)
+        if item not in self.node_data:
+            print(">> [오류] 이 노드에 저장된 좌표가 없습니다.")
+            return
+        
+        d = self.node_data[item]
+        wps = d.get("waypoints", [])
+        
+        if wps:
+            # 선택된 WP의 좌표를 불러오기
+            sel_idx = getattr(self.move_editor, '_selected_wp_idx', 0)
+            sel_idx = min(sel_idx, len(wps) - 1)
+            q = wps[sel_idx]["q"]
+            p = wps[sel_idx]["p"]
             self.jog_controller.update_coordinates(q, p)
-            print(f">> [조그로 불러오기] '{self.tree.item(item, 'text').strip()}'의 저장된 좌표를 JOG 패널로 불러왔습니다.")
+            print(f">> [조그 불러오기] WP{sel_idx+1} 좌표를 JOG 패널로 로드했습니다.")
+        elif d.get("q"):
+            self.jog_controller.update_coordinates(d["q"], d.get("p", [0.0]*6))
+            print(f">> [조그 불러오기] 좌표를 JOG 패널로 로드했습니다.")
         else:
             print(">> [오류] 이 노드에 저장된 좌표가 없습니다.")
             
     def _on_move_btn_clicked(self):
+        """선택된 웨이포인트의 좌표로 로봇 이동"""
         selected = self.tree.selection()
         if not selected: return
         item = selected[0]
         item_text = self.tree.item(item, "text").strip()
         
-        if "Move Home" in item_text:
-            print(">> [로봇 이동] 지정된 홈(Home) 위치로 기동합니다.")
+        if "Move Home" in item_text or "Home" in item_text:
+            print(">> [로봇 이동] Home 위치로 기동합니다.")
             RobotControlUseCase.move_to_joint([0.0, 0.0, -90.0, 0.0, -90.0, 0.0])
             return
             
-        if item in self.node_data:
-            d = self.node_data[item]
-            q = d.get("q", [0.0]*6)
-            print(f">> [로봇 이동] 로봇을 '{item_text}'의 저장된 관절 좌표 {q}로 기동합니다.")
-            self.jog_controller.update_coordinates(q, d.get("p", [0.0]*6)) # 기동 시 조그도 동기화
-            
-            # 실제 로봇 기동 명령 전송 (UseCase 사용)
+        if item not in self.node_data:
+            print(">> [오류] 이 노드에 저장된 좌표가 없습니다.")
+            return
+        
+        d = self.node_data[item]
+        wps = d.get("waypoints", [])
+        
+        if wps:
+            # 선택된 WP로 이동
+            sel_idx = getattr(self.move_editor, '_selected_wp_idx', 0)
+            sel_idx = min(sel_idx, len(wps) - 1)
+            q = wps[sel_idx]["q"]
+            p = wps[sel_idx]["p"]
+            print(f">> [로봇 이동] WP{sel_idx+1}로 이동: J1:{q[0]:.1f} J2:{q[1]:.1f} J3:{q[2]:.1f}")
+            self.jog_controller.update_coordinates(q, p)
+            RobotControlUseCase.move_to_joint(q)
+        elif d.get("q") and not all(v == 0.0 for v in d["q"]):
+            q = d["q"]
+            print(f">> [로봇 이동] 저장된 좌표로 이동: {q}")
             RobotControlUseCase.move_to_joint(q)
         else:
             print(">> [오류] 이 노드에 저장된 좌표가 없습니다.")
+    
+    def _on_delete_wp_clicked(self):
+        """선택된 웨이포인트를 삭제"""
+        selected = self.tree.selection()
+        if not selected: return
+        item = selected[0]
+        if item not in self.node_data:
+            print(">> [오류] 이 노드에 저장된 좌표가 없습니다.")
+            return
+        
+        wps = self.node_data[item].get("waypoints", [])
+        if not wps:
+            print(">> [오류] 삭제할 웨이포인트가 없습니다.")
+            return
+        
+        # 현재 선택된 WP 인덱스 가져오기
+        sel_idx = getattr(self.move_editor, '_selected_wp_idx', len(wps) - 1)
+        sel_idx = min(sel_idx, len(wps) - 1)
+        
+        removed = wps.pop(sel_idx)
+        item_text = self.tree.item(item, "text").strip()
+        print(f">> [위치 삭제] '{item_text}'의 WP{sel_idx+1} 삭제됨 (잔여 {len(wps)}개)")
+        
+        # 대표 좌표 갱신
+        if wps:
+            self.node_data[item]["q"] = wps[0]["q"]
+            self.node_data[item]["p"] = wps[0]["p"]
+        else:
+            self.node_data[item]["q"] = [0.0]*6
+            self.node_data[item]["p"] = [0.0]*6
+        
+        # 에디터 UI 갱신
+        raw = self.node_data[item].get("__raw__", {})
+        conty_type = raw.get("type", 102)
+        if hasattr(self.move_editor, 'update_waypoint_info'):
+            self.move_editor.update_waypoint_info(wps, conty_type)
+        if hasattr(self.jog_controller, 'set_target'):
+            if wps:
+                self.jog_controller.set_target(wps[0]["q"], wps[0]["p"])
+            else:
+                self.jog_controller.set_target(None, None)
+    
+    def _on_single_cycle_clicked(self):
+        """모든 웨이포인트를 순서대로 1회 실행"""
+        selected = self.tree.selection()
+        if not selected: return
+        item = selected[0]
+        item_text = self.tree.item(item, "text").strip()
+        
+        if item not in self.node_data:
+            print(">> [오류] 이 노드에 저장된 좌표가 없습니다.")
+            return
+        
+        d = self.node_data[item]
+        wps = d.get("waypoints", [])
+        
+        if not wps:
+            q = d.get("q", [0.0]*6)
+            if all(v == 0.0 for v in q):
+                print(">> [오류] 좌표가 미설정 상태입니다. 먼저 '현위치 저장'을 하세요.")
+                return
+            wps = [{"q": q, "p": d.get("p", [0.0]*6)}]
+            
+        def _run_cycle():
+            try:
+                total = len(wps)
+                print(f">> [1회 Cycle] '{item_text}' — {total}개 웨이포인트 순회 시작")
+                for i, wp in enumerate(wps):
+                    q = wp["q"]
+                    print(f">> [1회 Cycle] WP{i+1}/{total} 이동중... J1:{q[0]:.1f} J2:{q[1]:.1f} J3:{q[2]:.1f}")
+                    RobotControlUseCase.move_to_joint(q)
+                    # 이동 완료 대기
+                    RobotControlUseCase.wait_for_move_finish()
+                print(f">> [1회 Cycle] '{item_text}' — 전체 {total}개 WP 이동 완료!")
+            except Exception as e:
+                print(f">> [1회 Cycle 에러] {e}")
+        threading.Thread(target=_run_cycle, daemon=True).start()
         
     def apply_current_editor(self):
         selected = self.tree.selection()
@@ -1483,6 +1726,12 @@ class ProgramTreeEditor:
 
     def _run_program(self):
         """Execute the entire program tree on the real robot."""
+        # 중복 실행 가드: builtins.print monkey-patch가 두 스레드에서 동시에 일어나면
+        # 재귀호출/로그 유실이 발생할 수 있다. 또한 self._exec_stop / _global_stop가
+        # 두 실행 사이에서 의도치 않게 동기화되는 사고를 막는다.
+        if getattr(self, "_program_thread", None) and self._program_thread.is_alive():
+            print(">> [경고] 이미 프로그램이 실행 중입니다. (중복 실행 차단)")
+            return
         self._exec_stop = False
         RobotControlUseCase._global_stop = False  # 글로벌 정지 플래그 리셋
         
@@ -1548,22 +1797,66 @@ class ProgramTreeEditor:
                     print(f">> 📋 Variables 노드 (스킵)")
                     
                 elif node_type == 20:  # Loop
-                    count = data.get("count", raw.get("count", -1))
+                    # 무한 = None / -1 / <=0 / 누락. 우리 저장은 -1로 통일하지만 외부 파일은 null인 경우도 있어 모두 수용.
+                    raw_count = data.get("count")
+                    if raw_count is None:
+                        raw_count = raw.get("count")
+                    try:
+                        count = int(raw_count) if raw_count is not None else None
+                    except (TypeError, ValueError):
+                        count = None
+                    if count is not None and count <= 0:
+                        count = None  # 비정상값(0/음수)도 무한으로 안전 해석
+
+                    # 자식 중 팔레트 Pick/Place가 있으면 Loop iter ↔ 팔레트 슬롯 1:1 매핑한다.
+                    # 사용자 의도: Loop=9회 + 9-slot 팔레트 → 1번 슬롯, 2번 슬롯, ... 순서대로 진행.
+                    pallet_size = 0
+                    for child in node["children"]:
+                        cdata = child["data"]
+                        craw = cdata.get("__raw__", {})
+                        if craw.get("type") in (201, 202):
+                            cpd = cdata.get("p_data")
+                            if cpd and isinstance(cpd, dict):
+                                csz = cpd.get("size", [1, 1])
+                                m_ = csz[0] if len(csz) > 0 else 1
+                                n_ = csz[1] if len(csz) > 1 else 1
+                                l_ = csz[2] if len(csz) > 2 else 1
+                                pallet_size = max(pallet_size, m_ * n_ * l_)
+                    if pallet_size > 0:
+                        if count is None:
+                            effective = pallet_size
+                            print(f">> 🔄 Loop 무한 + 팔레트 {pallet_size}개 → {effective}회로 자동 결정")
+                        else:
+                            effective = count
+                    else:
+                        effective = count  # None이면 무한
+
                     iteration = 0
-                    while not self._exec_stop:
-                        iteration += 1
-                        if count is not None and count >= 0 and iteration > count:
-                            print(f">> 🔄 Loop 완료 ({count}회)")
-                            break
-                        print(f">> 🔄 Loop #{iteration}" + (f"/{count}" if count and count > 0 else " (무한)"))
-                        try:
-                            _execute_node_list(node["children"])
-                        except _LoopBreakException:
-                            print(f">> ⏹️ Loop Break 실행 — 루프 탈출")
-                            break
-                        # 자식 실행 후 정지 플래그 재확인
-                        if self._exec_stop:
-                            break
+                    prev_slot = getattr(self, "_pallet_loop_idx", None)
+                    try:
+                        while not self._exec_stop:
+                            iteration += 1
+                            if effective is not None and iteration > effective:
+                                print(f">> 🔄 Loop 완료 ({effective}회)")
+                                break
+                            # Loop iter → 팔레트 슬롯 인덱스 (0-based, wrap).
+                            # max(...,1)로 divisor 항상 >=1 보장 (분석기 false positive 회피).
+                            slot_divisor = max(pallet_size, 1)
+                            if pallet_size > 0:
+                                self._pallet_loop_idx = (iteration - 1) % slot_divisor
+                                print(f">> 🔄 Loop #{iteration}/{effective} (팔레트 슬롯 {self._pallet_loop_idx + 1}/{pallet_size})")
+                            else:
+                                self._pallet_loop_idx = None
+                                print(f">> 🔄 Loop #{iteration}" + (f"/{effective}" if effective else " (무한)"))
+                            try:
+                                _execute_node_list(node["children"])
+                            except _LoopBreakException:
+                                print(f">> ⏹️ Loop Break 실행 — 루프 탈출")
+                                break
+                            if self._exec_stop:
+                                break
+                    finally:
+                        self._pallet_loop_idx = prev_slot
                 
                 elif node_type == 21:  # loopBreak
                     print(f">> ⏹️ Loop Break!")
@@ -1719,7 +2012,10 @@ class ProgramTreeEditor:
                     ret_data = data.get("retract", raw.get("retract", {}))
                     app_dist = app_data.get("distance", 0.05)
                     ret_dist = ret_data.get("distance", 0.05)
-                    # distance가 미터 단위인지 확인 (0.1 이하면 미터, 이상이면 mm → 변환)
+                    # ⚠️ 단위 휴리스틱: 우리 UI(거리 mm)는 50.0처럼 1보다 큰 값으로 저장하고,
+                    # 표준 Conty(거리 m)는 0.05처럼 1 이하로 저장한다. 따라서 1.0을 경계로 단위 추정한다.
+                    # ⚠️ 위험: 사용자가 1mm 미만(예: 0.5mm)을 입력하면 m로 오해될 수 있다. UI가 mm 단위로
+                    # 직접 입력받는 한 5~500mm 범위라 안전하지만, 정밀 보정용 모션을 추가할 땐 명시적 단위 필요.
                     if app_dist > 1.0: app_dist /= 1000.0
                     if ret_dist > 1.0: ret_dist /= 1000.0
                     
@@ -1894,12 +2190,30 @@ class ProgramTreeEditor:
                             
                             print(f">>   🔄 인터리빙 모드: {action_label} (팔레트 {total}개) ↔ {partner_label}")
                         
+                        # Loop이 자식으로 이 Pick/Place를 호출했고 self._pallet_loop_idx가 설정돼 있으면
+                        # 전체 팔레트 그리드를 펼치지 않고 그 슬롯 하나만 처리한다.
+                        loop_slot = getattr(self, "_pallet_loop_idx", None)
+                        if loop_slot is not None and 0 <= loop_slot < total:
+                            target_layer = loop_slot // (m * n)
+                            in_layer = loop_slot % (m * n)
+                            target_row = in_layer // n
+                            target_col = in_layer % n
+                            slot_iter = [(target_layer, target_row, target_col)]
+                            print(f">>   🎯 Loop 슬롯 모드: {action_label} 슬롯 {loop_slot+1}/{total}만 실행")
+                        else:
+                            slot_iter = [
+                                (layer, row, col)
+                                for layer in range(l_val)
+                                for row in range(m)
+                                for col in range(n)
+                            ]
+
                         pallet_count = 0
-                        for layer in range(l_val):
-                            for row in range(m):
-                                for col in range(n):
-                                    if self._exec_stop: return
-                                    pallet_count += 1
+                        for (layer, row, col) in slot_iter:
+                            if self._exec_stop: return
+                            pallet_count += 1
+                            if True:  # 들여쓰기 유지 (아래 블록 그대로 사용)
+                                if True:
                                     cur_t = MotionMath.compute_pallet_point(p1, p2, p3, m, n, row, col, p4=p4, size_l=l_val, current_l=layer)
                                     cur_app = _safe_offset(cur_t, app_dist)
                                     cur_ret = _safe_offset(cur_t, ret_dist)
@@ -1949,10 +2263,29 @@ class ProgramTreeEditor:
                                     # 3) 파트너(Place/Pick) 실행
                                     if partner_node:
                                         _highlight(partner_node["id"])
-                                        p_target = partner_p if partner_p else [0.0]*6
+                                        # ★ 파트너도 팔레트이면 같은 슬롯 인덱스로 좌표를 다시 계산한다.
+                                        #   (예: Pick 팔레트 1번 슬롯 ↔ Place 팔레트 1번 슬롯)
+                                        if partner_p_data and isinstance(partner_p_data, dict):
+                                            psz = partner_p_data.get("size", [1, 1, 1])
+                                            pm = psz[0] if len(psz) > 0 else 1
+                                            pn = psz[1] if len(psz) > 1 else 1
+                                            pl = psz[2] if len(psz) > 2 else 1
+                                            ppts = partner_p_data.get("points", [])
+                                            pp1 = ppts[0].get("p") if len(ppts) > 0 else partner_p
+                                            pp2 = ppts[1].get("p") if len(ppts) > 1 else pp1
+                                            pp3 = ppts[2].get("p") if len(ppts) > 2 else pp1
+                                            pp4 = ppts[3].get("p") if len(ppts) > 3 else None
+                                            # Pick 단계에서 사용한 (layer, row, col)를 그대로 사용
+                                            p_target = MotionMath.compute_pallet_point(
+                                                pp1, pp2, pp3, pm, pn, row, col,
+                                                p4=pp4, size_l=pl, current_l=layer
+                                            )
+                                            print(f">>     [팔레트 매핑] {partner_label} → L{layer+1} R{row+1} C{col+1}")
+                                        else:
+                                            p_target = partner_p if partner_p else [0.0]*6
                                         p_app = _safe_offset(p_target, partner_app_dist)
                                         p_ret = _safe_offset(p_target, partner_ret_dist)
-                                        
+
                                         print(f">>   {partner_label} [{pallet_count}/{total}]")
                                         print(f">>     1) 접근 위치(Z+{partner_app_dist:.3f}m)")
                                         inst.task_move_to(p_app)
@@ -1995,6 +2328,57 @@ class ProgramTreeEditor:
                         inst.task_move_to(ret_p)
                         RobotControlUseCase.wait_for_move_finish(30.0)
                 
+                elif node_type == 25:  # Elif (변수 조건)
+                    cond = data.get("cond", raw.get("cond", {}))
+                    result = False
+                    if cond:
+                        left = cond.get("left", {})
+                        right = cond.get("right", {})
+                        op_val = cond.get("op", 0)
+                        op_map = {0: "==", 1: "!=", 2: ">", 3: "<", 4: ">=", 5: "<="}
+                        op_str = op_map.get(op_val, "==")
+                        var_name = left.get("value", "var1") if left.get("type", -1) == 10 else "var1"
+                        compare_val = right.get("value", 0) if right.get("type", -1) != -1 else 0
+                        result = RobotControlUseCase.eval_condition(str(var_name), op_str, float(compare_val or 0))
+                    print(f">> 🔀 Elif → {'TRUE' if result else 'FALSE'}")
+                    if result:
+                        _execute_node_list(node["children"])
+                
+                elif node_type == 26:  # Else (무조건 실행)
+                    print(f">>   🔀 Else → 자식 실행")
+                    _execute_node_list(node["children"])
+                
+                elif node_type == 30:  # WaitFor (조건 대기)
+                    di_list = data.get("diList", raw.get("diList", []))
+                    if di_list:
+                        pins_str = ", ".join(f"DI{d['idx']}={'HI' if d['value'] else 'LO'}" for d in di_list)
+                        print(f">>   ⏳ Wait For: {pins_str}")
+                        timeout = 60.0
+                        start = time.time()
+                        while not self._exec_stop and (time.time() - start) < timeout:
+                            current_di = RobotControlUseCase.get_di()
+                            if current_di:
+                                all_met = all(
+                                    current_di[c["idx"]] == c["value"]
+                                    for c in di_list if c["idx"] < len(current_di)
+                                )
+                                if all_met:
+                                    print(f">>   ✅ 조건 충족")
+                                    break
+                            time.sleep(0.1)
+                    else:
+                        print(f">>   ⏳ Wait For (조건 미지정 — 스킵)")
+                
+                elif node_type == 32:  # SpeedRatio
+                    spd = data.get("prgSpdRatio", raw.get("prgSpdRatio", 100))
+                    print(f">>   ⚡ 프로그램 속도 변경: {spd}%")
+                    try:
+                        inst = robot_manager.get_active_instance()
+                        if inst and hasattr(inst, 'set_speed_ratio'):
+                            inst.set_speed_ratio(spd)
+                    except Exception as e:
+                        print(f">>   ⚠️ 속도 변경 실패: {e}")
+
                 elif node_type == 200:  # Pick Group → 자식 실행
                     _execute_node_list(node["children"])
                     
@@ -2092,7 +2476,8 @@ class ProgramTreeEditor:
             except Exception as e:
                 print(f">> [로그 에러] {e}")
         
-        threading.Thread(target=_run, daemon=True).start()
+        self._program_thread = threading.Thread(target=_run, daemon=True)
+        self._program_thread.start()
 
     def _move_node_up(self):
         """선택한 노드를 한 칸 위로 이동."""
@@ -2178,43 +2563,43 @@ class ProgramTreeEditor:
         # 표시 이름 → 내부 이름 + Conty 타입 코드
         _MAP = {
             # 모션 명령어
-            "Joint Move": ("JointMove", 1),
-            "Frame Move": ("FrameMove", 103),     # type=103: FrameMove:Absolute
-            "Move C":     ("Move C", 102),         # type=102: FrameMove (variant)
-            "Move Home":  ("Folder", 100),         # type=100: Home은 Folder로 구현
-            "Move B":     ("JointMove", 1),        # type=1 (relative joint)
-            "Move By":    ("FrameMove", 103),      # type=103 (relative frame)
+            "Joint Move": ("JointMove", 102),       # type=102: JointMove:Absolute
+            "Frame Move": ("FrameMove", 103),      # type=103: FrameMove:Absolute
+            "Move C":     ("Move C", 3),            # type=3: CircularMove
+            "Move Home":  ("Home", 100),            # type=100: Home
+            "Move B":     ("Move B", 5),            # type=5: MoveB
+            "Move By":    ("Move By", 6),           # type=6: frameMove:Relative
             # 입출력 명령어
-            "DO":         ("Tool Command", 40),    # type=40: toolCommand
-            "Smart DO":   ("Smart DO", 4),         # type=4: doList
-            "EndTool DO": ("EndTool DO", 6),       # type=6: endtoolDoList
-            "AO":         ("Smart AO", 5),         # type=5: aoList
-            "Tool Sensing": ("Tool Sensing", 41),  # type=41: toolSensing
+            "DO":         ("DO 출력", 4),            # type=4: smartDO
+            "Smart DO":   ("Smart DO", 4),          # type=4: doList
+            "EndTool DO": ("EndTool DO", 6),        # type=6: endtoolDoList
+            "AO":         ("Smart AO", 5),          # type=5: aoList
+            "Tool Sensing": ("Tool Sensing", 23),   # type=23: toolSensing
             # 흐름제어 명령어
-            "Loop":       ("Loop", 20),            # type=20: count=-1
-            "Wait":       ("Wait", 28),            # type=28: time=1
-            "Wait For":   ("Wait For", 22),        # type=22: time-based wait
-            "Wait DI":    ("Wait For [DI]", 29),   # type=29: diList (no children)
-            "If (DI)":    ("If [DI]", 29),         # type=29: diList (has children)
-            "If Var":     ("If Var", 23),           # type=23: cond
-            "Else":       ("If", 24),              # type=24: cond
-            "Math":       ("If Var", 23),           # closest match
-            "Loop Break": ("Loop Break", 21),      # type=21: loopBreak
-            "Speed Ratio": ("Call", 250),          # type=250: prgSpdRatio
-            "Comment":    ("Comment", 100),        # type=100 (use Folder)
-            "Stop":       ("Stop", 100),           # type=100 (use Folder)
-            "Folder":     ("Folder", 100),         # type=100: Folder/Group
+            "Loop":       ("Loop", 20),             # type=20: count=-1
+            "Wait":       ("Wait", 22),             # type=22: time-based wait
+            "Wait For":   ("Wait For", 30),         # type=30: waitFor (조건 대기)
+            "Wait DI":    ("Wait DI", 28),          # type=28: Wait (DI 대기)
+            "If (DI)":    ("If [DI]", 29),          # type=29: if[DI]
+            "If Var":     ("If Var", 24),            # type=24: if (변수 조건)
+            "Else":       ("Else", 26),             # type=26: else
+            "Math":       ("Math", 21),              # type=21: assignment
+            "Loop Break": ("Loop Break", 21),       # type=21: loopBreak → 주의: 실제는 31
+            "Speed Ratio": ("Speed", 32),           # type=32: speedRatio
+            "Comment":    ("Comment", 40),          # type=40: comment
+            "Stop":       ("Stop", 41),             # type=41: stop
+            "Folder":     ("Folder", 100),          # type=100: Folder/Group
             # 응용 명령어
-            "Pick":       ("Pick", 201),           # type=201: pick
-            "Place":      ("Place", 202),          # type=202: place
-            "Pallet":     ("Pallet", 200),         # type=200: Pick Group
-            "Call":       ("Call", 250),            # type=250
-            "Conveyor":   ("Conveyor", 100),       # placeholder
-            "Force":      ("indyCARE", 302),       # type=302
-            "TaktTime":   ("indyCARE", 302),       # type=302: careTackTime
-            "Detect":     ("Detect", 100),         # placeholder
-            "Retrieve":   ("Retrieve", 100),       # placeholder
-            "Python":     ("Python Script", 100),  # placeholder
+            "Pick":       ("Pick", 201),            # type=201: pick
+            "Place":      ("Place", 202),           # type=202: place
+            "Pallet":     ("Pallet", 200),          # type=200: Pick Group
+            "Call":       ("Call", 250),             # type=250
+            "Conveyor":   ("Conveyor", 300),        # type=300: conveyorTracking
+            "Force":      ("indyCARE", 302),        # type=302
+            "TaktTime":   ("TaktTime", 303),        # type=303: taktTime
+            "Detect":     ("Detect", 400),          # type=400: detect
+            "Retrieve":   ("Retrieve", 401),        # type=401: retrieve
+            "Python":     ("Python Script", 500),   # type=500: pythonScript
         }
         internal_name, conty_type = _MAP.get(cmd_name, (cmd_name, 100))
         

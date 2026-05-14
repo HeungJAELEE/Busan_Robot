@@ -152,28 +152,28 @@ class JogController:
         self.target_frame = ctk.CTkFrame(jog_frame, fg_color=Theme.BG_BASE, corner_radius=6)
         self.target_frame.pack(fill="x", padx=10, pady=(5, 10))
         
-        target_info_f = ctk.CTkFrame(self.target_frame, fg_color="transparent")
-        target_info_f.pack(side="left", fill="x", expand=True, padx=10, pady=5)
+        ctk.CTkLabel(self.target_frame, text="🎯 선택 노드 목표 (Target)", font=ctk.CTkFont(weight="bold", size=11), text_color="#F57C00").pack(anchor="w", padx=10, pady=(5,0))
         
-        ctk.CTkLabel(target_info_f, text="🎯 선택 노드 목표 (Target)", font=ctk.CTkFont(weight="bold", size=11), text_color="#F57C00").pack(anchor="w")
+        self.t_q_lbl = ctk.CTkLabel(self.target_frame, text="J: 미설정", font=Theme.font(size=10), text_color=Theme.TEXT_SECONDARY)
+        self.t_q_lbl.pack(anchor="w", padx=10)
         
-        self.t_q_lbl = ctk.CTkLabel(target_info_f, text="J1: 0.00 | J2: 0.00 | J3: 0.00 | J4: 0.00 | J5: 0.00 | J6: 0.00", font=Theme.font(size=10), text_color=Theme.TEXT_SECONDARY)
-        self.t_q_lbl.pack(anchor="w")
+        self.t_p_lbl = ctk.CTkLabel(self.target_frame, text="P: 미설정", font=Theme.font(size=10), text_color=Theme.TEXT_SECONDARY)
+        self.t_p_lbl.pack(anchor="w", padx=10)
         
-        self.t_p_lbl = ctk.CTkLabel(target_info_f, text="X: 0.00 | Y: 0.00 | Z: 0.00 | Rx: 0.00 | Ry: 0.00 | Rz: 0.00", font=Theme.font(size=10), text_color=Theme.TEXT_SECONDARY)
-        self.t_p_lbl.pack(anchor="w")
+        # Row 1: Home / Zero (이동 명령)
+        row1 = ctk.CTkFrame(self.target_frame, fg_color="transparent")
+        row1.pack(fill="x", padx=8, pady=(5, 2))
+        ctk.CTkButton(row1, text="🏠 Home", height=30, fg_color="#1565C0", hover_color="#0D47A1", font=Theme.font(size=11, weight="bold"), command=self._move_to_home).pack(side="left", expand=True, fill="x", padx=2)
+        ctk.CTkButton(row1, text="0️⃣ Zero", height=30, fg_color="#F57C00", hover_color=Theme.WARNING, font=Theme.font(size=11, weight="bold"), command=self._move_to_zero).pack(side="left", expand=True, fill="x", padx=2)
+
+        # Row 2: 에러리셋 / 비상정지 (안전 제어)
+        row2 = ctk.CTkFrame(self.target_frame, fg_color="transparent")
+        row2.pack(fill="x", padx=8, pady=(2, 5))
+        self.err_reset_btn = ctk.CTkButton(row2, text="🔄 에러리셋", height=30, fg_color="#546E7A", hover_color="#455A64", font=Theme.font(size=11, weight="bold"), command=self._error_reset)
+        self.err_reset_btn.pack(side="left", expand=True, fill="x", padx=2)
+        self.estop_btn = ctk.CTkButton(row2, text="🚨 비상정지", height=30, fg_color="#B71C1C", hover_color="#D32F2F", font=Theme.font(size=11, weight="bold"), command=self._emergency_stop)
+        self.estop_btn.pack(side="left", expand=True, fill="x", padx=2)
         
-        btn_col = ctk.CTkFrame(self.target_frame, fg_color="transparent")
-        btn_col.pack(side="right", padx=10, pady=5)
-        
-        move_btn = ctk.CTkButton(btn_col, text="▶ 로봇 이동", width=80, height=28, fg_color=Theme.SUCCESS, hover_color="#1B5E20", command=self._move_to_target)
-        move_btn.pack(pady=1)
-        
-        home_btn = ctk.CTkButton(btn_col, text="🏠 Home", width=80, height=28, fg_color="#1565C0", hover_color="#0D47A1", command=self._move_to_home)
-        home_btn.pack(pady=1)
-        
-        zero_btn = ctk.CTkButton(btn_col, text="0️⃣ Zero", width=80, height=28, fg_color="#F57C00", hover_color=Theme.WARNING, command=self._move_to_zero)
-        zero_btn.pack(pady=1)
         
         # === 로봇 제어 패널 (다이렉트 티칭, 충돌 감도, 서보) ===
         ctrl_frame = ctk.CTkFrame(self.parent, fg_color=Theme.BG_SURFACE, corner_radius=6)
@@ -264,6 +264,32 @@ class JogController:
             RobotControlUseCase.move_to_joint([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         except Exception as e:
             print(f">> [에러] Zero 이동 실패: {e}")
+    
+    def _error_reset(self):
+        """로봇 에러/충돌 리셋."""
+        try:
+            from core.domains.robot.communication.client_manager import robot_manager
+            inst = robot_manager.get_active_instance()
+            if inst:
+                inst.reset_robot()
+                print(">> [에러리셋] 로봇 에러/충돌이 리셋되었습니다.")
+            else:
+                print(">> [에러] 로봇이 연결되지 않았습니다.")
+        except Exception as e:
+            print(f">> [에러] 리셋 실패: {e}")
+    
+    def _emergency_stop(self):
+        """비상정지."""
+        try:
+            from core.domains.robot.communication.client_manager import robot_manager
+            inst = robot_manager.get_active_instance()
+            if inst:
+                inst.stop_emergency()
+                print(">> 🚨 [비상정지] 로봇이 긴급 정지되었습니다!")
+            else:
+                print(">> [에러] 로봇이 연결되지 않았습니다.")
+        except Exception as e:
+            print(f">> [에러] 비상정지 실패: {e}")
 
     def _toggle_direct_teaching(self):
         """다이렉트 티칭 모드 ON/OFF 토글."""
@@ -382,15 +408,23 @@ class MoveEditor:
                                              justify="left", wraplength=320)
         self.wp_detail_label.pack(anchor="w", padx=10, pady=5)
         
-        # ── 버튼 (Teach / Load / Move) ──
+        # ── 버튼 Row 1 (현위치 저장 / 조그 불러오기 / 로봇 이동) ──
         tf = ctk.CTkFrame(main_frame, fg_color="transparent")
-        tf.pack(fill="x", pady=5)
-        self.teach_btn = ctk.CTkButton(tf, text="📌 위치 저장", fg_color=Theme.INFO, hover_color="#1565C0", font=Theme.font(size=12, weight="bold"), width=100)
+        tf.pack(fill="x", pady=(5, 2))
+        self.teach_btn = ctk.CTkButton(tf, text="📌 현위치 저장", fg_color=Theme.INFO, hover_color="#1565C0", font=Theme.font(size=12, weight="bold"), width=100)
         self.teach_btn.pack(side="left", padx=(10, 5))
         self.load_btn = ctk.CTkButton(tf, text="📥 조그 불러오기", fg_color="#F57C00", hover_color=Theme.WARNING, font=Theme.font(size=12, weight="bold"), width=110)
         self.load_btn.pack(side="left", padx=5)
         self.move_btn = ctk.CTkButton(tf, text="▶ 로봇 이동", fg_color=Theme.SUCCESS, hover_color="#1B5E20", font=Theme.font(size=12, weight="bold"), width=100)
         self.move_btn.pack(side="left", padx=5)
+        
+        # ── 버튼 Row 2 (위치 삭제 / 1회 Cycle) ──
+        tf2 = ctk.CTkFrame(main_frame, fg_color="transparent")
+        tf2.pack(fill="x", pady=(2, 5))
+        self.delete_btn = ctk.CTkButton(tf2, text="🗑️ 위치 삭제", fg_color=Theme.DANGER, hover_color=Theme.DANGER_HOVER, font=Theme.font(size=12, weight="bold"), width=100)
+        self.delete_btn.pack(side="left", padx=(10, 5))
+        self.cycle_btn = ctk.CTkButton(tf2, text="🔁 1회 Cycle", fg_color="#7B1FA2", hover_color="#6A1B9A", font=Theme.font(size=12, weight="bold"), width=110)
+        self.cycle_btn.pack(side="left", padx=5)
         
     def update_ui(self, node_name, b_radius=0.0, vel=5, acc=5):
         if self.header_label:
@@ -427,9 +461,8 @@ class MoveEditor:
             
         # 각 웨이포인트를 카드로 표시
         for i, wp_data in enumerate(self._waypoints):
-            wp_obj = wp_data.get("wp", None)
-            q = wp_obj.j_pos if wp_obj and hasattr(wp_obj, 'j_pos') else wp_data.get("q", [])
-            p = wp_obj.t_pos if wp_obj and hasattr(wp_obj, 't_pos') else wp_data.get("p", [])
+            q = wp_data.get("q", [])
+            p = wp_data.get("p", [])
             
             # 좌표 요약
             if p and len(p) >= 3:
@@ -469,9 +502,8 @@ class MoveEditor:
             return
         
         wp_data = self._waypoints[idx]
-        wp_obj = wp_data.get("wp", None)
-        q = wp_obj.j_pos if wp_obj and hasattr(wp_obj, 'j_pos') else wp_data.get("q", [])
-        p = wp_obj.t_pos if wp_obj and hasattr(wp_obj, 't_pos') else wp_data.get("p", [])
+        q = wp_data.get("q", [])
+        p = wp_data.get("p", [])
         
         lines = [f"▶ WP{idx+1} 상세 좌표:"]
         if q and len(q) >= 6:
@@ -590,9 +622,26 @@ class MoveHomeEditor:
         for w in self.parent.winfo_children(): w.destroy()
         header = ctk.CTkFrame(self.parent, fg_color=Theme.BG_SURFACE, height=40)
         header.pack(fill="x")
-        ctk.CTkLabel(header, text="홈 이동(Move Home) 설정", font=Theme.font(size=16, weight="bold"), text_color=Theme.INFO).pack(pady=10)
-        ctk.CTkLabel(self.parent, text="로봇이 미리 지정된 홈(Home) 위치로 이동합니다.").pack(pady=20)
-    def update_ui(self, node_name): pass
+        self.header_label = ctk.CTkLabel(header, text="🏠 홈 이동(Move Home)", font=Theme.font(size=16, weight="bold"), text_color=Theme.INFO)
+        self.header_label.pack(pady=10)
+        
+        info_f = ctk.CTkFrame(self.parent, fg_color=Theme.BG_SURFACE, corner_radius=8)
+        info_f.pack(fill="x", padx=15, pady=10)
+        ctk.CTkLabel(info_f, text="로봇을 미리 지정된 홈(Home) 위치로 이동합니다.", 
+                     text_color=Theme.TEXT_SECONDARY, font=Theme.font(size=12)).pack(pady=10, padx=10)
+        ctk.CTkLabel(info_f, text="Home 위치: [0°, 0°, -90°, 0°, -90°, 0°]", 
+                     text_color="#00FF41", font=Theme.font(size=13, weight="bold")).pack(pady=(0, 10), padx=10)
+        
+        # 홈으로 이동 버튼
+        self.home_move_btn = ctk.CTkButton(self.parent, text="🏠 홈으로 이동", height=50,
+                                            fg_color="#1565C0", hover_color="#0D47A1",
+                                            font=Theme.font(size=16, weight="bold"))
+        self.home_move_btn.pack(fill="x", padx=15, pady=10)
+        
+    def update_ui(self, node_name):
+        if hasattr(self, 'header_label'):
+            name_only = node_name.replace("Node", "").strip()
+            self.header_label.configure(text=f"🏠 {name_only}")
 
 class MoveCEditor(MoveEditor):
     def render(self):

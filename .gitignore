@@ -8,3 +8,13 @@ build/
 .eggs/
 refactor_theme.py
 test_*.py
+
+# 사용자 백업/임시 파일
+*.bak
+*.legacy.bak
+
+# 실행 로그
+frontend/logs/
+
+# 사용자 개인 티칭 데이터 (예제 외)
+frontend/user_programs/Robot_*/20260514*.json
