@@ -2,7 +2,7 @@ import customtkinter as ctk
 from core.domains.robot.communication.client_manager import robot_manager
 from infrastructure.mqtt.mqtt_manager import mqtt_broker
 from .editors.motion_editors import JogController, MoveEditor, MoveByEditor, MoveCEditor, MoveHomeEditor, ForceEditor
-from .editors.logic_editors import (LoopEditor, MathEditor, CallEditor, IfEditor, WaitEditor, WaitDIEditor, WaitAIEditor,
+from .editors.logic_editors import (SmartDOEditor, LoopEditor, MathEditor, CallEditor, IfEditor, WaitEditor, WaitDIEditor, WaitAIEditor,
                                     CommentEditor, StopEditor, SwitchEditor, FolderEditor,
                                     WaitForEditor, LoopBreakEditor, SpeedRatioEditor, ToolSensingEditor,
                                     ConveyorTrackingEditor, TaktTimeEditor, DetectEditor, RetrieveEditor, PythonScriptEditor)
@@ -1084,6 +1084,7 @@ class ProgramTreeEditor:
         self.comment_editor = CommentEditor(self.pp_frame)
         self.stop_editor = StopEditor(self.pp_frame)
         self.folder_editor = FolderEditor(self.pp_frame)
+        self.smart_do_editor = SmartDOEditor(self.pp_frame)
         self.switch_editor = SwitchEditor(self.pp_frame)
         self.loop_editor = LoopEditor(self.pp_frame)
         self.waitfor_editor = WaitForEditor(self.pp_frame)
@@ -1109,31 +1110,30 @@ class ProgramTreeEditor:
             if hasattr(self.jog_controller, "set_target"):
                 self.jog_controller.set_target(q, p)
                 
-            # 조그 패널을 강제로 덮어씌우지 않음 (JOG 독립성 보장)
-            if "Move By" in item_text:
+            # ─── Conty type 기반 우측 에디터 라우팅 ───
+            raw = d.get("__raw__", {})
+            conty_type = raw.get("type", -1)
+            
+            # 에디터 프레임 초기화 헬퍼
+            def _clear_pp():
                 for w in self.pp_frame.winfo_children(): w.destroy()
-                self.mb_editor.render()
-                self.mb_editor.update_ui(item_text, 0, 0, 0)
-            elif "Move C" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.current_editor = self.move_c_editor
-                self.move_c_editor.render()
-                self.move_c_editor.update_ui(item_text, b_radius)
+            
+            if conty_type in [102, 103]:  # ★ JointMove / FrameMove
+                _clear_pp()
+                self.current_editor = self.move_editor
+                self.move_editor.render()
+                bnd = d.get("boundary", {"velLevel": 5, "accLevel": 5})
+                self.move_editor.update_ui(item_text, b_radius, bnd.get("velLevel", 5), bnd.get("accLevel", 5))
+                # 웨이포인트 정보 전달
+                wps = d.get("waypoints", [])
+                if hasattr(self.move_editor, 'update_waypoint_info'):
+                    self.move_editor.update_waypoint_info(wps, conty_type)
+                self.move_editor.teach_btn.configure(command=self._on_teach_btn_clicked)
+                self.move_editor.load_btn.configure(command=self._on_load_btn_clicked)
+                self.move_editor.move_btn.configure(command=self._on_move_btn_clicked)
                 
-                # 기본 버튼 바인딩 (MoveEditor 상속받음)
-                self.move_c_editor.teach_btn.configure(command=self._on_teach_btn_clicked)
-                self.move_c_editor.load_btn.configure(command=self._on_load_btn_clicked)
-                self.move_c_editor.move_btn.configure(command=self._on_move_btn_clicked)
-                
-                # 경유점 버튼 바인딩
-                if hasattr(self.move_c_editor, 'via_teach_btn'):
-                    self.move_c_editor.via_teach_btn.configure(command=self._on_via_teach_btn_clicked)
-            elif "Move Home" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.move_home_editor.render()
-                self.move_home_editor.update_ui(item_text)
-            elif "Move J" in item_text or "Move L" in item_text or "Move B" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
+            elif conty_type == 1:  # Legacy JointMove
+                _clear_pp()
                 self.current_editor = self.move_editor
                 self.move_editor.render()
                 bnd = d.get("boundary", {"velLevel": 5, "accLevel": 5})
@@ -1141,126 +1141,137 @@ class ProgramTreeEditor:
                 self.move_editor.teach_btn.configure(command=self._on_teach_btn_clicked)
                 self.move_editor.load_btn.configure(command=self._on_load_btn_clicked)
                 self.move_editor.move_btn.configure(command=self._on_move_btn_clicked)
-            elif "Math" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.math_editor.render()
-                self.math_editor.update_ui(item_text, "var1", "=", 1.0)
-            elif "Call" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.call_editor.render()
-                self.call_editor.update_ui(item_text, "sub_routine.json")
-            elif "Switch" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.switch_editor.render()
-                self.switch_editor.update_ui(item_text)
-            elif "If" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.if_editor.render()
-                self.if_editor.update_ui(item_text, 0, "HIGH", "var1", "==", 0.0)
-            elif "Folder" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
+                
+            elif conty_type == 4:  # SmartDO (DO 출력)
+                _clear_pp()
+                self.current_editor = self.smart_do_editor
+                self.smart_do_editor.render()
+                self.smart_do_editor.update_ui(item_text, d.get("doList", []))
+                
+            elif conty_type in [5, 6]:  # SmartAO / EndTool DO
+                _clear_pp()
+                self.current_editor = self.folder_editor
                 self.folder_editor.render()
                 self.folder_editor.update_ui(item_text)
-            elif "Loop" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
+                
+            elif conty_type == 20:  # Loop
+                _clear_pp()
                 self.current_editor = self.loop_editor
                 self.loop_editor.render()
                 self.loop_editor.update_ui(item_text, d.get("count", None))
-            elif "Force" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.force_editor.render()
-                self.force_editor.update_ui(item_text, 500.0, 100.0, 50.0)
-            elif "Vision" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.vision_editor.render()
-                self.vision_editor.update_ui(item_text)
-            elif "Sync" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.sync_editor.render()
-                self.sync_editor.update_ui(item_text)
-            elif "Set AO" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.set_ao_editor.render()
-                self.set_ao_editor.update_ui(item_text)
-            elif "Wait DI" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.current_editor = self.wait_di_editor
-                self.wait_di_editor.render()
-                self.wait_di_editor.update_ui(item_text, d.get("diList", []))
-            elif "Wait AI" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.current_editor = self.wait_ai_editor
-                self.wait_ai_editor.render()
-                self.wait_ai_editor.update_ui(item_text)
-            elif "Wait" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
+                
+            elif conty_type == 21:  # Break
+                _clear_pp()
+                self.current_editor = self.loopbreak_editor
+                self.loopbreak_editor.render()
+                self.loopbreak_editor.update_ui(item_text)
+                
+            elif conty_type == 22:  # Wait (시간)
+                _clear_pp()
                 self.current_editor = self.wait_editor
                 self.wait_editor.render()
                 self.wait_editor.update_ui(item_text, d.get("time", 1.0))
-            elif "Comment" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.comment_editor.render()
-                self.comment_editor.update_ui(item_text)
-            elif "Stop" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.stop_editor.render()
-                self.stop_editor.update_ui(item_text)
-            elif "Pick" in item_text or "Place" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
+                
+            elif conty_type == 23:  # Switch
+                _clear_pp()
+                self.current_editor = self.switch_editor
+                self.switch_editor.render()
+                self.switch_editor.update_ui(item_text)
+                
+            elif conty_type in [24, 25, 26]:  # If / Elif / Else (변수 조건)
+                _clear_pp()
+                self.current_editor = self.if_editor
+                self.if_editor.render()
+                cond = d.get("cond", {})
+                lv = cond.get("left", {}).get("value", "var1") if cond else "var1"
+                op_map = {0: "==", 1: "!=", 2: ">", 3: "<", 4: ">=", 5: "<="}
+                op = op_map.get(cond.get("op", 0), "==") if cond else "=="
+                rv = cond.get("right", {}).get("value", 0.0) if cond else 0.0
+                self.if_editor.update_ui(item_text, 0, "HIGH", str(lv) if lv else "var1", op, rv if rv else 0.0)
+                
+            elif conty_type == 28:  # Wait (DI 대기)
+                _clear_pp()
+                self.current_editor = self.wait_di_editor
+                self.wait_di_editor.render()
+                self.wait_di_editor.update_ui(item_text, d.get("diList", []), d.get("time", 1.0))
+                
+            elif conty_type in [29, 30]:  # If (DI) / Elif (DI)
+                _clear_pp()
+                self.current_editor = self.if_editor
+                self.if_editor.render()
+                di_list = d.get("diList", [])
+                if di_list:
+                    di = di_list[0]
+                    self.if_editor.update_ui(item_text, di.get("idx", 0), "ON" if di.get("value", 1) else "OFF", "var1", "==", 0.0)
+                else:
+                    self.if_editor.update_ui(item_text, 0, "HIGH", "var1", "==", 0.0)
+                
+            elif conty_type == 32:  # SpeedRatio
+                _clear_pp()
+                self.current_editor = self.speed_ratio_editor
+                self.speed_ratio_editor.render()
+                self.speed_ratio_editor.update_ui(item_text, d.get("prgSpdRatio", raw.get("prgSpdRatio", 100)))
+                
+            elif conty_type in [40, 41]:  # ToolCommand / ToolSensing
+                _clear_pp()
+                self.current_editor = self.tool_sensing_editor
+                self.tool_sensing_editor.render()
+                self.tool_sensing_editor.update_ui(item_text)
+                
+            elif conty_type == 100:  # Folder
+                _clear_pp()
+                self.current_editor = self.folder_editor
+                self.folder_editor.render()
+                self.folder_editor.update_ui(item_text)
+                
+            elif conty_type in [201, 202]:  # Pick / Place
+                _clear_pp()
                 self.current_editor = self.pp_editor
                 self.pp_editor.render()
                 self.pp_editor.target_q = q
                 self.pp_editor.target_p = p if p else [0.0]*6
-                self.pp_editor.node_data = d  # Pass the full node_data for target speed etc.
+                self.pp_editor.node_data = d
                 self.pp_editor.update_ui(d, all_pallets)
                 self.pp_editor.teach_btn.configure(command=self._on_teach_btn_clicked)
                 self.pp_editor.load_btn.configure(command=self._on_load_btn_clicked)
                 self.pp_editor.move_btn.configure(command=self._on_move_btn_clicked)
-            elif "Wait For" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.current_editor = self.waitfor_editor
-                self.waitfor_editor.render()
-                self.waitfor_editor.update_ui(item_text)
-            elif "Loop Break" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.current_editor = self.loopbreak_editor
-                self.loopbreak_editor.render()
-                self.loopbreak_editor.update_ui(item_text)
-            elif "Speed Ratio" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.current_editor = self.speed_ratio_editor
-                self.speed_ratio_editor.render()
-                self.speed_ratio_editor.update_ui(item_text, d.get("prgSpdRatio", 100))
-            elif "Tool Sensing" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.current_editor = self.tool_sensing_editor
-                self.tool_sensing_editor.render()
-                self.tool_sensing_editor.update_ui(item_text)
-            elif "Conveyor" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.current_editor = self.conveyor_editor
-                self.conveyor_editor.render()
-                self.conveyor_editor.update_ui(item_text)
-            elif "TaktTime" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.current_editor = self.takttime_editor
-                self.takttime_editor.render()
-                self.takttime_editor.update_ui(item_text)
-            elif "Detect" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.current_editor = self.detect_editor
-                self.detect_editor.render()
-                self.detect_editor.update_ui(item_text)
-            elif "Retrieve" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.current_editor = self.retrieve_editor
-                self.retrieve_editor.render()
-                self.retrieve_editor.update_ui(item_text)
-            elif "Python" in item_text:
-                for w in self.pp_frame.winfo_children(): w.destroy()
-                self.current_editor = self.python_editor
-                self.python_editor.render()
-                self.python_editor.update_ui(item_text)
+                
+            elif conty_type == 200:  # Pick Group
+                _clear_pp()
+                self.current_editor = self.folder_editor
+                self.folder_editor.render()
+                self.folder_editor.update_ui(item_text)
+                
+            elif conty_type == 250:  # Call
+                _clear_pp()
+                self.current_editor = self.call_editor
+                self.call_editor.render()
+                self.call_editor.update_ui(item_text, "sub_routine.json")
+                
+            elif conty_type == 302:  # indyCARE
+                _clear_pp()
+                self.current_editor = self.force_editor
+                self.force_editor.render()
+                self.force_editor.update_ui(item_text, 500.0, 100.0, 50.0)
+                
+            elif conty_type == 999:  # Program Settings
+                _clear_pp()
+                self.current_editor = self.folder_editor
+                self.folder_editor.render()
+                self.folder_editor.update_ui(item_text)
+                
+            elif conty_type in [2, 3]:  # Variables
+                _clear_pp()
+                self.current_editor = self.folder_editor
+                self.folder_editor.render()
+                self.folder_editor.update_ui(item_text)
+                
+            else:
+                # 알 수 없는 타입 → 폴더 에디터로 표시
+                _clear_pp()
+                self.current_editor = self.folder_editor
+                self.folder_editor.render()
+                self.folder_editor.update_ui(f"{item_text} (type={conty_type})")
                 
         # 콜백 연결
         self.on_node_selected_callback = _on_node_selected
@@ -1904,6 +1915,11 @@ class ProgramTreeEditor:
                                     time.sleep(0.2)
                                     print(f">>     3) {'Hold' if is_pick else 'Release'}")
                                     _do_tool_action(is_pick)
+                                    # retract.waitTime 대기
+                                    ret_wait = ret_data.get("waitTime", 0)
+                                    if ret_wait > 0:
+                                        print(f">>     3b) 대기 {ret_wait}초...")
+                                        time.sleep(ret_wait)
                                     payload = {"robot_id": robot_manager.get_active_robot_name(), "action_type": 'Pick' if is_pick else 'Place', "pos": cur_t}
                                     mqtt_broker.publish("robot/task_done", payload)
                                     print(f">>     4) 후퇴 위치(Z+{ret_dist:.3f}m)")
@@ -1968,6 +1984,11 @@ class ProgramTreeEditor:
                         time.sleep(0.2)
                         print(f">>     3) {'Hold(잡기)' if is_pick else 'Release(놓기)'}")
                         _do_tool_action(is_pick)
+                        # retract.waitTime 대기
+                        ret_wait = ret_data.get("waitTime", 0)
+                        if ret_wait > 0:
+                            print(f">>     3b) 대기 {ret_wait}초...")
+                            time.sleep(ret_wait)
                         payload = {"robot_id": robot_manager.get_active_robot_name(), "action_type": 'Pick' if is_pick else 'Place', "pos": target_p}
                         mqtt_broker.publish("robot/task_done", payload)
                         print(f">>     4) 후퇴 위치(Z={ret_p[2]:.4f}, +{ret_dist:.3f}m 위)")

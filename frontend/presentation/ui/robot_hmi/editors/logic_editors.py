@@ -3,6 +3,75 @@ from .base_editor import BaseNodeEditor
 from presentation.ui.theme import Theme
 
 
+class SmartDOEditor:
+    """SmartDO (type 4) — 디지털 출력 포트 설정"""
+    def __init__(self, parent_frame): self.parent = parent_frame
+    def render(self):
+        for w in self.parent.winfo_children(): w.destroy()
+        header = ctk.CTkFrame(self.parent, fg_color=Theme.BG_SURFACE, height=40)
+        header.pack(fill="x")
+        self.header_label = ctk.CTkLabel(header, text="디지털 출력(DO) 설정", font=Theme.font(size=16, weight="bold"), text_color="#4CAF50")
+        self.header_label.pack(pady=10)
+        main_frame = ctk.CTkFrame(self.parent, fg_color="transparent")
+        main_frame.pack(fill="x", padx=10, pady=10)
+        
+        # DO 포트 1
+        self.do_rows = []
+        for i in range(2):
+            frame = ctk.CTkFrame(main_frame, fg_color=Theme.BG_SURFACE)
+            frame.pack(fill="x", pady=3)
+            row = ctk.CTkFrame(frame, fg_color="transparent")
+            row.pack(fill="x", padx=10, pady=5)
+            
+            ctk.CTkLabel(row, text=f"DO {i+1}:", font=Theme.font(size=12, weight="bold")).pack(side="left", padx=5)
+            ctk.CTkLabel(row, text="포트:").pack(side="left", padx=(10, 3))
+            port_entry = ctk.CTkEntry(row, width=50)
+            port_entry.insert(0, str(i))
+            port_entry.pack(side="left", padx=3)
+            
+            ctk.CTkLabel(row, text="상태:").pack(side="left", padx=(10, 3))
+            state_sel = ctk.CTkOptionMenu(row, values=["ON (1)", "OFF (0)"], width=85)
+            state_sel.set("ON (1)")
+            state_sel.pack(side="left", padx=3)
+            
+            enable_var = ctk.StringVar(value="on" if i == 0 else "off")
+            enable_check = ctk.CTkCheckBox(row, text="사용", variable=enable_var, onvalue="on", offvalue="off", width=50)
+            enable_check.pack(side="left", padx=(10, 5))
+            
+            self.do_rows.append({"port": port_entry, "state": state_sel, "enable": enable_var, "check": enable_check})
+        
+        ctk.CTkLabel(main_frame, text="💡 디지털 출력 포트의 ON/OFF를 설정합니다.\n그리퍼, 솔레노이드 밸브 등을 제어합니다.", 
+                     text_color=Theme.TEXT_SECONDARY, font=Theme.font(size=11), justify="left", wraplength=300).pack(anchor="w", pady=10)
+    
+    def apply_changes(self, node_data):
+        try:
+            do_list = []
+            for row in self.do_rows:
+                if row["enable"].get() == "on":
+                    port = int(row["port"].get())
+                    value = 1 if "ON" in row["state"].get() else 0
+                    do_list.append({"idx": port, "value": value})
+            node_data["doList"] = do_list
+        except Exception: pass
+    
+    def update_ui(self, node_name, doList=None):
+        if self.header_label:
+            name_only = node_name.replace("Node", "").strip()
+            self.header_label.configure(text=f"사용자 {name_only} 설정")
+        if not doList: doList = []
+        for i, row in enumerate(self.do_rows):
+            if i < len(doList):
+                do = doList[i]
+                row["port"].delete(0, "end")
+                row["port"].insert(0, str(do.get("idx", i)))
+                row["state"].set("ON (1)" if do.get("value", 0) else "OFF (0)")
+                row["enable"].set("on")
+                row["check"].select()
+            else:
+                row["enable"].set("off")
+                row["check"].deselect()
+
+
 class LoopEditor:
     def __init__(self, parent_frame):
         self.parent = parent_frame
@@ -262,31 +331,57 @@ class WaitDIEditor:
         self.header_label.pack(pady=10)
         main_frame = ctk.CTkFrame(self.parent, fg_color="transparent")
         main_frame.pack(fill="x", padx=10, pady=10)
-        ctk.CTkLabel(main_frame, text="포트 번호 (DI):").pack(anchor="w")
-        self.port_entry = ctk.CTkEntry(main_frame)
+        
+        # DI 포트 번호
+        row1 = ctk.CTkFrame(main_frame, fg_color="transparent")
+        row1.pack(fill="x", pady=5)
+        ctk.CTkLabel(row1, text="DI 포트 번호:").pack(side="left", padx=5)
+        self.port_entry = ctk.CTkEntry(row1, width=60)
         self.port_entry.insert(0, "0")
-        self.port_entry.pack(fill="x", pady=5)
+        self.port_entry.pack(side="left", padx=5)
+        
+        # ON/OFF 상태
+        ctk.CTkLabel(row1, text="대기 상태:").pack(side="left", padx=(15, 5))
+        self.state_sel = ctk.CTkOptionMenu(row1, values=["ON (1)", "OFF (0)"], width=90)
+        self.state_sel.set("ON (1)")
+        self.state_sel.pack(side="left", padx=5)
+        
+        # 타임아웃
+        row2 = ctk.CTkFrame(main_frame, fg_color="transparent")
+        row2.pack(fill="x", pady=5)
+        ctk.CTkLabel(row2, text="타임아웃 (초):").pack(side="left", padx=5)
+        self.time_entry = ctk.CTkEntry(row2, width=60)
+        self.time_entry.insert(0, "1")
+        self.time_entry.pack(side="left", padx=5)
+        ctk.CTkLabel(row2, text="(0 = 무제한 대기)", text_color=Theme.TEXT_SECONDARY, font=Theme.font(size=10)).pack(side="left", padx=5)
+        
+        ctk.CTkLabel(main_frame, text="💡 지정한 DI 포트가 설정 상태가 될 때까지 대기합니다.\n타임아웃 시간이 지나면 다음 명령으로 넘어갑니다.", 
+                     text_color=Theme.TEXT_SECONDARY, font=Theme.font(size=11), justify="left", wraplength=300).pack(anchor="w", pady=10)
         
     def apply_changes(self, node_data):
         try:
             port = int(self.port_entry.get())
-            if "diList" not in node_data: node_data["diList"] = []
-            if len(node_data["diList"]) > 0:
-                node_data["diList"][0]["idx"] = port
-            else:
-                node_data["diList"].append({"idx": port, "value": 1})
+            value = 1 if "ON" in self.state_sel.get() else 0
+            node_data["diList"] = [{"idx": port, "value": value}]
+            node_data["time"] = float(self.time_entry.get())
         except Exception: pass
         
-    def update_ui(self, node_name, diList=None):
+    def update_ui(self, node_name, diList=None, time_val=1.0):
         if self.header_label:
             name_only = node_name.replace("Node", "").strip()
             self.header_label.configure(text=f"사용자 {name_only} 설정")
         if hasattr(self, 'port_entry'):
             self.port_entry.delete(0, "end")
             port = 0
+            value = 1
             if diList and len(diList) > 0:
                 port = diList[0].get("idx", 0)
+                value = diList[0].get("value", 1)
             self.port_entry.insert(0, str(port))
+            self.state_sel.set("ON (1)" if value else "OFF (0)")
+        if hasattr(self, 'time_entry'):
+            self.time_entry.delete(0, "end")
+            self.time_entry.insert(0, str(time_val))
 
 class WaitAIEditor:
     def __init__(self, parent_frame): self.parent = parent_frame

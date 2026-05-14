@@ -347,6 +347,8 @@ JSON 안의 Pick/Place 노드는 내부적으로 **3단계 자동 시퀀스**로
 
 ---
 
+---
+
 ## 🧪 단위 테스트 (TDD)
 각 서비스 폴더 내에서 독립 실행 가능합니다.
 ```bash
@@ -355,3 +357,29 @@ cd plc_bridge && pytest tests/
 cd robot_controller && pytest tests/
 ```
 
+---
+
+## 🤖 AI 분석 가이드 — Conty JSON 파일 분석 시 필독
+
+> **⚠️ AI 에이전트에게**: 사용자가 Conty JSON 파일(`.7.json`)을 제공하며 분석을 요청할 경우,
+> **반드시** 아래 문서를 먼저 읽고 참조한 뒤 분석을 수행하세요.
+
+### 📖 참조 문서
+```
+docs/conty_node_reference.md
+```
+
+이 문서에는 다음 내용이 **상세하게** 기록되어 있습니다:
+- **30+ 노드 타입의 JSON 필드 구조** (type 번호 → 필드명 → 데이터 타입 → 편집 가능 여부)
+- **3-Level Reference Resolution** (program → moveList → wpList 좌표 참조 체계)
+- **Pick & Place 동작 시퀀스** (approach → target → Hold/Release → waitTime → retract)
+- **팔레트 좌표 계산 공식** (P1/P2/P3 기반 그리드 보간)
+- **고정값 vs 가변값 가이드** (편집해야 하는 필드 vs 시스템 고정 필드)
+- **자주 사용되는 프로그래밍 패턴** (Loop+Pick+Place, DO+WaitDI 등)
+
+### 분석 절차
+1. `docs/conty_node_reference.md`를 읽어 노드 타입 사전을 숙지합니다.
+2. 사용자 JSON의 `program` 배열을 순회하며 각 노드의 `type`을 참조 문서와 대조합니다.
+3. `moveList` → `wpList` 참조를 추적하여 실제 로봇 좌표를 해석합니다.
+4. `type=999` 노드의 `toolInfo`/`palletInfo`를 확인하여 Pick/Place 동작의 그리퍼 설정과 팔레트 배열을 파악합니다.
+5. 분석 결과를 사용자에게 **동작 순서도** 형태로 정리하여 전달합니다.

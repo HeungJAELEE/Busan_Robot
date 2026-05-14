@@ -372,8 +372,46 @@ class PickPlaceEditor:
                 self.step3_frame.pack_forget()
 
     def on_pallet_changed(self, choice):
-        """Called when user selects a different pallet from the dropdown."""
-        pass
+        """Called when user selects a different pallet from the dropdown.
+        Loads the pallet's points and size into the editor fields."""
+        if not hasattr(self, '_all_pallets') or not self._all_pallets:
+            return
+        
+        # 이름으로 팔레트 찾기
+        selected = None
+        for pal in self._all_pallets:
+            if pal.get("name", str(pal.get("id", ""))) == choice:
+                selected = pal
+                break
+        
+        if not selected:
+            return
+        
+        # size → M×N
+        sz = selected.get("size", [2, 2])
+        if isinstance(sz, list) and len(sz) >= 2:
+            self.m_entry.delete(0, "end"); self.m_entry.insert(0, str(sz[0]))
+            self.n_entry.delete(0, "end"); self.n_entry.insert(0, str(sz[1]))
+        
+        # points → P1, P2, P3
+        pts = selected.get("points", [])
+        axes = ["X", "Y", "Z", "Rx", "Ry", "Rz"]
+        keys = ["P1 (시작점)", "P2 (행 끝점)", "P3 (열 끝점)"]
+        for i, p_key in enumerate(keys):
+            if i < len(pts):
+                p_val = pts[i].get("p", [0]*6)
+                for j, ax in enumerate(axes):
+                    try:
+                        self.p_entries[p_key][ax].delete(0, "end")
+                        self.p_entries[p_key][ax].insert(0, f"{p_val[j]:.4f}")
+                    except: pass
+        
+        # 요약 업데이트
+        total = sz[0] * sz[1] if len(sz) >= 2 else 1
+        self.pallet_summary_lbl.configure(text=f"팔레트: {choice}\n{sz[0]}행×{sz[1]}열 = {total}개")
+        self._draw_pallet_preview()
+        
+        print(f">> [팔레트 선택] '{choice}' → {sz[0]}×{sz[1]}, {len(pts)}개 포인트 로드")
 
     def _get_current_pos_to_p(self, p_name):
         """Read current real-time task position into the specified P entry."""
@@ -640,6 +678,7 @@ class PickPlaceEditor:
         except Exception as e:
             print(f">> [에러] 이동 스텝 실행 중 오류: {e}")
     def update_ui(self, node_data, all_pallets=None):
+        self._all_pallets = all_pallets or []
         # Update Target Type
         ttype = node_data.get("target_type", 0)
         if ttype == 0: self.style_seg_var.set("단일 위치 사용")
@@ -803,6 +842,31 @@ class PickPlaceEditor:
                 
                 if l_val > 1 or any(p4):
                     node_data["p_data"]["points"].append({"p": p4, "q": q4})
+                
+                # Z 레이어 이지 티칭: L > 1이면 레이어별 Place 노드 자동 전개 데이터 생성
+                if l_val > 1:
+                    z_step = iz / 1000.0  # 제품 높이(mm→m)가 레이어 간격
+                    layer_nodes = []
+                    for layer in range(l_val):
+                        z_offset = z_step * layer
+                        layer_p1 = list(p1); layer_p1[2] += z_offset
+                        layer_p2 = list(p2); layer_p2[2] += z_offset
+                        layer_p3 = list(p3); layer_p3[2] += z_offset
+                        layer_nodes.append({
+                            "layer": layer + 1,
+                            "z_offset_m": z_offset,
+                            "points": [
+                                {"p": layer_p1, "q": [0]*6},
+                                {"p": layer_p2, "q": [0]*6},
+                                {"p": layer_p3, "q": [0]*6}
+                            ],
+                            "size": [m, n]
+                        })
+                    node_data["expanded_layer_nodes"] = layer_nodes
+                    print(f">> [이지 티칭] {l_val}층 × {m}×{n} = {l_val*m*n}개 포인트 자동 전개 데이터 생성")
+                else:
+                    node_data.pop("expanded_layer_nodes", None)
+                    
             except Exception as e:
                 print(f"Error applying pallet points: {e}")
 

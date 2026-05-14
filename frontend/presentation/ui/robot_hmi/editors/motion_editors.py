@@ -312,6 +312,8 @@ class MoveEditor:
     def __init__(self, parent_frame):
         self.parent = parent_frame
         self.header_label = None
+        self._waypoints = []  # 저장된 웨이포인트 데이터
+        self._selected_wp_idx = 0
         
     def render(self):
         for w in self.parent.winfo_children(): w.destroy()
@@ -321,35 +323,74 @@ class MoveEditor:
         self.header_label.pack(pady=10)
         
         main_frame = ctk.CTkFrame(self.parent, fg_color="transparent")
-        main_frame.pack(fill="x", padx=10, pady=2)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=2)
         
-        ctk.CTkLabel(main_frame, text="기본 이동 설정입니다. 상세 로봇 좌표는 좌측 트리 선택 시 갱신됩니다.").pack(anchor="w", pady=(0, 10))
+        # ── 속도 / 가감속 설정 (Conty boundary) ──
+        speed_frame = ctk.CTkFrame(main_frame, fg_color=Theme.BG_SURFACE)
+        speed_frame.pack(fill="x", pady=5)
+        ctk.CTkLabel(speed_frame, text="⚡ 속도 / 가감속 설정", text_color=Theme.WARNING, font=Theme.font(size=12, weight="bold")).pack(anchor="w", padx=10, pady=5)
         
-        # Blending 설정
+        vel_row = ctk.CTkFrame(speed_frame, fg_color="transparent")
+        vel_row.pack(fill="x", padx=10, pady=3)
+        ctk.CTkLabel(vel_row, text="속도 레벨:", width=80).pack(side="left", padx=5)
+        self.vel_slider = ctk.CTkSlider(vel_row, from_=1, to=9, number_of_steps=8, width=150)
+        self.vel_slider.set(5)
+        self.vel_slider.pack(side="left", padx=5, fill="x", expand=True)
+        self.vel_label = ctk.CTkLabel(vel_row, text="Lv.5", width=40, font=Theme.font(size=11, weight="bold"), text_color=Theme.SUCCESS)
+        self.vel_label.pack(side="left", padx=5)
+        self.vel_slider.configure(command=lambda v: self.vel_label.configure(text=f"Lv.{int(v)}"))
+        
+        acc_row = ctk.CTkFrame(speed_frame, fg_color="transparent")
+        acc_row.pack(fill="x", padx=10, pady=3)
+        ctk.CTkLabel(acc_row, text="가감속 레벨:", width=80).pack(side="left", padx=5)
+        self.acc_slider = ctk.CTkSlider(acc_row, from_=1, to=9, number_of_steps=8, width=150)
+        self.acc_slider.set(5)
+        self.acc_slider.pack(side="left", padx=5, fill="x", expand=True)
+        self.acc_label = ctk.CTkLabel(acc_row, text="Lv.5", width=40, font=Theme.font(size=11, weight="bold"), text_color=Theme.SUCCESS)
+        self.acc_label.pack(side="left", padx=5)
+        self.acc_slider.configure(command=lambda v: self.acc_label.configure(text=f"Lv.{int(v)}"))
+        
+        # ── 블렌딩 설정 ──
         bf = ctk.CTkFrame(main_frame, fg_color=Theme.BG_SURFACE)
         bf.pack(fill="x", pady=5)
-        ctk.CTkLabel(bf, text="블렌딩 (연속 동작) 설정", text_color=Theme.INFO).pack(anchor="w", padx=10, pady=5)
+        ctk.CTkLabel(bf, text="🔗 블렌딩 (연속 동작)", text_color=Theme.INFO, font=Theme.font(size=12, weight="bold")).pack(anchor="w", padx=10, pady=5)
         
         br = ctk.CTkFrame(bf, fg_color="transparent")
         br.pack(fill="x", padx=10, pady=5)
-        ctk.CTkLabel(br, text="블렌딩 반경(Radius):").pack(side="left", padx=5)
+        ctk.CTkLabel(br, text="블렌딩 반경:").pack(side="left", padx=5)
         self.blend_entry = ctk.CTkEntry(br, width=60)
         self.blend_entry.insert(0, "0.0")
         self.blend_entry.pack(side="left", padx=5)
         ctk.CTkLabel(br, text="mm").pack(side="left")
         
-        # Teach Button (Position Registration)
-        tf = ctk.CTkFrame(main_frame, fg_color="transparent")
-        tf.pack(fill="x", pady=10)
-        self.teach_btn = ctk.CTkButton(tf, text="[위치 업데이트]", fg_color=Theme.INFO, hover_color="#1565C0", font=Theme.font(size=12, weight="bold"), width=100)
-        self.teach_btn.pack(side="left", padx=(10, 5))
-        self.load_btn = ctk.CTkButton(tf, text="[조그로 불러오기]", fg_color="#F57C00", hover_color=Theme.WARNING, font=Theme.font(size=12, weight="bold"), width=120)
-        self.load_btn.pack(side="left", padx=5)
-        self.move_btn = ctk.CTkButton(tf, text="[로봇 이동]", fg_color=Theme.SUCCESS, hover_color="#1B5E20", font=Theme.font(size=12, weight="bold"), width=100)
-        self.move_btn.pack(side="left", padx=5)
+        # ── 웨이포인트 리스트 (동적) ──
+        wp_header = ctk.CTkFrame(main_frame, fg_color=Theme.BG_SURFACE)
+        wp_header.pack(fill="x", pady=(5, 0))
+        ctk.CTkLabel(wp_header, text="📍 웨이포인트 리스트", text_color="#AB47BC", font=Theme.font(size=12, weight="bold")).pack(side="left", padx=10, pady=5)
+        self.wp_count_label = ctk.CTkLabel(wp_header, text="(0개)", text_color=Theme.TEXT_SECONDARY, font=Theme.font(size=11))
+        self.wp_count_label.pack(side="left")
         
-        self.pos_info_label = ctk.CTkLabel(tf, text="저장된 좌표 없음", text_color="#B0BEC5")
-        self.pos_info_label.pack(side="left", padx=10)
+        # 스크롤 가능한 웨이포인트 컨테이너
+        self.wp_scroll = ctk.CTkScrollableFrame(main_frame, fg_color=Theme.BG_BASE, height=120)
+        self.wp_scroll.pack(fill="x", pady=(0, 5))
+        
+        # 선택된 WP 상세 정보
+        self.wp_detail_frame = ctk.CTkFrame(main_frame, fg_color=Theme.BG_SURFACE)
+        self.wp_detail_frame.pack(fill="x", pady=5)
+        self.wp_detail_label = ctk.CTkLabel(self.wp_detail_frame, text="웨이포인트를 선택하세요", 
+                                             text_color=Theme.TEXT_SECONDARY, font=Theme.font(size=10), 
+                                             justify="left", wraplength=320)
+        self.wp_detail_label.pack(anchor="w", padx=10, pady=5)
+        
+        # ── 버튼 (Teach / Load / Move) ──
+        tf = ctk.CTkFrame(main_frame, fg_color="transparent")
+        tf.pack(fill="x", pady=5)
+        self.teach_btn = ctk.CTkButton(tf, text="📌 위치 저장", fg_color=Theme.INFO, hover_color="#1565C0", font=Theme.font(size=12, weight="bold"), width=100)
+        self.teach_btn.pack(side="left", padx=(10, 5))
+        self.load_btn = ctk.CTkButton(tf, text="📥 조그 불러오기", fg_color="#F57C00", hover_color=Theme.WARNING, font=Theme.font(size=12, weight="bold"), width=110)
+        self.load_btn.pack(side="left", padx=5)
+        self.move_btn = ctk.CTkButton(tf, text="▶ 로봇 이동", fg_color=Theme.SUCCESS, hover_color="#1B5E20", font=Theme.font(size=12, weight="bold"), width=100)
+        self.move_btn.pack(side="left", padx=5)
         
     def update_ui(self, node_name, b_radius=0.0, vel=5, acc=5):
         if self.header_label:
@@ -358,21 +399,102 @@ class MoveEditor:
         if hasattr(self, 'blend_entry'):
             self.blend_entry.delete(0, "end")
             self.blend_entry.insert(0, str(b_radius))
-            if hasattr(self, 'vel_entry'):
-                self.vel_entry.delete(0, "end")
-                self.vel_entry.insert(0, str(vel))
-                self.acc_entry.delete(0, "end")
-                self.acc_entry.insert(0, str(acc))
+        if hasattr(self, 'vel_slider'):
+            vel_v = max(1, min(9, int(vel)))
+            acc_v = max(1, min(9, int(acc)))
+            self.vel_slider.set(vel_v)
+            self.vel_label.configure(text=f"Lv.{vel_v}")
+            self.acc_slider.set(acc_v)
+            self.acc_label.configure(text=f"Lv.{acc_v}")
+            
+    def update_waypoint_info(self, waypoints, move_type=102):
+        """웨이포인트 리스트를 동적으로 구성"""
+        self._waypoints = waypoints or []
+        self._selected_wp_idx = 0
+        mtype = "JointMove" if move_type == 102 else "FrameMove"
+        
+        if hasattr(self, 'wp_count_label'):
+            self.wp_count_label.configure(text=f"({len(self._waypoints)}개) — {mtype}")
+        
+        # 기존 WP 위젯 삭제
+        if hasattr(self, 'wp_scroll'):
+            for w in self.wp_scroll.winfo_children():
+                w.destroy()
+        
+        if not self._waypoints:
+            ctk.CTkLabel(self.wp_scroll, text="좌표 미설정", text_color=Theme.TEXT_SECONDARY).pack(pady=5)
+            return
+            
+        # 각 웨이포인트를 카드로 표시
+        for i, wp_data in enumerate(self._waypoints):
+            wp_obj = wp_data.get("wp", None)
+            q = wp_obj.j_pos if wp_obj and hasattr(wp_obj, 'j_pos') else wp_data.get("q", [])
+            p = wp_obj.t_pos if wp_obj and hasattr(wp_obj, 't_pos') else wp_data.get("p", [])
+            
+            # 좌표 요약
+            if p and len(p) >= 3:
+                coord = f"X={p[0]*1000:.1f}  Y={p[1]*1000:.1f}  Z={p[2]*1000:.1f}"
+            elif q and len(q) >= 6:
+                coord = f"J1={q[0]:.1f}  J2={q[1]:.1f}  J3={q[2]:.1f}  ..."
+            else:
+                coord = "좌표 없음"
+            
+            bg = "#2E2E3E" if i == self._selected_wp_idx else Theme.BG_SURFACE
+            card = ctk.CTkFrame(self.wp_scroll, fg_color=bg, corner_radius=4, height=30)
+            card.pack(fill="x", pady=1, padx=2)
+            
+            idx_label = ctk.CTkLabel(card, text=f"WP{i+1}", font=Theme.font(size=11, weight="bold"), 
+                                      text_color="#AB47BC", width=35)
+            idx_label.pack(side="left", padx=5)
+            
+            coord_label = ctk.CTkLabel(card, text=coord, font=Theme.font(size=10), 
+                                        text_color=Theme.TEXT_PRIMARY)
+            coord_label.pack(side="left", padx=5, fill="x", expand=True)
+            
+            # 클릭으로 선택
+            def _on_select(event, idx=i):
+                self._select_waypoint(idx)
+            card.bind("<Button-1>", _on_select)
+            idx_label.bind("<Button-1>", _on_select)
+            coord_label.bind("<Button-1>", _on_select)
+        
+        # 첫 번째 WP 자동 선택
+        if self._waypoints:
+            self._select_waypoint(0)
+    
+    def _select_waypoint(self, idx):
+        """웨이포인트 선택 시 상세 정보 표시"""
+        self._selected_wp_idx = idx
+        if idx >= len(self._waypoints):
+            return
+        
+        wp_data = self._waypoints[idx]
+        wp_obj = wp_data.get("wp", None)
+        q = wp_obj.j_pos if wp_obj and hasattr(wp_obj, 'j_pos') else wp_data.get("q", [])
+        p = wp_obj.t_pos if wp_obj and hasattr(wp_obj, 't_pos') else wp_data.get("p", [])
+        
+        lines = [f"▶ WP{idx+1} 상세 좌표:"]
+        if q and len(q) >= 6:
+            lines.append(f"  Joint: J1={q[0]:.2f} J2={q[1]:.2f} J3={q[2]:.2f} J4={q[3]:.2f} J5={q[4]:.2f} J6={q[5]:.2f}")
+        if p and len(p) >= 6:
+            lines.append(f"  Task:  X={p[0]*1000:.1f} Y={p[1]*1000:.1f} Z={p[2]*1000:.1f} Rx={p[3]:.1f} Ry={p[4]:.1f} Rz={p[5]:.1f}")
+        
+        if hasattr(self, 'wp_detail_label'):
+            self.wp_detail_label.configure(text="\n".join(lines), text_color=Theme.TEXT_PRIMARY)
+        
+        # 카드 하이라이트 갱신
+        if hasattr(self, 'wp_scroll'):
+            for i, card in enumerate(self.wp_scroll.winfo_children()):
+                if hasattr(card, 'configure'):
+                    card.configure(fg_color="#2E2E3E" if i == idx else Theme.BG_SURFACE)
                 
     def apply_changes(self, node_data):
         if "boundary" not in node_data: node_data["boundary"] = {}
         try:
-            node_data["boundary"]["velLevel"] = int(self.vel_entry.get())
-            node_data["boundary"]["accLevel"] = int(self.acc_entry.get())
+            node_data["boundary"]["velLevel"] = int(self.vel_slider.get())
+            node_data["boundary"]["accLevel"] = int(self.acc_slider.get())
             node_data["b_radius"] = float(self.blend_entry.get())
         except Exception: pass
-        if hasattr(self, 'pos_info_label'):
-            self.pos_info_label.configure(text="J1: 0.0, J2: 0.0 ... (저장됨)")
 
 class MoveByEditor:
     def __init__(self, parent_frame):
