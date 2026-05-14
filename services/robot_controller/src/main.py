@@ -5,7 +5,7 @@ import threading
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from src.infrastructure.mqtt_manager import MqttManager
-from indy_utils import indydcp_client
+from src.infrastructure.indy_utils import indydcp_client
 
 print("🤖 [Robot Controller] 시작됨 - MSA 환경")
 
