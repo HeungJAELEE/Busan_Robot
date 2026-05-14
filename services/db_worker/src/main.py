@@ -5,7 +5,7 @@ import time
 # 프로젝트 루트 경로를 시스템 패스에 추가하여 공통 모듈 임포트 허용
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
-from infrastructure.mqtt.mqtt_manager import MqttManager
+from src.infrastructure.mqtt_manager import MqttManager
 from infrastructure.repositories.database_repository import db_repository
 
 print("🗄 [DB Worker] 시작됨 - MSA 환경")

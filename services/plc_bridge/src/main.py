@@ -3,7 +3,7 @@ import os
 import time
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-from infrastructure.mqtt.mqtt_manager import MqttManager
+from src.infrastructure.mqtt_manager import MqttManager
 
 try:
     import pymcprotocol

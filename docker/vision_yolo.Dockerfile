@@ -2,5 +2,5 @@
 FROM python:3.10-slim
 WORKDIR /app
 # RUN pip install opencv-python-headless torch torchvision ultralytics paho-mqtt
-COPY services/vision_yolo/ ./services/vision_yolo/
+COPY services/vision_yolo/ .
 CMD ["python", "services/vision_yolo/main.py"]

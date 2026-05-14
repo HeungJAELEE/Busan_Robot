@@ -1,0 +1,2 @@
+paho-mqtt
+pymcprotocol\npytest\n
