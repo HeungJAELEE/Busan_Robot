@@ -179,7 +179,15 @@ class PalletizingWizardDialog(ctk.CTkToplevel):
             return
         
         total = self.rows * self.cols * self.layers
-        self.info_lbl.configure(text=f"총 {total}개 ({self.cols}×{self.rows}×{self.layers}층)")
+        virtual_cols = max(1, self.cols * 2 - 1)
+        virtual_rows = max(1, self.rows * 2 - 1)
+        self.info_lbl.configure(
+            text=(
+                f"총 {total}개 ({self.cols}×{self.rows}×{self.layers}층) | "
+                f"가상 격자 {virtual_cols}×{virtual_rows} "
+                f"(제품 {self.cols}×{self.rows} + 갭 {max(0, self.cols-1)}×{max(0, self.rows-1)})"
+            )
+        )
         
         self.canvas.delete("all")
         

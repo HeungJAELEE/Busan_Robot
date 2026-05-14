@@ -1,4 +1,5 @@
 import customtkinter as ctk
+import math
 from .base_editor import BaseNodeEditor
 from presentation.ui.theme import Theme
 
@@ -11,6 +12,7 @@ class PickPlaceEditor:
         self.style_seg_var = ctk.StringVar(value="단일 위치 사용")
         self.step3_frame = None
         self.pallet_name_label = None
+        self.pallet_calc_mode_var = ctk.StringVar(value="APK 끝점 보간")
 
     def _selected_robot_name(self):
         try:
@@ -181,10 +183,25 @@ class PickPlaceEditor:
         self.pallet_summary_lbl = ctk.CTkLabel(mn_frame, text="M×N×L 설정 후\n⚡계산 또는 🧱마법사 사용", 
                                                 font=Theme.font(size=11), text_color="#888")
         self.pallet_summary_lbl.pack(pady=(3, 10))
+        self.pallet_virtual_lbl = ctk.CTkLabel(mn_frame, text="APK 보간 미리보기 없음",
+                                                justify="left", font=Theme.font(size=10), text_color="#9FA8DA")
+        self.pallet_virtual_lbl.pack(padx=8, pady=(0, 8))
         
         # 2. 중단 프레임: 제품 크기 및 간격 (자동 계산용)
         spec_frame = ctk.CTkFrame(self.pallet_detail_frame, fg_color=Theme.BG_BASE, corner_radius=8)
         spec_frame.pack(fill="x", padx=15, pady=5)
+
+        mode_row = ctk.CTkFrame(spec_frame, fg_color="transparent")
+        mode_row.pack(fill="x", padx=5, pady=(5, 2))
+        ctk.CTkLabel(mode_row, text="계산 기준:", font=Theme.font(size=11, weight="bold")).pack(side="left", padx=3)
+        self.pallet_calc_mode = ctk.CTkSegmentedButton(
+            mode_row,
+            values=["APK 끝점 보간", "제품+갭 계산"],
+            variable=self.pallet_calc_mode_var,
+            command=lambda _=None: self._update_pallet_virtual_preview(),
+            width=230,
+        )
+        self.pallet_calc_mode.pack(side="left", padx=5)
         
         # Row 1: 제품 크기
         spec_row1 = ctk.CTkFrame(spec_frame, fg_color="transparent")
@@ -232,6 +249,7 @@ class PickPlaceEditor:
         self.layer_entry.pack(side="left", padx=2)
         
         ctk.CTkButton(spec_row2, text="⚡계산", width=60, height=26, fg_color="#1565C0", hover_color="#0D47A1", font=Theme.font(size=11), command=self._auto_calc_p2p3).pack(side="right", padx=3)
+        ctk.CTkButton(spec_row2, text="📐보간", width=60, height=26, fg_color="#455A64", hover_color="#607D8B", font=Theme.font(size=11), command=self._update_pallet_virtual_preview).pack(side="right", padx=3)
 
         # 3. 하단 프레임: P1, P2, P3 표 형태 레이아웃 (컴팩트)
         self.p_entries = {}
@@ -369,6 +387,7 @@ class PickPlaceEditor:
         self._draw_pallet_preview()
         
         # 자동으로 P2, P3 좌표 계산
+        self.pallet_calc_mode_var.set("제품+갭 계산")
         self._auto_calc_p2p3()
         
         print(f">> [마법사 연동] 설정 반영 완료: {result['cols']}×{result['rows']}×{result['layers']}층, 패턴={pattern_name}")
@@ -421,6 +440,7 @@ class PickPlaceEditor:
         total = sz[0] * sz[1] if len(sz) >= 2 else 1
         self.pallet_summary_lbl.configure(text=f"팔레트: {choice}\n{sz[0]}행×{sz[1]}열 = {total}개")
         self._draw_pallet_preview()
+        self._update_pallet_virtual_preview()
         
         print(f">> [팔레트 선택] '{choice}' → {sz[0]}×{sz[1]}, {len(pts)}개 포인트 로드")
 
@@ -446,6 +466,7 @@ class PickPlaceEditor:
             self.p_entries[p_key][ax].delete(0, "end")
             self.p_entries[p_key][ax].insert(0, f"{p_data[i]:.4f}")
         print(f">> [{p_name} 설정] 현재 실시간 좌표를 {p_name}으로 설정: X={p_data[0]:.3f} Y={p_data[1]:.3f} Z={p_data[2]:.3f}")
+        self._update_pallet_virtual_preview()
     
     def _auto_calc_p2p3(self):
         """
@@ -500,8 +521,86 @@ class PickPlaceEditor:
             self.layer_entry.insert(0, str(l_val))
             
             print(f">> [자동계산] 수평 기준 3D 다단 적재(P2, P3, P4) 생성 완료")
+            self._update_pallet_virtual_preview()
         except Exception as e:
             print(f">> [오류] 자동 계산 중 에러: {e}")
+
+    def _read_pallet_inputs(self):
+        axes = ["X", "Y", "Z", "Rx", "Ry", "Rz"]
+        p1 = [float(self.p_entries["P1 (시작점)"][ax].get()) for ax in axes]
+        p2 = [float(self.p_entries["P2 (행 끝점)"][ax].get()) for ax in axes]
+        p3 = [float(self.p_entries["P3 (열 끝점)"][ax].get()) for ax in axes]
+        p4 = [float(self.p_entries["P4 (층 끝점)"][ax].get()) for ax in axes]
+        m = max(1, int(self.m_entry.get() or 1))
+        n = max(1, int(self.n_entry.get() or 1))
+        l_val = max(1, int(self.layer_entry.get() or 1))
+        ix = float(self.prod_entries["Ix"].get() or 0)
+        iy = float(self.prod_entries["Iy"].get() or 0)
+        iz = float(self.prod_entries["Iz"].get() or 0)
+        gx = float(self.gap_entries["Gx"].get() or 0)
+        gy = float(self.gap_entries["Gy"].get() or 0)
+        return p1, p2, p3, p4, m, n, l_val, ix, iy, iz, gx, gy
+
+    def _build_pallet_virtual_grid(self, p1, p2, p3, p4, m, n, l_val, ix=0.0, iy=0.0, iz=0.0, gx=0.0, gy=0.0):
+        def dist_mm(a, b):
+            return math.sqrt(sum((float(b[i]) - float(a[i])) ** 2 for i in range(3))) * 1000.0
+
+        pitch_m_mm = dist_mm(p1, p2) / max(m - 1, 1) if m > 1 else 0.0
+        pitch_n_mm = dist_mm(p1, p3) / max(n - 1, 1) if n > 1 else 0.0
+        pitch_l_mm = dist_mm(p1, p4) / max(l_val - 1, 1) if l_val > 1 and any(abs(float(v)) > 1e-9 for v in p4[:3]) else float(iz or 0.0)
+        est_gap_x = pitch_m_mm - float(ix or 0.0) if ix else float(gx or 0.0)
+        est_gap_y = pitch_n_mm - float(iy or 0.0) if iy else float(gy or 0.0)
+        points = []
+        try:
+            from core.domains.robot.use_cases.motion_math import MotionMath
+            max_points = min(m * n * l_val, 100)
+            for layer in range(l_val):
+                for row in range(m):
+                    for col in range(n):
+                        if len(points) >= max_points:
+                            break
+                        p = MotionMath.compute_pallet_point(p1, p2, p3, m, n, row, col, p4=p4, size_l=l_val, current_l=layer)
+                        points.append({
+                            "slot": len(points) + 1,
+                            "layer": layer + 1,
+                            "m": row + 1,
+                            "n": col + 1,
+                            "p": [round(float(v), 6) for v in p[:6]],
+                        })
+        except Exception:
+            points = []
+        return {
+            "source": "apk_endpoint_interpolation" if self.pallet_calc_mode_var.get() == "APK 끝점 보간" else "product_gap_generated_endpoints",
+            "product_slots": [m, n, l_val],
+            "virtual_grid": [max(1, 2 * m - 1), max(1, 2 * n - 1), max(1, 2 * l_val - 1)],
+            "gap_slots": [max(0, m - 1), max(0, n - 1), max(0, l_val - 1)],
+            "pitch_mm": [round(pitch_m_mm, 3), round(pitch_n_mm, 3), round(pitch_l_mm, 3)],
+            "estimated_gap_mm": [round(est_gap_x, 3), round(est_gap_y, 3)],
+            "preview_points": points,
+        }
+
+    def _update_pallet_virtual_preview(self):
+        try:
+            p1, p2, p3, p4, m, n, l_val, ix, iy, iz, gx, gy = self._read_pallet_inputs()
+            grid = self._build_pallet_virtual_grid(p1, p2, p3, p4, m, n, l_val, ix, iy, iz, gx, gy)
+            product_total = m * n * l_val
+            visual = grid["virtual_grid"]
+            pitch = grid["pitch_mm"]
+            gap = grid["estimated_gap_mm"]
+            mode = self.pallet_calc_mode_var.get()
+            self.pallet_virtual_lbl.configure(
+                text=(
+                    f"{mode}\n"
+                    f"제품 {m}×{n}×{l_val} = {product_total}개\n"
+                    f"가상 격자 {visual[0]}×{visual[1]}×{visual[2]} "
+                    f"(제품+갭)\n"
+                    f"피치 M/N/L: {pitch[0]:.1f}/{pitch[1]:.1f}/{pitch[2]:.1f}mm\n"
+                    f"추정 갭 X/Y: {gap[0]:.1f}/{gap[1]:.1f}mm"
+                )
+            )
+        except Exception as e:
+            if hasattr(self, "pallet_virtual_lbl") and self.pallet_virtual_lbl:
+                self.pallet_virtual_lbl.configure(text=f"보간 미리보기 계산 실패: {e}")
     def _execute_pallet_move(self, p_name):
         """Move robot to one of the pallet reference points (P1/P2/P3/P4)."""
         from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
@@ -824,8 +923,12 @@ class PickPlaceEditor:
                 target["pallet"] = dict(target.get("pallet") or {})
                 target["pallet"]["palletId"] = node_data.get("target_pallet_id") or p_name
             
-            # 🔥 적용 버튼 누를 때마다 무조건 자동 계산 먼저 실행!
-            self._auto_calc_p2p3()
+            # APK 호환 기본값: 사용자가 입력한 P1/P2/P3 끝점을 보존하고 M/N/L로 보간한다.
+            # 제품+갭 계산 모드에서만 P2/P3/P4를 자동 생성한다.
+            if self.pallet_calc_mode_var.get() == "제품+갭 계산":
+                self._auto_calc_p2p3()
+            else:
+                self._update_pallet_virtual_preview()
             
             axes = ["X", "Y", "Z", "Rx", "Ry", "Rz"]
             try:
@@ -862,6 +965,7 @@ class PickPlaceEditor:
                     "size": [m, n, l_val],
                     "prod_size": [ix, iy, iz],
                     "gap_size": [gx, gy],
+                    "virtual_grid": self._build_pallet_virtual_grid(p1, p2, p3, p4, m, n, l_val, ix, iy, iz, gx, gy),
                     "points": [
                         {"p": p1, "q": q1},
                         {"p": p2, "q": q2},

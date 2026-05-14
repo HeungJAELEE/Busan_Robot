@@ -98,6 +98,8 @@ class AITeachingView:
             "- y축 -1mm 이동\n\n"
             "티칭:\n"
             "- 여기에 pick 위치 저장해\n"
+            "- 여기를 P2 행 끝점으로 저장해\n"
+            "- 여기를 P3 열 끝점으로 저장해\n"
             "- 여기에 place 위치 저장해\n"
             "- 2바이 2로 하고 4층이야\n"
             "- 제품 50x50x30 2x2 4층\n\n"
@@ -108,6 +110,11 @@ class AITeachingView:
         )
         ctk.CTkLabel(right, text=help_text, anchor="w", justify="left",
                      text_color=Theme.TEXT_SECONDARY, font=Theme.font(size=12)).pack(fill="x", padx=16, pady=8)
+        ctk.CTkLabel(right, text="팔레트 보간 미리보기", font=Theme.font(size=13, weight="bold"),
+                     text_color=Theme.INFO).pack(anchor="w", padx=16, pady=(10, 4))
+        self.preview_box = ctk.CTkTextbox(right, height=220, fg_color=Theme.BG_BASE,
+                                          text_color=Theme.TEXT_PRIMARY, font=ctk.CTkFont(family="Consolas", size=11))
+        self.preview_box.pack(fill="both", expand=True, padx=16, pady=(0, 16))
 
     def _entry_row(self, parent, label, default):
         row = ctk.CTkFrame(parent, fg_color="transparent")
@@ -197,10 +204,11 @@ class AITeachingView:
     def _gemini_parse_prompt(self, command_text=None):
         base = (
             "Convert the Korean robot teaching command into compact JSON only. "
-            "Allowed actions: move_relative, save_pick, save_place, set_pallet, read_pose, stop, unknown. "
-            "Fields: action, transcript, axis, distance_mm, m, n, l, product_x_mm, product_y_mm, product_z_mm. "
+            "Allowed actions: move_relative, save_pick, save_place, save_pallet_ref, set_pallet, read_pose, stop, unknown. "
+            "Fields: action, transcript, axis, distance_mm, point, m, n, l, product_x_mm, product_y_mm, product_z_mm. "
             "Rules: never invent coordinates; if the user asks for a small move, set axis and distance_mm; "
             "if the user says pick/place save here, use save_pick/save_place; "
+            "if the user says P2/P3/P4 endpoint save, use save_pallet_ref with point=P2/P3/P4; "
             "if the user answers pallet shape like 2x2 and 4 floors, use set_pallet. "
         )
         if command_text:
@@ -262,6 +270,9 @@ class AITeachingView:
             return {"action": "stop"}
         if "좌표" in s and ("읽" in s or "확인" in s or "현재" in s):
             return {"action": "read_pose"}
+        ref_point = self._parse_ref_point(s)
+        if ref_point:
+            return {"action": "save_pallet_ref", "point": ref_point}
         if "pick" in s and "저장" in s:
             return {"action": "save_pick"}
         if "place" in s and "저장" in s:
@@ -286,6 +297,19 @@ class AITeachingView:
         if any(word in s for word in ("마이너스", "음수", "minus")):
             distance = -abs(distance)
         return {"action": "move_relative", "axis": axis, "distance_mm": distance}
+
+    def _parse_ref_point(self, s):
+        if "저장" not in s and "잡" not in s:
+            return None
+        if re.search(r"\bp\s*1\b", s) or "시작점" in s:
+            return "P1"
+        if re.search(r"\bp\s*2\b", s) or "행 끝" in s or "행끝" in s:
+            return "P2"
+        if re.search(r"\bp\s*3\b", s) or "열 끝" in s or "열끝" in s:
+            return "P3"
+        if re.search(r"\bp\s*4\b", s) or "층 끝" in s or "층끝" in s:
+            return "P4"
+        return None
 
     def _contains_pallet_size(self, s):
         return bool(re.search(r"\d+\s*(?:바이|x|×|by)\s*\d+", s) or re.search(r"\d+\s*층", s))
@@ -315,6 +339,8 @@ class AITeachingView:
             self._capture_teach_point("pick")
         elif action_name == "save_place":
             self._capture_teach_point("place")
+        elif action_name == "save_pallet_ref":
+            self._capture_pallet_ref(str(action.get("point", "")).upper())
         elif action_name == "set_pallet":
             self._finish_pending_teach(action)
         elif action_name == "read_pose":
@@ -361,15 +387,36 @@ class AITeachingView:
         if not p or all(abs(float(v or 0.0)) < 1e-9 for v in p[:3]):
             self._log("현재 좌표를 읽지 못했습니다. 로봇 연결과 좌표 값을 확인하세요.")
             return
-        self.pending_teach = {"kind": kind, "robot": robot, "p": p, "q": q}
+        self.pending_teach = {"kind": kind, "robot": robot, "p": p, "q": q, "refs": {"P1": {"p": p, "q": q}}}
         self._log(f"{robot} 현재 위치를 {kind.upper()} 후보로 잡았습니다: P={self._fmt(p, 3)}")
-        self._log("제품 pitch와 팔레트 배열을 알려주세요. 예: 제품 50x50x30, 2바이 2로 하고 4층")
+        self._log("APK 방식이면 P2/P3 끝점을 추가 저장하세요. 예: '여기를 P2 행 끝점으로 저장해'")
+        self._log("이후 제품 크기와 배열을 알려주세요. 예: 제품 50x50x30, 2바이 2로 하고 4층")
+
+    def _capture_pallet_ref(self, point_name):
+        if point_name not in ("P1", "P2", "P3", "P4"):
+            self._log("팔레트 기준점은 P1/P2/P3/P4만 저장할 수 있습니다.")
+            return
+        if not self.pending_teach:
+            self._log("먼저 '여기에 pick 위치 저장해' 또는 '여기에 place 위치 저장해'로 P1을 잡아주세요.")
+            return
+        robot = self._selected_robot()
+        p = RobotControlUseCase.get_task_pos(robot)
+        q = RobotControlUseCase.get_joint_pos(robot)
+        if not p or all(abs(float(v or 0.0)) < 1e-9 for v in p[:3]):
+            self._log("현재 좌표를 읽지 못했습니다. 로봇 연결과 좌표 값을 확인하세요.")
+            return
+        self.pending_teach.setdefault("refs", {})[point_name] = {"p": p, "q": q}
+        if point_name == "P1":
+            self.pending_teach["p"] = p
+            self.pending_teach["q"] = q
+        self._log(f"{robot} {point_name} 기준점 저장: P={self._fmt(p, 3)}")
 
     def _finish_pending_teach(self, action):
         if not self.pending_teach:
             self._log("먼저 '여기에 pick 위치 저장해'처럼 기준 위치를 잡아주세요.")
             return
         data = dict(self.pending_teach)
+        data["refs"] = dict(self.pending_teach.get("refs", {}))
         data.update({
             "m": max(1, int(action.get("m", 1) or 1)),
             "n": max(1, int(action.get("n", 1) or 1)),
@@ -397,6 +444,7 @@ class AITeachingView:
         pallet_id = f"AI_{kind.upper()}_{new_id}"
         m, n, l = data["m"], data["n"], data["l"]
         p_data = self._make_pallet_data(data, pallet_id)
+        self._show_pallet_preview(data, p_data)
         if m * n * l > 1:
             config.setdefault("palletInfo", []).append({
                 "id": pallet_id,
@@ -482,22 +530,114 @@ class AITeachingView:
             nodes.insert(1 if nodes else 0, {"id": 2, "enable": True, "type": 2, "pId": 0, "varList": []})
 
     def _make_pallet_data(self, data, pallet_id):
-        p1 = [float(v or 0.0) for v in data["p"][:6]]
-        q = [float(v or 0.0) for v in data["q"][:6]]
+        p1, q1, p2, q2, p3, q3, p4, q4 = self._resolve_pallet_points(data)
+        q = q1
         unit = 1.0 if max(abs(v) for v in p1[:3]) > 10.0 else 0.001
-        dx = float(data["product_x_mm"]) * unit * max(data["m"] - 1, 0)
-        dy = float(data["product_y_mm"]) * unit * max(data["n"] - 1, 0)
-        dz = float(data["product_z_mm"]) * unit * max(data["l"] - 1, 0)
-        p2 = list(p1); p2[0] += dx
-        p3 = list(p1); p3[1] += dy
-        p4 = list(p1); p4[2] += dz
+        if p2 is None:
+            p2 = list(p1)
+            p2[0] += float(data["product_x_mm"]) * unit * max(data["m"] - 1, 0)
+            q2 = q
+        if p3 is None:
+            p3 = list(p1)
+            p3[1] += float(data["product_y_mm"]) * unit * max(data["n"] - 1, 0)
+            q3 = q
+        if p4 is None:
+            p4 = list(p1)
+            p4[2] += float(data["product_z_mm"]) * unit * max(data["l"] - 1, 0)
+            q4 = q
         points = [
-            {"name": f"{pallet_id}_P1", "q": q, "p": p1},
-            {"name": f"{pallet_id}_P2", "q": q, "p": p2},
-            {"name": f"{pallet_id}_P3", "q": q, "p": p3},
-            {"name": f"{pallet_id}_P4", "q": q, "p": p4},
+            {"name": f"{pallet_id}_P1", "q": q1, "p": p1},
+            {"name": f"{pallet_id}_P2", "q": q2, "p": p2},
+            {"name": f"{pallet_id}_P3", "q": q3, "p": p3},
+            {"name": f"{pallet_id}_P4", "q": q4, "p": p4},
         ]
-        return {"size": [data["m"], data["n"], data["l"]], "points": points}
+        virtual_grid = self._build_virtual_grid(data, p1, p2, p3, p4)
+        return {
+            "size": [data["m"], data["n"], data["l"]],
+            "prod_size": [data["product_x_mm"], data["product_y_mm"], data["product_z_mm"]],
+            "gap_size": virtual_grid["estimated_gap_mm"],
+            "points": points,
+            "virtual_grid": virtual_grid,
+        }
+
+    def _resolve_pallet_points(self, data):
+        refs = data.get("refs") or {}
+        p1 = [float(v or 0.0) for v in (refs.get("P1", {}).get("p") or data["p"])[:6]]
+        q1 = [float(v or 0.0) for v in (refs.get("P1", {}).get("q") or data["q"])[:6]]
+
+        def read_ref(name):
+            ref = refs.get(name) or {}
+            p = ref.get("p")
+            q = ref.get("q")
+            if not p:
+                return None, None
+            return [float(v or 0.0) for v in p[:6]], [float(v or 0.0) for v in (q or q1)[:6]]
+
+        p2, q2 = read_ref("P2")
+        p3, q3 = read_ref("P3")
+        p4, q4 = read_ref("P4")
+        return p1, q1, p2, q2, p3, q3, p4, q4
+
+    def _build_virtual_grid(self, data, p1, p2, p3, p4):
+        def dist_mm(a, b):
+            return (sum((float(b[i]) - float(a[i])) ** 2 for i in range(3)) ** 0.5) * 1000.0
+
+        m, n, l_val = data["m"], data["n"], data["l"]
+        pitch_m = dist_mm(p1, p2) / max(m - 1, 1) if m > 1 else 0.0
+        pitch_n = dist_mm(p1, p3) / max(n - 1, 1) if n > 1 else 0.0
+        pitch_l = dist_mm(p1, p4) / max(l_val - 1, 1) if l_val > 1 else 0.0
+        gap_x = pitch_m - float(data["product_x_mm"]) if data.get("product_x_mm") else 0.0
+        gap_y = pitch_n - float(data["product_y_mm"]) if data.get("product_y_mm") else 0.0
+        preview_points = []
+        try:
+            from core.domains.robot.use_cases.motion_math import MotionMath
+            max_points = min(m * n * l_val, 100)
+            for layer in range(l_val):
+                for row in range(m):
+                    for col in range(n):
+                        if len(preview_points) >= max_points:
+                            break
+                        p = MotionMath.compute_pallet_point(p1, p2, p3, m, n, row, col, p4=p4, size_l=l_val, current_l=layer)
+                        preview_points.append({
+                            "slot": len(preview_points) + 1,
+                            "layer": layer + 1,
+                            "m": row + 1,
+                            "n": col + 1,
+                            "p": [round(float(v), 6) for v in p[:6]],
+                        })
+        except Exception:
+            preview_points = []
+        source = "apk_endpoint_interpolation" if (data.get("refs") or {}).get("P2") or (data.get("refs") or {}).get("P3") else "product_pitch_generated_endpoints"
+        return {
+            "source": source,
+            "product_slots": [m, n, l_val],
+            "virtual_grid": [max(1, 2 * m - 1), max(1, 2 * n - 1), max(1, 2 * l_val - 1)],
+            "gap_slots": [max(0, m - 1), max(0, n - 1), max(0, l_val - 1)],
+            "pitch_mm": [round(pitch_m, 3), round(pitch_n, 3), round(pitch_l, 3)],
+            "estimated_gap_mm": [round(gap_x, 3), round(gap_y, 3)],
+            "preview_points": preview_points,
+        }
+
+    def _show_pallet_preview(self, data, p_data):
+        grid = p_data.get("virtual_grid", {})
+        text = (
+            f"{data['kind'].upper()} {data['m']}x{data['n']}x{data['l']}\n"
+            f"source: {grid.get('source', '-')}\n"
+            f"product slots: {grid.get('product_slots', [])}\n"
+            f"virtual grid: {grid.get('virtual_grid', [])} (product+gap)\n"
+            f"gap slots: {grid.get('gap_slots', [])}\n"
+            f"pitch mm: {grid.get('pitch_mm', [])}\n"
+            f"estimated gap mm: {grid.get('estimated_gap_mm', [])}\n\n"
+            "preview points:\n"
+        )
+        for pt in (grid.get("preview_points") or [])[:12]:
+            text += f"#{pt['slot']:02d} L{pt['layer']} M{pt['m']} N{pt['n']} P={pt['p'][:3]}\n"
+        if len(grid.get("preview_points") or []) > 12:
+            text += f"... {len(grid.get('preview_points', []))} points stored in preview\n"
+        if hasattr(self, "preview_box"):
+            self.preview_box.delete("1.0", ctk.END)
+            self.preview_box.insert("1.0", text)
+        self._log(f"가상 격자 {grid.get('virtual_grid', [])}, 피치(mm) {grid.get('pitch_mm', [])}, 추정 갭(mm) {grid.get('estimated_gap_mm', [])}")
 
     @staticmethod
     def _approach_block(distance_mm, direction):
