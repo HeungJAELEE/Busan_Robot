@@ -386,69 +386,122 @@ class ProgramTreeEditor:
                             
                             parent_item = node_map.get(pid, main_node)
                             node_str = f" Node ({name})"
-                            # ─── Conty 실제 타입 매핑 ─────────────
-                            # ─── Conty 실제 타입 코드 (학습파일 12개 분석 기반) ───
+                            # ─── Conty 실제 타입 매핑 (120+ 학습파일 기반) ───
                             if t == 999: node_str = " Program Settings"
-                            elif t == 1: node_str = f" JointMove ({name})" if name else " JointMove"
                             elif t in [2, 3]:  # Variables
                                 vl = getattr(node, "varList", getattr(node, "__raw__", {}).get("varList", []))
                                 node_str = f" Variables ({len(vl)}개)" if vl else " Variables"
+                            elif t == 102:  # ★ JointMove
+                                wp_count = len(getattr(node, "resolved_waypoints", []))
+                                q = getattr(node, "target_q", [0]*6)
+                                p = getattr(node, "target_p", [0]*6)
+                                # XYZ 좌표 표시 (mm 단위)
+                                try:
+                                    xyz = f"X{p[0]*1000:.0f} Y{p[1]*1000:.0f} Z{p[2]*1000:.0f}"
+                                except:
+                                    xyz = ""
+                                if wp_count > 1:
+                                    node_str = f" JointMove ({name}, {wp_count}pts) [{xyz}]" if name else f" JointMove ({wp_count}pts) [{xyz}]"
+                                elif name:
+                                    node_str = f" JointMove ({name}) [{xyz}]"
+                                else:
+                                    node_str = f" JointMove [{xyz}]"
+                            elif t == 103:  # ★ FrameMove
+                                wp_count = len(getattr(node, "resolved_waypoints", []))
+                                q = getattr(node, "target_q", [0]*6)
+                                p = getattr(node, "target_p", [0]*6)
+                                try:
+                                    xyz = f"X{p[0]*1000:.0f} Y{p[1]*1000:.0f} Z{p[2]*1000:.0f}"
+                                except:
+                                    xyz = ""
+                                if wp_count > 1:
+                                    node_str = f" FrameMove ({name}, {wp_count}pts) [{xyz}]" if name else f" FrameMove ({wp_count}pts) [{xyz}]"
+                                elif name:
+                                    node_str = f" FrameMove ({name}) [{xyz}]"
+                                else:
+                                    node_str = f" FrameMove [{xyz}]"
+                            elif t == 1:  # Legacy JointMove
+                                node_str = f" JointMove ({name})" if name else " JointMove"
                             elif t == 4:  # SmartDO
                                 do_list = getattr(node, "doList", getattr(node, "__raw__", {}).get("doList", []))
                                 if do_list:
                                     pins = ", ".join(f"DO{d['idx']}={'ON' if d['value'] else 'OFF'}" for d in do_list)
-                                    node_str = f" Smart DO ({pins})"
+                                    node_str = f" DO 출력 ({pins})"
                                 else:
-                                    node_str = " Smart DO"
+                                    node_str = " DO 출력"
                             elif t == 5:  # SmartAO
-                                node_str = " Smart AO"
+                                node_str = " AO 출력"
                             elif t == 6:  # EndTool DO
-                                node_str = " EndTool DO"
+                                node_str = " 엔드툴 DO"
                             elif t == 20:  # Loop
-                                node_str = " Loop"
-                            elif t == 21:  # loopBreak
-                                node_str = " Loop Break"
+                                count = getattr(node, "count", getattr(node, "__raw__", {}).get("count", None))
+                                if count is not None and count > 0:
+                                    node_str = f" Loop ({count}회)"
+                                else:
+                                    node_str = " Loop (무한)"
+                            elif t == 21:  # LoopBreak
+                                node_str = " Break"
                             elif t == 22:  # Wait (시간)
                                 time_v = getattr(node, "time", getattr(node, "__raw__", {}).get("time", 0))
                                 node_str = f" Wait ({time_v}s)"
-                            elif t == 23:  # if (변수 조건)
-                                node_str = f" If Var ({name})" if name else " If Var"
-                            elif t == 24:  # if (조건)
-                                node_str = f" If ({name})" if name else " If"
-                            elif t == 28:  # Wait For [DI]
+                            elif t == 23:  # Switch
+                                time_v = getattr(node, "time", getattr(node, "__raw__", {}).get("time", 0))
+                                node_str = f" Switch ({time_v}s)"
+                            elif t == 24:  # If (변수 조건)
+                                cond = getattr(node, "cond", getattr(node, "__raw__", {}).get("cond", {}))
+                                if cond and cond.get("left", {}).get("value"):
+                                    lv = cond["left"]["value"]
+                                    op_map = {0: "==", 1: "!=", 2: ">", 3: "<", 4: ">=", 5: "<="}
+                                    op = op_map.get(cond.get("op", 0), "==")
+                                    rv = cond.get("right", {}).get("value", "?")
+                                    node_str = f" If ({lv} {op} {rv})"
+                                else:
+                                    node_str = " If"
+                            elif t == 25:  # Elif (변수 조건)
+                                cond = getattr(node, "cond", getattr(node, "__raw__", {}).get("cond", {}))
+                                if cond and cond.get("left", {}).get("value"):
+                                    lv = cond["left"]["value"]
+                                    op_map = {0: "==", 1: "!=", 2: ">", 3: "<", 4: ">=", 5: "<="}
+                                    op = op_map.get(cond.get("op", 0), "==")
+                                    rv = cond.get("right", {}).get("value", "?")
+                                    node_str = f" Elif ({lv} {op} {rv})"
+                                else:
+                                    node_str = " Elif"
+                            elif t == 26:  # Else
+                                node_str = " Else"
+                            elif t == 28:  # Wait (DI 대기)
                                 di_list = getattr(node, "diList", getattr(node, "__raw__", {}).get("diList", []))
                                 time_v = getattr(node, "time", getattr(node, "__raw__", {}).get("time", 0))
                                 if di_list:
-                                    pins = ", ".join(f"DI{d['idx']}" for d in di_list)
-                                    node_str = f" Wait For [DI] ({pins})"
+                                    conds = ", ".join(f"DI{d['idx']}={'ON' if d.get('value',1) else 'OFF'}" for d in di_list)
+                                    node_str = f" Wait ({conds}, {time_v}s)"
                                 else:
-                                    node_str = f" Wait For [DI] (DI 미지정)"
-                            elif t == 29:  # waitFor[DI] / if[DI] (자식 유무로 구분)
+                                    node_str = f" Wait (DI, {time_v}s)"
+                            elif t == 29:  # If (DI 조건)
                                 di_list = getattr(node, "diList", getattr(node, "__raw__", {}).get("diList", []))
-                                # 자식이 있으면 if[DI], 없으면 waitFor[DI]
-                                has_children = any(n2.pId == cid for n2 in program.nodes if hasattr(n2, 'pId'))
                                 if di_list:
-                                    pins = ", ".join(f"DI{d['idx']}" for d in di_list)
-                                    if has_children:
-                                        node_str = f" If [DI] ({pins})"
-                                    else:
-                                        node_str = f" Wait For [DI] ({pins})"
+                                    conds = ", ".join(f"DI{d['idx']}={'ON' if d.get('value',1) else 'OFF'}" for d in di_list)
+                                    node_str = f" If ({conds})"
                                 else:
-                                    node_str = " If [DI]" if has_children else " Wait For [DI]"
-                            elif t == 40:  # toolCommand
+                                    node_str = " If (DI)"
+                            elif t == 30:  # Else (DI)
+                                di_list = getattr(node, "diList", getattr(node, "__raw__", {}).get("diList", []))
+                                if di_list:
+                                    conds = ", ".join(f"DI{d['idx']}={'ON' if d.get('value',1) else 'OFF'}" for d in di_list)
+                                    node_str = f" Elif ({conds})"
+                                else:
+                                    node_str = " Else (DI)"
+                            elif t == 32:  # SpeedRatio
+                                spd = getattr(node, "prgSpdRatio", getattr(node, "__raw__", {}).get("prgSpdRatio", 100))
+                                node_str = f" Speed ({spd}%)"
+                            elif t == 40:  # ToolCommand
                                 raw = getattr(node, "__raw__", {})
                                 cmd = raw.get("toolCmd", "")
                                 node_str = f" Tool Command ({cmd})" if cmd else " Tool Command"
-                            elif t == 41:  # toolSensing
-                                raw = getattr(node, "__raw__", {})
-                                sens = raw.get("sensName", "")
-                                node_str = f" Tool Sensing ({sens})" if sens else " Tool Sensing"
-                            elif t == 100:  # Home
-                                node_str = f" Home ({name})" if name else " Home"
-                            elif t == 102:  # FrameMove (이름 있음)
-                                node_str = f" FrameMove ({name})" if name else " FrameMove"
-                            elif t == 103:  # FrameMove:Absolute
-                                node_str = f" FrameMove ({name})" if name else " FrameMove"
+                            elif t == 41:  # Stop
+                                node_str = " Stop"
+                            elif t == 100:  # Folder
+                                node_str = f" Folder ({name})" if name else " Folder"
                             elif t == 200: node_str = f" Pick Group ({name})" if name else " Pick Group"
                             elif t == 201: node_str = f" Pick ({name})" if name else " Pick"
                             elif t == 202: node_str = f" Place ({name})" if name else " Place"
@@ -471,13 +524,25 @@ class ProgramTreeEditor:
                                 "__raw__": getattr(node, "__raw__", {}),
                             }
                             
-                            # ─── Conty 실제 타입별 데이터 (수정됨) ─────────
-                            if t == 1:  # JointMove
+                            # ─── Conty 실제 타입별 데이터 (120+ 학습파일 기반) ─────────
+                            if t in [102, 103]:  # ★ JointMove / FrameMove
                                 self.node_data[n_id]["t_type"] = "move"
-                                raw = getattr(node, "__raw__", {})
-                                target = raw.get("target", {})
-                                self.node_data[n_id]["boundary"] = target.get("boundary", {"velLevel": 5, "accLevel": 5})
-                                self.node_data[n_id]["tcp"] = target.get("tcp", [0,0,0,0,0,0])
+                                self.node_data[n_id]["name"] = name
+                                self.node_data[n_id]["boundary"] = getattr(node, "boundary", {"velLevel": 5, "accLevel": 5})
+                                self.node_data[n_id]["tcp"] = getattr(node, "tcp", [0,0,0,0,0,0])
+                                self.node_data[n_id]["refFrame"] = getattr(node, "refFrame", {"type": 1, "tref": [0,0,0,0,0,0]})
+                                self.node_data[n_id]["intpl"] = getattr(node, "intpl", 0)
+                                self.node_data[n_id]["move_type"] = t  # 102=Joint, 103=Frame
+                                # 다중 웨이포인트 저장
+                                resolved = getattr(node, "resolved_waypoints", [])
+                                self.node_data[n_id]["waypoints"] = [
+                                    {"id": wp["id"], "q": wp["wp"].j_pos, "p": wp["wp"].t_pos}
+                                    for wp in resolved
+                                ]
+                            
+                            elif t == 1:  # Legacy JointMove
+                                self.node_data[n_id]["t_type"] = "move"
+                                self.node_data[n_id]["move_type"] = 102
 
                             elif t in [2, 3]:  # Variables
                                 raw = getattr(node, "__raw__", {})
@@ -496,34 +561,32 @@ class ProgramTreeEditor:
                                 self.node_data[n_id]["endtoolDoList"] = raw.get("endtoolDoList", [])
 
                             elif t == 20:  # Loop
-                                raw = getattr(node, "__raw__", {})
-                                self.node_data[n_id]["count"] = raw.get("count", getattr(node, "count", -1))
+                                self.node_data[n_id]["count"] = getattr(node, "count", getattr(node, "__raw__", {}).get("count", -1))
                                 
-                            elif t == 21:  # loopBreak (필드 없음)
+                            elif t == 21:  # LoopBreak
                                 pass
 
-                            elif t in [22, 28]:  # Wait (시간 대기)
+                            elif t in [22, 23, 28]:  # Wait (시간/DI) / Switch
                                 self.node_data[n_id]["time"] = getattr(node, "time", getattr(node, "__raw__", {}).get("time", 0))
+                                self.node_data[n_id]["diList"] = getattr(node, "diList", getattr(node, "__raw__", {}).get("diList", []))
+                                self.node_data[n_id]["cond"] = getattr(node, "cond", getattr(node, "__raw__", {}).get("cond", {}))
 
-                            elif t in [23, 24]:  # if (변수/조건)
-                                raw = getattr(node, "__raw__", {})
-                                self.node_data[n_id]["cond"] = raw.get("cond", {})
+                            elif t in [24, 25]:  # If / Else If (변수 조건)
+                                self.node_data[n_id]["cond"] = getattr(node, "cond", getattr(node, "__raw__", {}).get("cond", {}))
                                 
-                            elif t == 29:  # waitFor[DI] / if[DI]
+                            elif t == 26:  # Else (무조건)
+                                pass
+                                
+                            elif t in [29, 30]:  # If[DI] / WaitFor[DI] / Else[DI]
                                 self.node_data[n_id]["diList"] = getattr(node, "diList", getattr(node, "__raw__", {}).get("diList", []))
                                 self.node_data[n_id]["endtoolDiList"] = getattr(node, "endtoolDiList", getattr(node, "__raw__", {}).get("endtoolDiList", []))
 
-                            elif t in [40, 41]:  # toolCommand / toolSensing
+                            elif t in [40, 41]:  # ToolCommand / ToolSensing
                                 raw = getattr(node, "__raw__", {})
                                 self.node_data[n_id]["toolCmd"] = raw.get("toolCmd", "")
                                 self.node_data[n_id]["sensName"] = raw.get("sensName", "")
 
-                            elif t in [102, 103]:  # FrameMove
-                                self.node_data[n_id]["t_type"] = "move"
-                                raw = getattr(node, "__raw__", {})
-                                self.node_data[n_id]["name"] = raw.get("name", name)
-                                
-                            elif t in [201, 202]:  # Place / Pallet
+                            elif t in [201, 202]:  # Pick / Place
                                 self.node_data[n_id]["target_type"] = getattr(node, "target_type", 0)
                                 self.node_data[n_id]["t_type"] = getattr(node, "target_type", 0)
                                 self.node_data[n_id]["target_pallet_name"] = getattr(node, "target_pallet_name", "")
