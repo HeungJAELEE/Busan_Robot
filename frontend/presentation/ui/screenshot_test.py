@@ -1,5 +1,5 @@
 import sys, os
-sys.path.insert(0, '/Users/leejaeheung/Documents/Busan_Project/indydcp_example')
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 import customtkinter as ctk
 from presentation.ui.robot_hmi.editors.process_editors import PickPlaceEditor
 

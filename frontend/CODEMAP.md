@@ -2,7 +2,7 @@
 
 > 디버깅/수정 시 **이 파일을 먼저 참조**하여 해당 기능의 정확한 위치로 바로 이동할 것.
 
-프로젝트 루트: `/Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/`
+프로젝트 루트: `Indy7_HMI_Clean/`
 
 ---
 

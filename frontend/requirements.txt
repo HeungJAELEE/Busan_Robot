@@ -1,9 +1,27 @@
-customtkinter>=5.2.0
-numpy>=1.24.0
-scipy>=1.10.0
-paho-mqtt>=1.6.1
-PyMySQL>=1.0.2
-pyserial>=3.5
-tkcap>=0.0.11
-PyYAML>=6.0
-pytest>=7.0.0
+# ============================================
+# Indy7 HMI Frontend - 필수 패키지 목록
+# ============================================
+# 설치 명령어: pip install -r requirements.txt
+# ============================================
+
+# ── UI 프레임워크 ──
+customtkinter>=5.2.0         # 모던 다크모드 데스크톱 GUI
+
+# ── 수학/과학 연산 ──
+numpy>=1.24.0                # 좌표 변환, 행렬 연산, 순운동학 계산
+scipy>=1.10.0                # 회전 행렬 / 보간 계산 (motion_math)
+matplotlib>=3.7.0            # 3D 로봇 뷰어 그래프 (Digital Twin)
+
+# ── 통신 ──
+paho-mqtt>=2.0.0             # MQTT 중앙 통신 허브 클라이언트
+pyserial>=3.5                # 시리얼 통신 (그리퍼 등 외부 장비)
+
+# ── 데이터베이스 ──
+PyMySQL>=1.0.2               # MySQL FA DB 연결 (MES 작업이력)
+
+# ── 유틸리티 ──
+PyYAML>=6.0                  # 설정 파일 파싱
+Pillow>=9.0.0                # 이미지 처리 (UI 아이콘 등)
+
+# ── 개발/테스트 ──
+pytest>=7.0.0                # TDD 단위 테스트 프레임워크

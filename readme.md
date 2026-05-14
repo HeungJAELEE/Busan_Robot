@@ -36,7 +36,7 @@ Neuromeka(뉴로메카) **Indy7 협동 로봇**을 위한 PC 기반 HMI 소프�
 ### 실행 명령어
 터미널을 열고 아래 명령어를 입력합니다.
 ```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/frontend
+cd frontend
 python run_ui_only.py
 ```
 

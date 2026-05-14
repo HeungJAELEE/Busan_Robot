@@ -8,18 +8,24 @@
 ---
 
 ## 🚀 실행 방법
+
+### 현재 방식 (도커 없이, UI에서 직접 제어)
+```bash
+cd ../frontend
+python run_ui_only.py
+```
+UI가 뜨면 우측 상단 **[🔌 서비스 관리]** 버튼을 눌러 각 백엔드 서비스를 ON/OFF 합니다.
+
+### 향후 도커 도입 시
 ```bash
 # 전체 서비스 빌드 & 백그라운드 실행
-docker-compose up -d
-
-# 특정 서비스만 실행
-docker-compose up db_worker
+docker compose up -d
 
 # 로그 실시간 확인
-docker-compose logs -f robot_controller
+docker compose logs -f robot_controller
 
 # 전체 종료
-docker-compose down
+docker compose down
 ```
 
 ---

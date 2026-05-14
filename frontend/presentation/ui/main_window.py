@@ -32,9 +32,8 @@ class ModernContyApp(ctk.CTk):
         self.title("Indy7 Command Center (DDD Architecture)")
         self.geometry("1400x900")
         
-        # MQTT 브로커 연결 (HMI에서 데이터 발송용)
+        # MQTT 브로커 인스턴스 (서비스 관리 패널에서 ON 할 때 연결됨)
         self.mqtt_broker = MqttManager(client_id="hmi_main")
-        self.mqtt_broker.connect_and_loop()
         
         self.log_queue = queue.Queue()
         self._poll_log_queue()

@@ -2641,17 +2641,192 @@ class OptionsEditor:
 class LogViewer:
     def __init__(self, parent_frame):
         self.parent = parent_frame
+        self._poll_id = None
+        
     def render(self):
         for w in self.parent.winfo_children(): w.destroy()
         
         f = ctk.CTkFrame(self.parent, fg_color=Theme.BG_BASE, corner_radius=12)
-        f.pack(expand=True, padx=40, pady=40, fill="both")
+        f.pack(expand=True, padx=40, pady=30, fill="both")
         
-        ctk.CTkLabel(f, text="📋 SYSTEM LOGS", font=Theme.font(size=18, weight="bold")).pack(pady=20)
+        ctk.CTkLabel(f, text="📡 통신 체크 & 수동 연결", font=Theme.font(size=20, weight="bold"), text_color=Theme.TEXT_PRIMARY).pack(pady=(20, 5))
+        ctk.CTkLabel(f, text="각 서비스의 연결 상태를 확인하고 수동으로 연결/해제할 수 있습니다", font=Theme.font(size=12), text_color=Theme.TEXT_SECONDARY).pack(pady=(0, 15))
         
-        self.textbox = ctk.CTkTextbox(f, fg_color=Theme.BG_BASE, text_color="#00FF41", font=ctk.CTkFont(family="Consolas"))
-        self.textbox.pack(fill="both", expand=True, padx=20, pady=20)
-        self.textbox.insert("end", "[SYS] Log Viewer Initialized.\n[SYS] Ready to display events.\n")
+        # ── 서비스 카드 리스트 ──
+        self.cards = {}
+        services = [
+            {"key": "robot_plc", "icon": "🤖", "name": "로봇 + PLC (전체 연결)", "desc": "Indy7 IndyDCP 소켓 + 미쓰비시 PLC 동시 연결", "color": "#00E676"},
+            {"key": "mqtt",      "icon": "📮", "name": "중앙 통신 허브",        "desc": "MQTT Broker (Mosquitto) 연결",             "color": "#00B0FF"},
+            {"key": "db",        "icon": "🗄",  "name": "MySQL Database",      "desc": "FA MES 데이터베이스 연결",                   "color": "#FF9100"},
+            {"key": "vision_a",  "icon": "👁",  "name": "Vision A",            "desc": "카메라 A — 메인 작업대 YOLO 추론",           "color": "#FF1744"},
+            {"key": "vision_b",  "icon": "👁",  "name": "Vision B",            "desc": "카메라 B — 보조 작업대 YOLO 추론",           "color": "#FF6D00"},
+            {"key": "vision_c",  "icon": "👁",  "name": "Vision C",            "desc": "카메라 C — 품질 검사 YOLO 추론",             "color": "#FFAB00"},
+        ]
+        
+        cards_frame = ctk.CTkFrame(f, fg_color="transparent")
+        cards_frame.pack(fill="both", expand=True, padx=20, pady=5)
+        
+        for svc in services:
+            card = ctk.CTkFrame(cards_frame, fg_color=Theme.BG_SURFACE, corner_radius=10, height=60)
+            card.pack(fill="x", pady=4)
+            card.pack_propagate(False)
+            
+            inner = ctk.CTkFrame(card, fg_color="transparent")
+            inner.pack(fill="x", padx=15, pady=10)
+            
+            # 왼쪽: 상태 표시등 + 이름
+            left = ctk.CTkFrame(inner, fg_color="transparent")
+            left.pack(side="left")
+            
+            indicator = ctk.CTkLabel(left, text="🔴", font=ctk.CTkFont(size=16), width=25)
+            indicator.pack(side="left")
+            
+            name_frame = ctk.CTkFrame(left, fg_color="transparent")
+            name_frame.pack(side="left", padx=10)
+            ctk.CTkLabel(name_frame, text=f"{svc['icon']} {svc['name']}", font=Theme.font(size=14, weight="bold"), text_color=svc["color"]).pack(anchor="w")
+            ctk.CTkLabel(name_frame, text=svc["desc"], font=Theme.font(size=11), text_color=Theme.TEXT_SECONDARY).pack(anchor="w")
+            
+            # 오른쪽: 상태 텍스트 + 연결/해제 버튼
+            right = ctk.CTkFrame(inner, fg_color="transparent")
+            right.pack(side="right")
+            
+            status_label = ctk.CTkLabel(right, text="⚪ 대기", font=Theme.font(size=12), text_color=Theme.TEXT_SECONDARY, width=100)
+            status_label.pack(side="left", padx=10)
+            
+            connect_btn = ctk.CTkButton(right, text="연결", width=70, height=30, corner_radius=8,
+                                         fg_color=Theme.SUCCESS, hover_color="#00C853",
+                                         command=lambda k=svc["key"]: self._on_connect(k))
+            connect_btn.pack(side="left", padx=3)
+            
+            disconnect_btn = ctk.CTkButton(right, text="해제", width=70, height=30, corner_radius=8,
+                                            fg_color="#B71C1C", hover_color="#D32F2F",
+                                            command=lambda k=svc["key"]: self._on_disconnect(k))
+            disconnect_btn.pack(side="left", padx=3)
+            
+            self.cards[svc["key"]] = {"indicator": indicator, "status": status_label, "connect": connect_btn, "disconnect": disconnect_btn}
+        
+        # ── 하단 로그 영역 ──
+        ctk.CTkLabel(f, text="📋 연결 로그", font=Theme.font(size=13, weight="bold"), text_color=Theme.TEXT_SECONDARY).pack(anchor="w", padx=25, pady=(10, 0))
+        self.textbox = ctk.CTkTextbox(f, height=120, fg_color="#0D1117", text_color="#00FF41", font=ctk.CTkFont(family="Consolas", size=12))
+        self.textbox.pack(fill="x", padx=20, pady=(5, 20))
+        self._log("[SYS] 통신 체크 화면 초기화 완료")
+        self._log("[SYS] 연결 버튼을 눌러 수동으로 서비스에 접속하세요")
+        
+        # 상태 폴링 시작
+        self._poll_status()
+    
+    def _log(self, msg):
+        import datetime
+        ts = datetime.datetime.now().strftime("%H:%M:%S")
+        self.textbox.insert("end", f"[{ts}] {msg}\n")
+        self.textbox.see("end")
+    
+    def _on_connect(self, key):
+        if key == "robot_plc":
+            try:
+                from core.domains.robot.communication.client_manager import robot_manager
+                from core.service_manager import service_mgr
+                robot_manager.connect()
+                service_mgr.services["plc"].start()
+                self._log("🤖 [Robot+PLC] 전체 연결 시도 중... (IndyDCP + MC Protocol)")
+            except Exception as e:
+                self._log(f"🤖 [Robot+PLC] 연결 실패: {e}")
+        elif key == "mqtt":
+            try:
+                from core.service_manager import service_mgr
+                service_mgr.services["mqtt"].start()
+                self._log("📮 [MQTT] 중앙 통신 허브 연결 시도 중...")
+            except Exception as e:
+                self._log(f"📮 [MQTT] 연결 실패: {e}")
+        elif key == "db":
+            try:
+                from core.service_manager import service_mgr
+                service_mgr.services["db"].start()
+                self._log("🗄 [DB] MySQL 연결 시도 중...")
+            except Exception as e:
+                self._log(f"🗄 [DB] 연결 실패: {e}")
+        elif key.startswith("vision_"):
+            cam_label = key.replace("vision_", "").upper()
+            try:
+                from core.service_manager import service_mgr
+                service_mgr.services["vision"].start()
+                self._log(f"👁 [Vision {cam_label}] 카메라 {cam_label} 시작 시도 중...")
+            except Exception as e:
+                self._log(f"👁 [Vision {cam_label}] 시작 실패: {e}")
+    
+    def _on_disconnect(self, key):
+        if key == "robot_plc":
+            try:
+                from core.domains.robot.communication.client_manager import robot_manager
+                from core.service_manager import service_mgr
+                robot_manager.disconnect()
+                svc = service_mgr.services.get("plc")
+                if svc and svc.is_running:
+                    svc.stop()
+                self._log("🤖 [Robot+PLC] 전체 연결 해제 완료")
+            except Exception as e:
+                self._log(f"🤖 [Robot+PLC] 해제 실패: {e}")
+        elif key.startswith("vision_"):
+            cam_label = key.replace("vision_", "").upper()
+            try:
+                from core.service_manager import service_mgr
+                svc = service_mgr.services.get("vision")
+                if svc and svc.is_running:
+                    svc.stop()
+                self._log(f"👁 [Vision {cam_label}] 카메라 {cam_label} 중지 완료")
+            except Exception as e:
+                self._log(f"👁 [Vision {cam_label}] 해제 실패: {e}")
+        else:
+            try:
+                from core.service_manager import service_mgr
+                svc = service_mgr.services.get(key)
+                if svc and svc.is_running:
+                    svc.stop()
+                    self._log(f"{svc.icon} [{svc.name}] 서비스 중지 완료")
+                else:
+                    self._log(f"[{key}] 이미 중지 상태입니다")
+            except Exception as e:
+                self._log(f"[{key}] 해제 실패: {e}")
+    
+    def _poll_status(self):
+        """500ms마다 각 서비스 연결 상태를 UI에 반영"""
+        try:
+            from core.service_manager import service_mgr
+            from core.domains.robot.communication.client_manager import robot_manager
+            
+            # Robot+PLC 전체 상태 (둘 다 연결되어야 🟢)
+            robot_ok = robot_manager.is_connected() if hasattr(robot_manager, 'is_connected') else False
+            plc_ok = service_mgr.services["plc"].is_running
+            self._update_card("robot_plc", robot_ok or plc_ok)
+            
+            # MQTT
+            self._update_card("mqtt", service_mgr.services["mqtt"].is_running)
+            
+            # DB
+            self._update_card("db", service_mgr.services["db"].is_running)
+            
+            # Vision A/B/C (현재는 하나의 비전 서비스를 공유, 향후 개별 분리 가능)
+            vision_running = service_mgr.services["vision"].is_running
+            for cam in ["vision_a", "vision_b", "vision_c"]:
+                self._update_card(cam, vision_running if cam == "vision_a" else False)
+        except Exception:
+            pass
+        
+        try:
+            self._poll_id = self.parent.after(500, self._poll_status)
+        except Exception:
+            pass
+    
+    def _update_card(self, key, is_connected):
+        card = self.cards.get(key)
+        if not card:
+            return
+        if is_connected:
+            card["indicator"].configure(text="🟢")
+            card["status"].configure(text="✅ 연결됨", text_color="#00E676")
+        else:
+            card["indicator"].configure(text="🔴")
+            card["status"].configure(text="⚪ 대기", text_color=Theme.TEXT_SECONDARY)
 
 class RobotHmiView:
     def __init__(self, parent_tab, on_back=None):
@@ -2674,7 +2849,7 @@ class RobotHmiView:
         nav_bar.grid(row=0, column=0, sticky="ew")
         nav_container = ctk.CTkFrame(nav_bar, fg_color="transparent")
         nav_container.pack(expand=True)
-        items = ["이전으로", "옵션", "로봇설정", "프로그램", "로그", "리셋"]
+        items = ["이전으로", "옵션", "로봇설정", "프로그램", "통신체크", "리셋"]
         for item in items:
             btn = ctk.CTkButton(nav_container, text=item, fg_color="transparent", text_color="#A0A0A0", 
                                 font=Theme.font(size=12, weight="bold"), hover_color=Theme.BG_SURFACE, corner_radius=0,
@@ -2694,7 +2869,7 @@ class RobotHmiView:
             ProgramTreeEditor(self.content_frame).render()
         elif name == "옵션":
             OptionsEditor(self.content_frame).render()
-        elif name == "로그":
+        elif name == "통신체크":
             LogViewer(self.content_frame).render()
         else:
             ctk.CTkLabel(self.content_frame, text=f"{name} 뷰는 아직 준비되지 않았습니다.").pack(expand=True)
