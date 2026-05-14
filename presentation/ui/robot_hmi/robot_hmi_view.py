@@ -1,6 +1,6 @@
 import customtkinter as ctk
 from core.domains.robot.communication.client_manager import robot_manager
-from infrastructure.repositories.database_repository import db_repository
+from infrastructure.mqtt.mqtt_manager import mqtt_broker
 from .editors.motion_editors import JogController, MoveEditor, MoveByEditor, MoveCEditor, MoveHomeEditor, ForceEditor
 from .editors.logic_editors import (LoopEditor, MathEditor, CallEditor, IfEditor, WaitEditor, WaitDIEditor, WaitAIEditor,
                                     CommentEditor, StopEditor, SwitchEditor, FolderEditor,
@@ -1841,7 +1841,8 @@ class ProgramTreeEditor:
                                     time.sleep(0.2)
                                     print(f">>     3) {'Hold' if is_pick else 'Release'}")
                                     _do_tool_action(is_pick)
-                                    db_repository.insert_task_completion(robot_manager.get_active_robot_name(), 'Pick' if is_pick else 'Place', cur_t)
+                                    payload = {"robot_id": robot_manager.get_active_robot_name(), "action_type": 'Pick' if is_pick else 'Place', "pos": cur_t}
+                                    mqtt_broker.publish("robot/task_done", payload)
                                     print(f">>     4) 후퇴 위치(Z+{ret_dist:.3f}m)")
                                     inst.task_move_to(cur_ret)
                                     RobotControlUseCase.wait_for_move_finish(30.0)
@@ -1883,7 +1884,8 @@ class ProgramTreeEditor:
                                         time.sleep(0.2)
                                         print(f">>     3) {'Hold' if partner_is_pick else 'Release'}")
                                         _do_tool_action(partner_is_pick)
-                                        db_repository.insert_task_completion(robot_manager.get_active_robot_name(), 'Pick' if partner_is_pick else 'Place', p_target)
+                                        payload = {"robot_id": robot_manager.get_active_robot_name(), "action_type": 'Pick' if partner_is_pick else 'Place', "pos": p_target}
+                                        mqtt_broker.publish("robot/task_done", payload)
                                         print(f">>     4) 후퇴 위치(Z+{partner_ret_dist:.3f}m)")
                                         inst.task_move_to(p_ret)
                                         RobotControlUseCase.wait_for_move_finish(30.0)
@@ -1903,7 +1905,8 @@ class ProgramTreeEditor:
                         time.sleep(0.2)
                         print(f">>     3) {'Hold(잡기)' if is_pick else 'Release(놓기)'}")
                         _do_tool_action(is_pick)
-                        db_repository.insert_task_completion(robot_manager.get_active_robot_name(), 'Pick' if is_pick else 'Place', target_p)
+                        payload = {"robot_id": robot_manager.get_active_robot_name(), "action_type": 'Pick' if is_pick else 'Place', "pos": target_p}
+                        mqtt_broker.publish("robot/task_done", payload)
                         print(f">>     4) 후퇴 위치(Z={ret_p[2]:.4f}, +{ret_dist:.3f}m 위)")
                         inst.task_move_to(ret_p)
                         RobotControlUseCase.wait_for_move_finish(30.0)

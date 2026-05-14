@@ -9,7 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')
 from presentation.ui.robot_hmi.robot_hmi_view import RobotHmiView
 from presentation.ui.digital_twin.digital_twin_view import DigitalTwinView
 from core.domains.robot.communication.client_manager import robot_manager
-from infrastructure.repositories.database_repository import db_repository
+from infrastructure.mqtt.mqtt_manager import MqttManager
 from presentation.ui.theme import Theme
 
 ctk.set_appearance_mode("dark")
@@ -30,6 +30,10 @@ class ModernContyApp(ctk.CTk):
         super().__init__()
         self.title("Indy7 Command Center (DDD Architecture)")
         self.geometry("1400x900")
+        
+        # MQTT 브로커 연결 (HMI에서 데이터 발송용)
+        self.mqtt_broker = MqttManager(client_id="hmi_main")
+        self.mqtt_broker.connect_and_loop()
         
         self.log_queue = queue.Queue()
         self._poll_log_queue()
@@ -205,11 +209,13 @@ class ModernContyApp(ctk.CTk):
                                 pass
                                 
                             status_data = {
+                                "robot_id": name,
                                 "q": j_pos,
                                 "torque": torque,
                                 "busy": robot_status.get('busy', 0) if robot_status else 0
                             }
-                            db_repository.insert_realtime_data(name, status_data)
+                            # DB Repository 직접 호출 대신 MQTT로 브로드캐스트
+                            self.mqtt_broker.publish("robot/realtime", status_data)
                             
                             # Page 1일 때만 3D 뷰어 UI 갱신
                             if self.active_page == 1:
