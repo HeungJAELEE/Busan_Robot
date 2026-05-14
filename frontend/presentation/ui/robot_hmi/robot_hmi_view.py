@@ -1944,6 +1944,24 @@ class ProgramTreeEditor:
         if is_virtual_test:
             cycle_label = "무한" if virtual_target_cycles <= 0 else f"{virtual_target_cycles}회"
             print(f">> [가상화 테스트] session={virtual_session_id} target={cycle_label} sample={virtual_sample_interval_ms}ms")
+        virtual_di_raw = virtual_cfg.get("virtual_di", {})
+        virtual_di_manual = bool(virtual_cfg.get("virtual_di_mode") == "manual" or virtual_cfg.get("virtual_di_manual"))
+        virtual_di_map = {}
+        if isinstance(virtual_di_raw, dict):
+            for key, value in virtual_di_raw.items():
+                try:
+                    virtual_di_map[int(key)] = 1 if int(value) else 0
+                except (TypeError, ValueError):
+                    pass
+        elif isinstance(virtual_di_raw, list):
+            for idx, value in enumerate(virtual_di_raw[:32]):
+                try:
+                    virtual_di_map[int(idx)] = 1 if int(value) else 0
+                except (TypeError, ValueError):
+                    pass
+        if dry_run and virtual_di_manual:
+            on_pins = [f"DI{idx:02d}" for idx, val in sorted(virtual_di_map.items()) if val]
+            print(f">> [DRY RUN] 가상 DI 수동 입력 사용: ON={', '.join(on_pins) if on_pins else '없음'}")
 
         class _LoopBreakException(Exception):
             """loopBreak (type=21) 실행 시 가장 가까운 Loop를 탈출하기 위한 예외"""
@@ -2026,6 +2044,23 @@ class ProgramTreeEditor:
                 return False
             if dry_run:
                 pins = ", ".join(f"DI{d.get('idx', 0)}={'HI' if d.get('value', 1) else 'LO'}" for d in di_list)
+                if virtual_di_manual:
+                    actuals = []
+                    all_met = True
+                    for cond in di_list:
+                        idx = int(cond.get("idx", 0) or 0)
+                        expected = 1 if int(cond.get("value", 1) or 0) else 0
+                        actual = int(virtual_di_map.get(idx, 0))
+                        actuals.append({"idx": idx, "expected": expected, "actual": actual})
+                        if actual != expected:
+                            all_met = False
+                    state_msg = ", ".join(
+                        f"DI{a['idx']:02d}={'ON' if a['actual'] else 'OFF'}"
+                        for a in actuals
+                    )
+                    print(f">>   [DRY RUN] {label} 가상 입력 확인: {state_msg} / 요구={pins} → {'TRUE' if all_met else 'FALSE'}")
+                    _dry_event("di_manual_eval", label, {"diList": di_list, "actuals": actuals, "result": all_met})
+                    return all_met
                 print(f">>   [DRY RUN] {label} 조건 통과 처리: {pins}")
                 _dry_event("di_bypass", label, {"diList": di_list})
                 return True
@@ -2542,6 +2577,8 @@ class ProgramTreeEditor:
                             if all_met:
                                 print(f">>   ✅ DI 조건 충족")
                                 break
+                            if dry_run and virtual_di_manual:
+                                _abort_program(f"가상 DI 조건 불만족: {pins_str}", text, item_id, ng=True)
                             time.sleep(0.1)
                         else:
                             print(f">>   ⚠️ DI 대기 타임아웃 ({timeout}s)")
@@ -2573,6 +2610,8 @@ class ProgramTreeEditor:
                                 if all_met:
                                     print(f">>   ✅ DI 조건 충족")
                                     break
+                                if dry_run and virtual_di_manual:
+                                    _abort_program(f"가상 DI 조건 불만족: {pins_str}", text, item_id, ng=True)
                                 time.sleep(0.1)
                         else:
                             print(f">>   (DI 미지정 — 스킵)")

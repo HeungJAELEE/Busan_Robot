@@ -347,6 +347,8 @@ class VirtualTestView:
         self.session_samples = {}
         self.local_recording_enabled = True
         self.db_recording_enabled = True
+        self.virtual_di_vars = {idx: tk.IntVar(value=0) for idx in range(32)}
+        self.virtual_di_buttons = {}
 
         self._build_ui()
         self._poll_runner_status()
@@ -364,6 +366,36 @@ class VirtualTestView:
         settings.pack(fill="x", padx=14, pady=8)
         self.target_entry = self._entry_row(settings, "목표 반복", "100")
         self.interval_entry = self._entry_row(settings, "샘플(ms)", "100")
+
+        di_box = ctk.CTkFrame(left, fg_color=Theme.BG_BASE, corner_radius=8)
+        di_box.pack(fill="x", padx=14, pady=(4, 8))
+        di_head = ctk.CTkFrame(di_box, fg_color="transparent")
+        di_head.pack(fill="x", padx=10, pady=(10, 4))
+        ctk.CTkLabel(di_head, text="가상 DI 입력", font=Theme.font(size=13, weight="bold"),
+                     text_color=Theme.INFO).pack(side="left")
+        ctk.CTkButton(di_head, text="ALL ON", width=58, height=24,
+                      command=lambda: self._set_all_virtual_di(1),
+                      **Theme.get_button_style("success")).pack(side="right", padx=2)
+        ctk.CTkButton(di_head, text="ALL OFF", width=64, height=24,
+                      command=lambda: self._set_all_virtual_di(0),
+                      **Theme.get_button_style("secondary")).pack(side="right", padx=2)
+
+        grid = ctk.CTkFrame(di_box, fg_color="transparent")
+        grid.pack(fill="x", padx=8, pady=(0, 10))
+        for idx in range(32):
+            btn = ctk.CTkButton(
+                grid,
+                text=f"DI{idx:02d}",
+                width=54,
+                height=24,
+                font=Theme.font(size=10, weight="bold"),
+                command=lambda i=idx: self._toggle_virtual_di(i),
+            )
+            btn.grid(row=idx // 4, column=idx % 4, padx=2, pady=2, sticky="ew")
+            self.virtual_di_buttons[idx] = btn
+            self._refresh_virtual_di_button(idx)
+        for col in range(4):
+            grid.grid_columnconfigure(col, weight=1)
 
         robot_box = ctk.CTkFrame(left, fg_color="transparent")
         robot_box.pack(fill="x", padx=12, pady=8)
@@ -523,6 +555,31 @@ class VirtualTestView:
         except (TypeError, ValueError):
             return 100
 
+    def _virtual_di_payload(self):
+        return {str(idx): int(var.get() or 0) for idx, var in self.virtual_di_vars.items()}
+
+    def _toggle_virtual_di(self, idx):
+        var = self.virtual_di_vars[idx]
+        var.set(0 if int(var.get() or 0) else 1)
+        self._refresh_virtual_di_button(idx)
+
+    def _set_all_virtual_di(self, value):
+        for idx, var in self.virtual_di_vars.items():
+            var.set(1 if value else 0)
+            self._refresh_virtual_di_button(idx)
+
+    def _refresh_virtual_di_button(self, idx):
+        btn = self.virtual_di_buttons.get(idx)
+        if not btn:
+            return
+        is_on = bool(self.virtual_di_vars[idx].get())
+        btn.configure(
+            text=f"DI{idx:02d}",
+            fg_color=Theme.SUCCESS if is_on else "#555555",
+            hover_color=Theme.SUCCESS_HOVER if is_on else "#666666",
+            text_color=Theme.TEXT_PRIMARY if is_on else Theme.TEXT_SECONDARY,
+        )
+
     def start_robot_test(self, robot):
         info = robot_manager.get_robot_info(robot)
         if not info or info.get("instance") is None:
@@ -552,6 +609,8 @@ class VirtualTestView:
             "sample_interval_ms": interval_ms,
             "program_path": program_path,
             "dry_run": True,
+            "virtual_di_mode": "manual",
+            "virtual_di": self._virtual_di_payload(),
             "status": "running",
             "note": "Page3 virtualization dry run",
         }

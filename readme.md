@@ -579,13 +579,15 @@ Page 3은 생산용 Page 1과 분리된 검증 화면입니다. 목적은 실제
 - 1회 카운트는 내부 Loop 또는 프로그램 본문이 완전히 끝난 뒤 증가합니다.
 - 샘플링 주기는 Page 3의 `샘플(ms)` 값으로 정합니다. 기본값은 100ms입니다.
 - 각 샘플에는 `session_id`, `robot_id`, `cycle_index`, `sample_index`, 관절각 `q1~q6`, TCP 좌표 `x/y/z/rx/ry/rz`, 토크 `tq1~tq6`, busy 상태가 포함됩니다.
-- Dry Run 실행 중에는 DI 조건은 통과 처리하고, DO/툴 출력은 실제 핀을 건드리지 않고 이벤트로만 기록합니다.
+- Dry Run 실행 중에는 DO/툴 출력은 실제 핀을 건드리지 않고 이벤트로만 기록합니다.
+- Page 3의 `가상 DI 입력`에서 DI 0~31을 미리 ON/OFF로 선택할 수 있습니다. `If DI`는 이 값으로 TRUE/FALSE를 판단하고, `Wait DI`가 선택값과 맞지 않으면 실제 신호를 기다리지 않고 즉시 N.G로 멈춥니다.
 
 저장 방식:
 
 - **로컬 JSONL 저장**: Page 3의 `저장 위치 선택` 버튼으로 폴더를 지정합니다. 세션마다 하위 폴더가 생기고 `metadata.json`, `samples.jsonl`, `events.jsonl`, `finish.json`이 저장됩니다.
 - **MySQL 실시간 기록**: Page 3의 MySQL Host/Port/User/Pass/DB를 입력하고 `DB 연결 확인`을 누릅니다. 연결되면 샘플이 비동기 큐를 통해 MySQL에 저장됩니다.
 - 두 저장 방식은 동시에 사용할 수 있습니다. 현장 네트워크나 DB가 불안정할 때는 로컬 저장만 켜두고, 나중에 `samples.jsonl`을 DB로 적재할 수 있습니다.
+- 가상 DI 프리셋은 `metadata.json`과 MySQL 세션 payload에 같이 남기므로 어떤 입력 조건으로 테스트했는지 나중에 추적할 수 있습니다.
 
 로컬 저장 구조 예시:
 
