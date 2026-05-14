@@ -61,8 +61,8 @@ class TeachingRepositoryImpl:
             # 24=If(조건), 25=Else, 26=If(변수)
             # 23=WaitFor, 30=Elif(DI), 21=LoopBreak, 41=ToolSensing
             
-            if t in [102, 103]:
-                # ★ JointMove(102) / FrameMove(103): 3단계 참조 해석
+            if t in [102, 103, 104, 105, 106]:
+                # ★ Move 계열(102~106): 3단계 참조 해석
                 # program[name] → moveList[name] → wpList[id] → q[], p[]
                 mv = move_map.get(node.name, {})
                 node.move_data = mv  # 이동 설정 전체 보존
@@ -75,13 +75,26 @@ class TeachingRepositoryImpl:
                 
                 # 웨이포인트 해석 (다중 웨이포인트 지원)
                 node.resolved_waypoints = []
-                for wp_ref in mv.get("wpList", []):
+                wp_origins = mv.get("wpListOrigin", [])
+                for wp_idx, wp_ref in enumerate(mv.get("wpList", [])):
                     wp_id = str(wp_ref.get("id", ""))
                     real_wp = wp_map.get(wp_id, {})
-                    if real_wp:
+                    origin = wp_origins[wp_idx] if isinstance(wp_origins, list) and wp_idx < len(wp_origins) else {}
+                    end_pose = origin.get("endPose", {}) if isinstance(origin, dict) else {}
+                    if real_wp or end_pose:
+                        q_pos = real_wp.get("q", []) if real_wp else []
+                        t_pos = real_wp.get("p", []) if real_wp else []
+                        # 104/105 계열 샘플은 wpList p가 비어 있거나 상대 오프셋인 경우가 있어,
+                        # APK가 함께 저장한 endPose를 가상화용 절대 좌표로 우선 사용한다.
+                        if t in [104, 105, 106] and end_pose.get("p"):
+                            t_pos = end_pose.get("p", t_pos)
+                        elif not t_pos and end_pose.get("p"):
+                            t_pos = end_pose.get("p", t_pos)
+                        if not q_pos and end_pose.get("q"):
+                            q_pos = end_pose.get("q", q_pos)
                         wp_vo = WaypointVO(
-                            j_pos=real_wp.get("q", [0]*6),
-                            t_pos=real_wp.get("p", [0]*6),
+                            j_pos=q_pos or [0]*6,
+                            t_pos=t_pos or [0]*6,
                             blend_radius=real_wp.get("blendRadius", 0)
                         )
                         node.resolved_waypoints.append({"id": wp_id, "wp": wp_vo, "raw": real_wp})
@@ -270,7 +283,7 @@ class TeachingRepositoryImpl:
                 
             elif t == 250:  # SpeedRatio
                 node.prgSpdRatio = raw_node.get("prgSpdRatio", 100)
-            elif t in [104, 105]:  # PalletDef
+            elif t in [104, 105]:  # handled by Move 계열 loader above
                 pass
             elif t == 302:  # TaktTime / care
                 node.careTackTime = raw_node.get("careTackTime", 0)

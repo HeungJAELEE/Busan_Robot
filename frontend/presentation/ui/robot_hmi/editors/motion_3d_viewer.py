@@ -49,6 +49,7 @@ class Motion3DViewer:
         self.loop_preview_count = 12
         self.autoplay = False
         self._auto_job = None
+        self.required_di_values = {}
         self.di_buttons = []
         self.do_labels = []
         self.var_label = None
@@ -349,6 +350,8 @@ class Motion3DViewer:
                     xyz = [p[0]*1000, p[1]*1000, p[2]*1000]
                     q_meta = d.get("q") if d.get("q") and any(v != 0 for v in d.get("q", [])) else None
                     emit_step(f"{icon} {label}", xyz, color, {"q": q_meta})
+                else:
+                    emit_io_step(f"{label} 좌표 없음", "#FFB74D")
 
         def walk(parent="", iter_slot=None):
             """iter_slot: 부모 Loop이 정한 현재 팔레트 슬롯 인덱스. None이면 비루프 컨텍스트."""
@@ -368,7 +371,11 @@ class Motion3DViewer:
                     while scan_idx < len(children):
                         sd = self.node_data.get(children[scan_idx], {})
                         sr = sd.get("__raw__", {})
-                        if sr.get("type", -1) not in (24, 25, 26):
+                        branch_type = sr.get("type", -1)
+                        if scan_idx == child_idx:
+                            if branch_type not in (24, 25, 26):
+                                break
+                        elif branch_type not in (25, 26):
                             break
                         chain.append(children[scan_idx])
                         scan_idx += 1
@@ -386,9 +393,21 @@ class Motion3DViewer:
                     if p and any(v != 0 for v in p):
                         xyz = [p[0]*1000, p[1]*1000, p[2]*1000]
                         emit_step("🏠 Home", xyz, self.C_HOME, {})
+                    elif not self.tree.get_children(item):
+                        home_q = d.get("q") if d.get("q") and any(v != 0 for v in d.get("q", [])) else [0.0] * 6
+                        transforms = self.singularity_analyzer.forward_kinematics(home_q)
+                        tcp_m = (transforms[-1] @ self.singularity_analyzer.tcp_offset)[:3]
+                        emit_step("🏠 Home", [float(v) * 1000.0 for v in tcp_m], self.C_HOME, {"q": home_q})
                     walk(item, iter_slot)
 
-                elif t in (102, 103):  # JointMove / FrameMove
+                elif t in (102, 103, 104, 105, 106):  # Move 계열
+                    move_label = {
+                        102: "JMove",
+                        103: "FMove",
+                        104: "BMove",
+                        105: "ByMove",
+                        106: "CMove",
+                    }.get(t, "Move")
                     wps = d.get("waypoints", [])
                     if wps:
                         for wi, wp in enumerate(wps):
@@ -396,28 +415,36 @@ class Motion3DViewer:
                             wp_q = wp.get("q")
                             if not (wp_q and len(wp_q) >= 6 and any(abs(float(v or 0.0)) > 1e-9 for v in wp_q[:6])):
                                 wp_q = None
-                            xyz = [wp_p[0]*1000, wp_p[1]*1000, wp_p[2]*1000]
-                            lbl = f"{'J' if t==102 else 'F'}Move" + (f" WP{wi+1}" if len(wps) > 1 else "")
-                            emit_step(f"🔵 {lbl}", xyz, self.C_MOVE, {"q": wp_q})
+                            if wp_p and len(wp_p) >= 3 and any(v != 0 for v in wp_p[:3]):
+                                xyz = [wp_p[0]*1000, wp_p[1]*1000, wp_p[2]*1000]
+                                lbl = move_label + (f" WP{wi+1}" if len(wps) > 1 else "")
+                                emit_step(f"🔵 {lbl}", xyz, self.C_MOVE, {"q": wp_q})
                     elif any(v != 0 for v in p):
                         xyz = [p[0]*1000, p[1]*1000, p[2]*1000]
                         q_meta = d.get("q") if d.get("q") and any(v != 0 for v in d.get("q", [])) else None
-                        emit_step("🔵 FrameMove", xyz, self.C_MOVE, {"q": q_meta})
+                        emit_step(f"🔵 {move_label}", xyz, self.C_MOVE, {"q": q_meta})
 
                 elif t in (201, 202):  # Pick / Place
                     emit_pick_or_place(item, slot_idx=iter_slot)
+                    # Some legacy Conty exports chain Place/Variables/next If under Pick.
+                    # Virtual playback must continue through those children just like runtime execution.
+                    walk(item, iter_slot)
 
                 elif t == 2:  # Variables
                     _apply_var_list(d.get("varList", raw.get("varList", [])))
+                    walk(item, iter_slot)
 
                 elif t == 3:  # Math / variable assignment
                     _apply_var_list(d.get("varList", raw.get("varList", [])))
+                    walk(item, iter_slot)
 
                 elif t == 4:  # SmartDO
                     apply_do_list(d.get("doList", raw.get("doList", [])))
+                    walk(item, iter_slot)
 
                 elif t == 6:  # EndToolDO
                     apply_do_list(d.get("endtoolDoList", raw.get("endtoolDoList", [])))
+                    walk(item, iter_slot)
 
                 elif t in (28, 29, 30):  # Wait/If by DI
                     di_list = d.get("diList", raw.get("diList", []))
@@ -467,6 +494,26 @@ class Motion3DViewer:
         self.do_state = list(sim_do)
         self.display_do_state = list(sim_do)
         self.display_vars = dict(sim_vars)
+        self.required_di_values = self._collect_required_di_values()
+
+    def _collect_required_di_values(self):
+        required = {}
+        for data in self.node_data.values():
+            if not isinstance(data, dict):
+                continue
+            raw = data.get("__raw__", {}) if isinstance(data.get("__raw__", {}), dict) else {}
+            for key in ("diList", "endtoolDiList"):
+                for cond in data.get(key, raw.get(key, [])) or []:
+                    if not isinstance(cond, dict):
+                        continue
+                    try:
+                        idx = int(cond.get("idx", 0))
+                        value = 1 if int(cond.get("value", 1)) else 0
+                    except (TypeError, ValueError):
+                        continue
+                    if 0 <= idx < len(self.di_state):
+                        required.setdefault(idx, value)
+        return required
 
     # ─────────── UI 생성 ───────────
     def _create_window(self):
@@ -568,6 +615,9 @@ class Motion3DViewer:
         ctk.CTkButton(header, text="DI/DO 초기화", height=28,
                       command=self._reset_io,
                       fg_color="#424242", hover_color="#616161").pack(fill="x", padx=8, pady=(0, 8))
+        ctk.CTkButton(header, text="필요 DI 적용", height=28,
+                      command=self._apply_required_di,
+                      fg_color="#2E7D32", hover_color="#388E3C").pack(fill="x", padx=8, pady=(0, 8))
 
         ctk.CTkLabel(parent, text="DI 입력 (외부 신호)", font=("Pretendard", 13, "bold"),
                      text_color="#81D4FA").pack(anchor="w", padx=10, pady=(8, 2))
@@ -610,6 +660,14 @@ class Motion3DViewer:
         self.do_state = [0] * 32
         self.display_do_state = [0] * 32
         self.display_vars = {}
+        self.current_step = 0
+        self._rebuild_simulation()
+
+    def _apply_required_di(self):
+        required = self.required_di_values or self._collect_required_di_values()
+        for idx, value in required.items():
+            if 0 <= idx < len(self.di_state):
+                self.di_state[idx] = value
         self.current_step = 0
         self._rebuild_simulation()
 

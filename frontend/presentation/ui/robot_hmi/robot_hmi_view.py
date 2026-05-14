@@ -815,6 +815,23 @@ class ProgramTreeEditor:
                                     node_str = f" FrameMove ({name}) [{xyz}]"
                                 else:
                                     node_str = f" FrameMove [{xyz}]"
+                            elif t in (104, 105, 106):
+                                wp_count = len(getattr(node, "resolved_waypoints", []))
+                                raw_n = getattr(node, "__raw__", {})
+                                p = getattr(node, "target_p", None) or raw_n.get("p", [0]*6)
+                                try:
+                                    xyz = f"X{p[0]*1000:.0f} Y{p[1]*1000:.0f} Z{p[2]*1000:.0f}" if p and any(v != 0 for v in p) else ""
+                                except Exception:
+                                    xyz = ""
+                                move_label = {104: "Move B", 105: "Move By", 106: "Move C"}.get(t, f"Move {t}")
+                                details = []
+                                if name:
+                                    details.append(name)
+                                if wp_count > 1:
+                                    details.append(f"{wp_count}pts")
+                                detail_text = f" ({', '.join(details)})" if details else ""
+                                xyz_text = f" [{xyz}]" if xyz else ""
+                                node_str = f" {move_label}{detail_text}{xyz_text}"
                             elif t == 1:
                                 node_str = f" Stop ({name})" if name else " Stop"
                             elif t == 4:  # SmartDO
@@ -955,14 +972,14 @@ class ProgramTreeEditor:
                             }
 
                             # ─── Conty 실제 타입별 데이터 (120+ 학습파일 기반) ─────────
-                            if t in [102, 103]:  # ★ JointMove / FrameMove
+                            if t in [102, 103, 104, 105, 106]:  # ★ Move 계열
                                 self.node_data[n_id]["t_type"] = "move"
                                 self.node_data[n_id]["name"] = name
                                 self.node_data[n_id]["boundary"] = getattr(node, "boundary", raw.get("boundary", {"velLevel": 5, "accLevel": 5}))
                                 self.node_data[n_id]["tcp"] = getattr(node, "tcp", raw.get("tcp", [0,0,0,0,0,0]))
                                 self.node_data[n_id]["refFrame"] = getattr(node, "refFrame", raw.get("refFrame", {"type": 1, "tref": [0,0,0,0,0,0]}))
                                 self.node_data[n_id]["intpl"] = getattr(node, "intpl", raw.get("intpl", 0))
-                                self.node_data[n_id]["move_type"] = t  # 102=Joint, 103=Frame
+                                self.node_data[n_id]["move_type"] = t  # 102=Joint, 103=Frame, 104~106=legacy APK move variants
                                 # 다중 웨이포인트 저장
                                 resolved = getattr(node, "resolved_waypoints", [])
                                 if resolved:
@@ -2354,7 +2371,11 @@ class ProgramTreeEditor:
             idx2 = start_idx
             while idx2 < len(node_list):
                 raw2 = node_list[idx2]["data"].get("__raw__", {})
-                if raw2.get("type", -1) not in (24, 25, 26):
+                branch_type = raw2.get("type", -1)
+                if idx2 == start_idx:
+                    if branch_type not in (24, 25, 26):
+                        break
+                elif branch_type not in (25, 26):
                     break
                 chain.append(node_list[idx2])
                 idx2 += 1
@@ -2416,11 +2437,15 @@ class ProgramTreeEditor:
                     var_list = data.get("varList", raw.get("varList", []))
                     print(f">> 📋 Variables 초기화 ({len(var_list)}개)")
                     _apply_var_list(var_list, label="변수 초기화")
+                    if node["children"]:
+                        _execute_node_list(node["children"])
 
                 elif node_type == 3:  # Var assignment / Math
                     var_list = data.get("varList", raw.get("varList", []))
                     print(f">> 📋 변수 대입/카운트 ({len(var_list)}개)")
                     _apply_var_list(var_list, label="카운트")
+                    if node["children"]:
+                        _execute_node_list(node["children"])
 
                 elif node_type == 20:  # Loop
                     # 무한 = None / -1 / <=0 / 누락. 우리 저장은 -1로 통일하지만 외부 파일은 null인 경우도 있어 모두 수용.
@@ -3003,6 +3028,9 @@ class ProgramTreeEditor:
                         _apply_motion_speed(ret_data.get("boundary", target_boundary), is_joint=False, label=f"{action_label} 후퇴")
                         inst.task_move_to(ret_p)
                         _wait_for_move_or_ng(stage=text, item_id=item_id)
+
+                    if node["children"]:
+                        _execute_node_list(node["children"])
 
                 elif node_type == 25:  # Elif (변수 조건)
                     cond = data.get("cond", raw.get("cond", {}))
