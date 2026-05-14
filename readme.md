@@ -484,31 +484,50 @@ AI 자연어 티칭은 로봇을 움직이는 일이므로 아래 규칙을 반�
 - 변수 카운트도 로봇별로 분리합니다. Robot A의 `Red` 카운트가 Robot B의 `Red` 카운트에 섞이면 안 됩니다.
 - Page 1 모니터링 중에도 프로그램 실행 상태와 좌표가 계속 보여야 합니다.
 
-### 10. AI 자연어 티칭 UI 제안
+### 10. Page 4 AI 자연어/음성 티칭
 
-향후 UI에는 Page 2 프로그램 화면 상단 또는 우측 설정 패널에 **AI 티칭** 버튼을 추가합니다.
+Page 4는 작업자가 텍스트 또는 짧은 음성으로 로봇을 티칭하기 위한 화면입니다. Google AI Studio API Key를 넣으면 Gemini가 한국어 자연어를 구조화된 명령으로 해석하고, API Key가 없을 때도 기본 텍스트 명령은 로컬 파서가 처리합니다.
 
-권장 UI 흐름:
-
-1. 사용자가 **AI 티칭** 버튼을 누릅니다.
-2. 텍스트 입력창에 자연어 작업을 붙여넣습니다.
-3. AI가 아래 네 가지를 생성합니다.
-   - 작업 요약
-   - 안전 확인 목록
-   - AI Teaching Plan JSON
-   - 실제 Conty 프로그램 트리 미리보기
-4. 사용자가 **트리에 넣기**를 누르면 `ProgramTreeEditor`에 노드가 삽입됩니다.
-5. 사용자가 **저장**을 누르면 기존 `save_program()` 또는 `export_to_conty()` 경로로 APK 호환 JSON을 저장합니다.
-6. 사용자가 **Play(가상)** 또는 **실행**을 선택합니다.
-
-권장 코드 진입점:
+현재 구현 위치:
 
 ```text
-frontend/core/application/use_cases/natural_language_teaching.py
-frontend/presentation/ui/robot_hmi/editors/ai_teaching_dialog.py
-ProgramTreeEditor.import_ai_teaching_plan(plan)
-TeachingRepositoryImpl.save_to_conty_json(program, filepath)
+frontend/presentation/ui/ai_teaching/ai_teaching_view.py
+frontend/presentation/ui/main_window.py
 ```
+
+지원 흐름:
+
+1. Page 4에서 대상 로봇을 `Robot A/B/C` 중 선택합니다.
+2. Google AI Studio API Key를 입력하고 `API Key 저장`을 누릅니다. 저장 위치는 사용자 홈의 `.indy7_hmi_ai_teaching.json`입니다. 모델은 기본 `gemini-3-flash-preview`를 쓰며, 필요하면 환경변수 `GEMINI_MODEL`로 바꿀 수 있습니다. 기본 모델 호출이 실패하면 `gemini-2.5-flash`로 한 번 더 시도합니다.
+3. 텍스트 박스에 자연어를 입력하거나 `마이크 녹음`을 누르고 말합니다.
+4. AI/로컬 파서가 명령을 `move_relative`, `save_pick`, `save_place`, `set_pallet`, `read_pose`, `stop` 중 하나로 변환합니다.
+5. 실제 로봇에는 변환된 안전 함수만 전달됩니다. AI가 임의로 소켓 명령이나 좌표를 직접 만들지 않습니다.
+
+명령 예시:
+
+```text
+1mm x축으로 이동
+z축 2mm 올려
+여기에 pick 위치 저장해
+여기에 place 위치 저장해
+제품 50x50x30, 2바이 2로 하고 4층이야
+현재 좌표 확인
+정지
+```
+
+음성 입력 방식:
+
+- **마이크 녹음**: `sounddevice`로 1~10초 WAV를 만들고 Gemini 오디오 입력으로 명령 JSON을 받습니다.
+- **OS 받아쓰기**: macOS 받아쓰기나 외부 음성 입력 앱으로 텍스트 박스에 문장을 넣은 뒤 `실행`을 누릅니다.
+- **완전 실시간 대화형**은 Gemini Live API/WebSocket으로 확장할 수 있습니다. 현장 안전을 위해 현재 Page 4는 짧은 녹음 단위로 명령을 확정한 뒤 실행합니다.
+
+안전 제한:
+
+- 자연어 상대 이동은 1회 최대 5mm까지만 허용합니다.
+- 실제 이동은 현재 선택된 로봇에만 전송합니다.
+- `여기에 pick 위치 저장해` 또는 `여기에 place 위치 저장해`는 현재 로봇 좌표를 읽은 뒤 후보점으로만 보관하고, 사용자가 `2x2 4층` 같은 팔레트 정보를 말해야 JSON 노드로 저장합니다.
+- 2x2x4 같은 팔레타이징은 현재 좌표를 P1으로 잡고 제품 pitch를 기준으로 P2/P3/P4를 자동 생성합니다.
+- 저장 파일은 `frontend/user_programs/Robot_A|Robot_B|Robot_C/program.json`입니다.
 
 ### 11. AI가 사용자에게 되물어야 하는 상황
 
@@ -647,7 +666,7 @@ python3 -m pip install -r backend/vision_yolo/requirements.txt
 | 파일 | 용도 |
 |---|---|
 | `requirements.txt` | 기본 실행 묶음. frontend, db_worker, robot_controller, plc_bridge, digital_twin requirements를 포함합니다. |
-| `frontend/requirements.txt` | CustomTkinter UI, 3D 그래프, MySQL, MQTT 클라이언트 |
+| `frontend/requirements.txt` | CustomTkinter UI, 3D 그래프, MySQL, MQTT 클라이언트, Google AI Studio/Gemini, 마이크 녹음 |
 | `backend/db_worker/requirements.txt` | MQTT 수신 및 MySQL 저장 |
 | `backend/vision_yolo/requirements.txt` | OpenCV, ultralytics, torch 등 무거운 비전 패키지 |
 

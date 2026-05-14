@@ -19,6 +19,10 @@ pyserial>=3.5                # 시리얼 통신 (그리퍼 등 외부 장비)
 # ── 데이터베이스 ──
 PyMySQL>=1.0.2               # MySQL FA DB 연결 (MES 작업이력)
 
+# ── AI 자연어/음성 티칭 ──
+google-genai>=1.0.0          # Google AI Studio / Gemini API 텍스트·오디오 명령 해석
+sounddevice>=0.4.6           # Page 4 마이크 음성 명령 녹음
+
 # ── 유틸리티 ──
 PyYAML>=6.0                  # 설정 파일 파싱
 Pillow>=9.0.0                # 이미지 처리 (UI 아이콘 등)

@@ -9,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')
 from presentation.ui.robot_hmi.robot_hmi_view import RobotHmiView
 from presentation.ui.digital_twin.digital_twin_view import DigitalTwinView
 from presentation.ui.virtual_test.virtual_test_view import VirtualTestView
+from presentation.ui.ai_teaching.ai_teaching_view import AITeachingView
 from core.domains.robot.communication.client_manager import robot_manager
 from infrastructure.mqtt.mqtt_manager import MqttManager
 from core.service_manager import service_mgr
@@ -67,6 +68,9 @@ class ModernContyApp(ctk.CTk):
 
         self.btn_page3 = ctk.CTkButton(tab_container, text="[Page 3] Virtual Test", corner_radius=15, command=lambda: self.switch_page(3), **self.style_inactive)
         self.btn_page3.pack(side="left", padx=5)
+
+        self.btn_page4 = ctk.CTkButton(tab_container, text="[Page 4] AI Teaching", corner_radius=15, command=lambda: self.switch_page(4), **self.style_inactive)
+        self.btn_page4.pack(side="left", padx=5)
         
         # 우측 연결 버튼
         self.conn_btn = ctk.CTkButton(self.header, text="로봇 통신 연결", fg_color=Theme.SUCCESS, command=self.toggle_connection)
@@ -108,6 +112,11 @@ class ModernContyApp(ctk.CTk):
         self.page3_frame = ctk.CTkFrame(self.pages_container, fg_color="transparent")
         self.page3_frame.grid(row=0, column=0, sticky="nsew")
         self.virtual_test_view = VirtualTestView(self.page3_frame)
+
+        # Page 4 (AI Natural Language / Voice Teaching)
+        self.page4_frame = ctk.CTkFrame(self.pages_container, fg_color="transparent")
+        self.page4_frame.grid(row=0, column=0, sticky="nsew")
+        self.ai_teaching_view = AITeachingView(self.page4_frame)
         
         # 로봇 기본 설정 (연결은 하지 않음!)
         robot_manager.add_robot("Robot A", "192.168.3.7")
@@ -148,17 +157,26 @@ class ModernContyApp(ctk.CTk):
             self.btn_page1.configure(**self.style_active)
             self.btn_page2.configure(**self.style_inactive)
             self.btn_page3.configure(**self.style_inactive)
+            self.btn_page4.configure(**self.style_inactive)
             self.page1_frame.tkraise()
         elif page_num == 2:
             self.btn_page1.configure(**self.style_inactive)
             self.btn_page2.configure(**self.style_active)
             self.btn_page3.configure(**self.style_inactive)
+            self.btn_page4.configure(**self.style_inactive)
             self.page2_frame.tkraise()
-        else:
+        elif page_num == 3:
             self.btn_page1.configure(**self.style_inactive)
             self.btn_page2.configure(**self.style_inactive)
             self.btn_page3.configure(**self.style_active)
+            self.btn_page4.configure(**self.style_inactive)
             self.page3_frame.tkraise()
+        else:
+            self.btn_page1.configure(**self.style_inactive)
+            self.btn_page2.configure(**self.style_inactive)
+            self.btn_page3.configure(**self.style_inactive)
+            self.btn_page4.configure(**self.style_active)
+            self.page4_frame.tkraise()
 
     def set_program_running(self, robot_name, is_running):
         """Track Page 1/Page 2 program execution without stopping telemetry polling."""
