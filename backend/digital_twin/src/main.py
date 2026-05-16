@@ -36,13 +36,15 @@ def on_realtime_data(payload):
 
 def start_mqtt():
     broker_ip = os.getenv("MQTT_BROKER", "127.0.0.1")
-    mqtt_client = MqttManager(broker_ip=broker_ip, client_id="digital_twin")
+    broker_port = int(os.getenv("MQTT_PORT", "1883"))
+    mqtt_client = MqttManager(broker_ip=broker_ip, port=broker_port, client_id="digital_twin")
     mqtt_client.subscribe("robot/realtime", on_realtime_data)
     mqtt_client.connect_and_loop()
 
 def main():
     global loop
     loop = asyncio.get_event_loop()
+    websocket_port = int(os.getenv("DIGITAL_TWIN_PORT", "8080"))
     
     # MQTT는 백그라운드 스레드로 실행
     threading.Thread(target=start_mqtt, daemon=True).start()
@@ -52,8 +54,8 @@ def main():
         while True:
             time.sleep(1)
 
-    print(" -> 3D 뷰어용 웹소켓 스트리밍 서버 오픈 (ws://0.0.0.0:8080)")
-    start_server = websockets.serve(ws_handler, "0.0.0.0", 8080)
+    print(f" -> 3D 뷰어용 웹소켓 스트리밍 서버 오픈 (ws://0.0.0.0:{websocket_port})")
+    start_server = websockets.serve(ws_handler, "0.0.0.0", websocket_port)
     loop.run_until_complete(start_server)
     loop.run_forever()
 

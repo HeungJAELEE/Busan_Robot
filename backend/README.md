@@ -16,10 +16,20 @@ python run_ui_only.py
 ```
 UI가 뜨면 우측 상단 **[🔌 서비스 관리]** 버튼을 눌러 각 백엔드 서비스를 ON/OFF 합니다.
 
-### 향후 도커 도입 시
+### Docker 실행
 ```bash
-# 전체 서비스 빌드 & 백그라운드 실행
-docker compose up -d
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+cp .env.example .env
+
+# 기본 인프라와 기록/트윈 서비스 실행
+docker compose build
+docker compose up -d message_broker db_worker digital_twin
+
+# 실제 로봇/PLC 연결이 필요할 때 추가 실행
+docker compose up -d robot_controller plc_bridge
+
+# 카메라/YOLO 서비스는 필요할 때만 실행
+docker compose --profile vision up -d vision_yolo
 
 # 로그 실시간 확인
 docker compose logs -f robot_controller
@@ -27,6 +37,8 @@ docker compose logs -f robot_controller
 # 전체 종료
 docker compose down
 ```
+
+자세한 배포 절차와 `.env` 항목은 [`DOCKER_DEPLOYMENT.md`](./DOCKER_DEPLOYMENT.md)를 기준으로 관리합니다.
 
 ---
 

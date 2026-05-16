@@ -1,8 +1,14 @@
 FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 WORKDIR /app
-COPY requirements.txt .
+
+COPY backend/robot_controller/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
-# 로봇 통신 모듈만 복사
-COPY core/domains/robot/ ./core/domains/robot/
-COPY services/robot_controller/ .
-CMD ["python", "services/robot_controller/main.py"]
+
+COPY backend/robot_controller/src ./src
+COPY frontend/indy_utils ./src/infrastructure/indy_utils
+
+CMD ["python", "-m", "src.main"]

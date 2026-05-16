@@ -16,5 +16,8 @@ test_*.py
 # 실행 로그
 frontend/logs/
 
+# Docker local deployment secrets
+backend/.env
+
 # 사용자 개인 티칭 데이터 (예제 외)
 frontend/user_programs/Robot_*/20260514*.json

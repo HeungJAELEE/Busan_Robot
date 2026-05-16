@@ -15,7 +15,9 @@ print("👁 [Vision YOLO] 시작됨 - MSA 환경")
 
 def main():
     broker_ip = os.getenv("MQTT_BROKER", "127.0.0.1")
-    mqtt_client = MqttManager(broker_ip=broker_ip, client_id="vision_yolo")
+    broker_port = int(os.getenv("MQTT_PORT", "1883"))
+    camera_device = os.getenv("CAMERA_DEVICE", "/dev/video0")
+    mqtt_client = MqttManager(broker_ip=broker_ip, port=broker_port, client_id="vision_yolo")
     mqtt_client.connect_and_loop()
 
     if cv2 is None:
@@ -23,9 +25,9 @@ def main():
         while True:
             time.sleep(1)
 
-    print(" -> 카메라(/dev/video0) 영상 스트림 캡처 시작...")
-    # 예시: 카메라 0번
-    # cap = cv2.VideoCapture(0)
+    print(f" -> 카메라({camera_device}) 영상 스트림 캡처 시작...")
+    # 예시: USB 카메라 장치
+    # cap = cv2.VideoCapture(camera_device)
     
     while True:
         # 실제 환경 주석 해제:

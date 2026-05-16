@@ -37,9 +37,10 @@ def on_virtual_test_event(payload):
 
 def main():
     broker_ip = os.getenv("MQTT_BROKER", "127.0.0.1")
-    print(f" -> MQTT 브로커({broker_ip}) 연결 및 구독 대기 중...")
+    broker_port = int(os.getenv("MQTT_PORT", "1883"))
+    print(f" -> MQTT 브로커({broker_ip}:{broker_port}) 연결 및 구독 대기 중...")
     
-    mqtt_client = MqttManager(broker_ip=broker_ip, client_id="db_worker")
+    mqtt_client = MqttManager(broker_ip=broker_ip, port=broker_port, client_id="db_worker")
     mqtt_client.subscribe("robot/realtime", on_realtime_data)
     mqtt_client.subscribe("robot/task_done", on_task_done)
     mqtt_client.subscribe("robot/virtual_test_sample", on_virtual_test_sample)

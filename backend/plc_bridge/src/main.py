@@ -15,10 +15,11 @@ print("⚙️ [PLC Bridge] 시작됨 - MSA 환경")
 
 def main():
     broker_ip = os.getenv("MQTT_BROKER", "127.0.0.1")
+    broker_port = int(os.getenv("MQTT_PORT", "1883"))
     plc_ip = os.getenv("PLC_IP", "192.168.3.39")
-    plc_port = 5000
+    plc_port = int(os.getenv("PLC_PORT", "5000"))
     
-    mqtt_client = MqttManager(broker_ip=broker_ip, client_id="plc_bridge")
+    mqtt_client = MqttManager(broker_ip=broker_ip, port=broker_port, client_id="plc_bridge")
     mqtt_client.connect_and_loop()
 
     if pymcprotocol is None:

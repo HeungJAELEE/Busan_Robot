@@ -1,7 +1,13 @@
 FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 WORKDIR /app
-COPY requirements.txt .
+
+COPY backend/db_worker/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
-COPY infrastructure/repositories/database_repository.py ./infrastructure/repositories/
-COPY services/db_worker/ .
-CMD ["python", "services/db_worker/main.py"]
+
+COPY backend/db_worker/src ./src
+
+CMD ["python", "-m", "src.main"]

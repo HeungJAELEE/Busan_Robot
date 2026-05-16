@@ -1,6 +1,7 @@
 import paho.mqtt.client as mqtt
 import json
 import threading
+import time
 
 class MqttManager:
     def __init__(self, broker_ip="127.0.0.1", port=1883, client_id=""):
@@ -23,7 +24,13 @@ class MqttManager:
         if topic in self.callbacks: self.callbacks[topic](payload)
 
     def connect_and_loop(self):
-        self.client.connect(self.broker_ip, self.port, 60)
+        while True:
+            try:
+                self.client.connect(self.broker_ip, self.port, 60)
+                break
+            except Exception as e:
+                print(f">> [MQTT] 연결 실패 {self.broker_ip}:{self.port} - {e}. 2초 후 재시도")
+                time.sleep(2)
         threading.Thread(target=self.client.loop_forever, daemon=True).start()
 
     def subscribe(self, topic, callback):

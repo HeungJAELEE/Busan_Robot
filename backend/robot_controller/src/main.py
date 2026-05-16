@@ -18,15 +18,16 @@ def on_robot_command(payload):
 def main():
     robot_ip = os.getenv("ROBOT_IP", "192.168.3.11")
     broker_ip = os.getenv("MQTT_BROKER", "127.0.0.1")
-    robot_name = "Indy7"
+    broker_port = int(os.getenv("MQTT_PORT", "1883"))
+    robot_name = os.getenv("ROBOT_NAME", "Indy7")
     
-    mqtt_client = MqttManager(broker_ip=broker_ip, client_id="robot_controller")
+    mqtt_client = MqttManager(broker_ip=broker_ip, port=broker_port, client_id="robot_controller")
     mqtt_client.subscribe("robot/command", on_robot_command)
     mqtt_client.connect_and_loop()
 
     # Indy 로봇 연결
-    print(f" -> IndyDCP({robot_ip}) 로봇 접속 시도...")
-    inst = indydcp_client.IndyDCPClient(robot_ip, "Indy7")
+    print(f" -> IndyDCP({robot_ip}, {robot_name}) 로봇 접속 시도...")
+    inst = indydcp_client.IndyDCPClient(robot_ip, robot_name)
     connected = inst.connect()
     
     if not connected:

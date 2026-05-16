@@ -1,0 +1,15 @@
+.git
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.DS_Store
+frontend/logs/
+frontend/user_programs/
+frontend/__pycache__/
+frontend/**/__pycache__/
+backend/**/__pycache__/
+backend/**/.pytest_cache/
+dist/
+build/
+*.egg-info/
