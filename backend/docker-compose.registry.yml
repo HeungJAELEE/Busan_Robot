@@ -1,0 +1,84 @@
+name: indy7-hmi
+
+services:
+  message_broker:
+    image: eclipse-mosquitto:2
+    container_name: indy7_mqtt_broker
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+      - "${MQTT_WS_PORT:-9001}:9001"
+    volumes:
+      - ./docker/mosquitto/config:/mosquitto/config:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    restart: unless-stopped
+
+  robot_controller:
+    image: ghcr.io/heungjaelee/indy7-hmi-robot-controller:${IMAGE_TAG:-latest}
+    container_name: indy7_robot_controller
+    environment:
+      MQTT_BROKER: message_broker
+      MQTT_PORT: 1883
+      ROBOT_IP: ${ROBOT_A_IP:-192.168.3.11}
+      ROBOT_NAME: ${ROBOT_NAME:-Indy7}
+    depends_on:
+      - message_broker
+    restart: unless-stopped
+
+  digital_twin:
+    image: ghcr.io/heungjaelee/indy7-hmi-digital-twin:${IMAGE_TAG:-latest}
+    container_name: indy7_digital_twin
+    environment:
+      MQTT_BROKER: message_broker
+      MQTT_PORT: 1883
+      DIGITAL_TWIN_PORT: 8080
+    ports:
+      - "${DIGITAL_TWIN_PORT:-8080}:8080"
+    depends_on:
+      - message_broker
+    restart: unless-stopped
+
+  plc_bridge:
+    image: ghcr.io/heungjaelee/indy7-hmi-plc-bridge:${IMAGE_TAG:-latest}
+    container_name: indy7_plc_bridge
+    environment:
+      MQTT_BROKER: message_broker
+      MQTT_PORT: 1883
+      PLC_IP: ${PLC_IP:-192.168.3.39}
+      PLC_PORT: ${PLC_PORT:-5000}
+    depends_on:
+      - message_broker
+    restart: on-failure
+
+  db_worker:
+    image: ghcr.io/heungjaelee/indy7-hmi-db-worker:${IMAGE_TAG:-latest}
+    container_name: indy7_db_worker
+    environment:
+      MQTT_BROKER: message_broker
+      MQTT_PORT: 1883
+      DB_HOST: ${MYSQL_HOST:-192.168.3.45}
+      DB_PORT: ${MYSQL_PORT:-3306}
+      DB_USER: ${MYSQL_USER:-guest}
+      DB_PASS: ${MYSQL_PASSWORD:-guest1234}
+      DB_NAME: ${MYSQL_DATABASE:-faictory_mes}
+    depends_on:
+      - message_broker
+    restart: unless-stopped
+
+  vision_yolo:
+    profiles: ["vision"]
+    image: ghcr.io/heungjaelee/indy7-hmi-vision-yolo:${IMAGE_TAG:-latest}
+    container_name: indy7_vision_yolo
+    environment:
+      MQTT_BROKER: message_broker
+      MQTT_PORT: 1883
+      CAMERA_DEVICE: ${CAMERA_DEVICE:-/dev/video0}
+    devices:
+      - "${CAMERA_DEVICE:-/dev/video0}:/dev/video0"
+    depends_on:
+      - message_broker
+    restart: unless-stopped
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:

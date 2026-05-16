@@ -63,7 +63,45 @@ Mosquitto 데이터는 named volume에 남습니다. 완전히 초기화해야 �
 docker compose down -v
 ```
 
-## 4. 서비스 구성
+## 4. Registry 이미지 업로드
+
+이 저장소는 GitHub Container Registry(GHCR)로 Docker 이미지를 자동 업로드하도록 구성되어 있습니다.
+
+main 브랜치에 push되면 GitHub Actions가 아래 이미지를 빌드하고 업로드합니다.
+
+```text
+ghcr.io/heungjaelee/indy7-hmi-robot-controller
+ghcr.io/heungjaelee/indy7-hmi-db-worker
+ghcr.io/heungjaelee/indy7-hmi-digital-twin
+ghcr.io/heungjaelee/indy7-hmi-plc-bridge
+ghcr.io/heungjaelee/indy7-hmi-vision-yolo
+```
+
+현장 PC에서 빌드 없이 업로드된 이미지만 받아 실행하려면 아래 명령을 사용합니다.
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+cp .env.example .env
+docker compose -f docker-compose.registry.yml pull
+docker compose -f docker-compose.registry.yml up -d message_broker db_worker digital_twin
+docker compose -f docker-compose.registry.yml up -d robot_controller plc_bridge
+```
+
+비전 서비스는 필요할 때만 profile을 켭니다.
+
+```bash
+docker compose -f docker-compose.registry.yml --profile vision up -d vision_yolo
+```
+
+로컬 PC에 Docker Desktop이 설치되어 있고 수동 업로드를 하려면 아래처럼 실행할 수 있습니다.
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+docker login ghcr.io
+REGISTRY=ghcr.io/heungjaelee TAG=latest PLATFORM=linux/amd64 ./scripts/docker-build-push.sh
+```
+
+## 5. 서비스 구성
 
 | 서비스 | 역할 | 기본 포트/연결 |
 |---|---|---|
@@ -76,7 +114,7 @@ docker compose down -v
 
 컨테이너 내부 MQTT 주소는 항상 `message_broker:1883`입니다. 외부 HMI나 다른 PC에서 MQTT에 붙을 때는 Docker가 실행 중인 PC의 IP와 `.env`의 `MQTT_PORT`를 사용합니다.
 
-## 5. 로봇 여러 대 운용
+## 6. 로봇 여러 대 운용
 
 현재 `robot_controller`는 `.env`의 `ROBOT_A_IP`를 기본 로봇으로 실행합니다. Robot A/B/C를 컨테이너로 동시에 분리하려면 `docker-compose.yml`에 `robot_controller_b`, `robot_controller_c` 서비스를 복제하고 아래 값만 다르게 지정하면 됩니다.
 
@@ -88,7 +126,7 @@ environment:
 
 HMI에서 선택한 로봇으로 명령을 라우팅하는 기능은 프론트엔드 실시간 제어 로직과 같이 맞춰야 합니다.
 
-## 6. 현장 주의사항
+## 7. 현장 주의사항
 
 - Docker Desktop이 실행되는 PC가 `192.168.3.x` 로봇/PLC 대역에 실제로 접근 가능해야 합니다.
 - 로봇 제어는 실시간성과 안전 정지가 중요하므로, 실제 생산 장비 연결 전에는 `message_broker`, `db_worker`, `digital_twin`만 먼저 띄워서 상태 수집 경로를 확인합니다.

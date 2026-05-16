@@ -38,6 +38,13 @@ docker compose logs -f robot_controller
 docker compose down
 ```
 
+이미 GitHub Container Registry에 업로드된 이미지를 받아 실행할 때는 빌드 없이 registry compose 파일을 사용합니다.
+
+```bash
+docker compose -f docker-compose.registry.yml pull
+docker compose -f docker-compose.registry.yml up -d message_broker db_worker digital_twin
+```
+
 자세한 배포 절차와 `.env` 항목은 [`DOCKER_DEPLOYMENT.md`](./DOCKER_DEPLOYMENT.md)를 기준으로 관리합니다.
 
 ---
