@@ -98,6 +98,12 @@ docker compose up -d robot_controller plc_bridge
 .\scripts\windows-start.ps1 -Registry -Pull -Robot -Plc
 ```
 
+UI가 Docker Robot Controller를 통해 로봇을 제어하도록 하려면 UI 실행 전에 아래 값을 설정합니다.
+
+```powershell
+$env:ROBOT_CONTROL_MODE="mqtt"
+```
+
 소스에서 직접 빌드 후 실행:
 
 ```powershell

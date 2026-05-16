@@ -4,6 +4,7 @@
 6개의 독립적인 마이크로서비스가 Docker 컨테이너로 실행되며, **중앙 통신 허브(Event Bus)**를 통해 서로 소통합니다.
 
 처음 실행하는 사용자는 루트의 [`BEGINNER_RUN_GUIDE.md`](../BEGINNER_RUN_GUIDE.md)를 먼저 보세요. Docker Desktop에서 UI 화면이 뜨지 않는 이유와 통신 확인 방법까지 순서대로 정리되어 있습니다.
+로봇 통신 중앙화 구조는 [`ROBOT_COMMUNICATION_FLOW.md`](../ROBOT_COMMUNICATION_FLOW.md)를 기준으로 합니다.
 
 > 💡 중앙 통신 허브의 내부 구현 기술은 MQTT(Mosquitto) 프로토콜이지만, 개념적으로는 "**모든 서비스들이 자기 할 일만 하고, 데이터를 허브에 던지는 우체국**" 역할입니다.
 

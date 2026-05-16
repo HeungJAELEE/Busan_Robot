@@ -11,7 +11,7 @@ from presentation.ui.digital_twin.digital_twin_view import DigitalTwinView
 from presentation.ui.virtual_test.virtual_test_view import VirtualTestView
 from presentation.ui.ai_teaching.ai_teaching_view import AITeachingView
 from core.domains.robot.communication.client_manager import robot_manager
-from infrastructure.mqtt.mqtt_manager import MqttManager
+from infrastructure.mqtt.mqtt_manager import mqtt_broker
 from core.service_manager import service_mgr
 from presentation.ui.theme import Theme
 
@@ -34,8 +34,9 @@ class ModernContyApp(ctk.CTk):
         self.title("Indy7 Command Center (DDD Architecture)")
         self.geometry("1400x900")
         
-        # MQTT 브로커 인스턴스 (서비스 관리 패널에서 ON 할 때 연결됨)
-        self.mqtt_broker = MqttManager(client_id="hmi_main")
+        # MQTT 브로커 인스턴스. Docker Robot Controller / DB / Digital Twin과 공유합니다.
+        self.mqtt_broker = mqtt_broker
+        self._configure_mqtt_gateway()
         
         self.log_queue = queue.Queue()
         self._poll_log_queue()
@@ -139,6 +140,48 @@ class ModernContyApp(ctk.CTk):
         
         # 서비스 상태 UI 동기화 루프
         self._poll_service_status()
+
+    def _configure_mqtt_gateway(self):
+        self.mqtt_broker.subscribe("robot/realtime", self._on_robot_realtime)
+        self.mqtt_broker.subscribe("robot/result", self._on_robot_result)
+        self.mqtt_broker.subscribe("robot/error", self._on_robot_error)
+        self.mqtt_broker.subscribe("robot/connection", self._on_robot_connection)
+        self.mqtt_broker.connect_and_loop()
+
+    def _on_robot_realtime(self, payload):
+        if not isinstance(payload, dict):
+            return
+        name = payload.get("robot_id")
+        if not name:
+            return
+        if not robot_manager.get_robot_info(name):
+            robot_manager.add_robot(name, payload.get("ip", ""))
+        robot_manager.update_robot_state(
+            name,
+            payload.get("q", [0.0] * 6),
+            payload.get("p", [0.0] * 6),
+            payload.get("status", {"busy": payload.get("busy", 0)}),
+            torque=payload.get("torque", [0.0] * 6),
+            di=payload.get("di", []),
+            do=payload.get("do", []),
+            source=payload.get("source", "mqtt"),
+        )
+
+    def _on_robot_result(self, payload):
+        if isinstance(payload, dict):
+            ok = "OK" if payload.get("ok") else "N.G"
+            print(f">> [Robot Gateway] {ok} {payload.get('robot_id', '')} {payload.get('type', '')}: {payload.get('message', '')}")
+
+    def _on_robot_error(self, payload):
+        if isinstance(payload, dict):
+            print(f">> [Robot Gateway N.G] {payload.get('robot_id', '')}: {payload.get('message', '')}")
+
+    def _on_robot_connection(self, payload):
+        if isinstance(payload, dict):
+            name = payload.get("robot_id", "")
+            status = payload.get("status", "")
+            robot_manager.mark_connection_status(name, status == "connected", status, payload.get("ip", ""))
+            print(f">> [Robot Gateway] {name} 연결 상태: {status}")
         
     def _poll_log_queue(self):
         try:
@@ -319,26 +362,38 @@ class ModernContyApp(ctk.CTk):
                         continue
                     
                     try:
-                        t_pos = inst.get_task_pos()
-                        j_pos = inst.get_joint_pos()
-                        
-                        # 로봇 상태도 함께 수집 (movedone, busy, emergency 등)
-                        robot_status = None
-                        try:
-                            robot_status = inst.get_robot_status()
-                        except:
-                            pass
-                        
-                        if t_pos and j_pos:
-                            robot_manager.update_robot_state(name, j_pos, t_pos, robot_status)
-                            
+                        use_gateway_state = (
+                            robot_manager.should_use_gateway()
+                            and inst.__class__.__name__ == "GatewayRobotProxy"
+                        )
+                        if use_gateway_state:
+                            state = robot_manager.get_robot_state(name) or {}
+                            t_pos = state.get("t_pos")
+                            j_pos = state.get("j_pos")
+                            robot_status = state.get("status")
+                            torque = state.get("torque") or [0] * 6
+                        else:
+                            t_pos = inst.get_task_pos()
+                            j_pos = inst.get_joint_pos()
+
+                            # 로봇 상태도 함께 수집 (movedone, busy, emergency 등)
+                            robot_status = None
+                            try:
+                                robot_status = inst.get_robot_status()
+                            except:
+                                pass
+
                             # 추가: 토크 값 수집 및 DB 전송
                             torque = [0]*6
                             try:
                                 torque = inst.get_control_torque()
                             except:
                                 pass
-                                
+
+                        if t_pos and j_pos:
+                            if not use_gateway_state:
+                                robot_manager.update_robot_state(name, j_pos, t_pos, robot_status, torque=torque)
+
                             status_data = {
                                 "robot_id": name,
                                 "q": j_pos,
@@ -347,7 +402,8 @@ class ModernContyApp(ctk.CTk):
                                 "busy": robot_status.get('busy', 0) if robot_status else 0
                             }
                             # DB Repository 직접 호출 대신 MQTT로 브로드캐스트
-                            self.mqtt_broker.publish("robot/realtime", status_data)
+                            if not robot_manager.should_use_gateway():
+                                self.mqtt_broker.publish("robot/realtime", status_data)
 
                             vt_payload = self._build_virtual_test_sample(name, j_pos, t_pos, torque, robot_status)
                             if vt_payload:

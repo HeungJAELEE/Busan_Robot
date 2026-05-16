@@ -166,6 +166,22 @@ PLC까지 연결할 때:
 docker compose up -d plc_bridge
 ```
 
+운영 모드에서 UI가 로봇을 직접 잡지 않고 Docker Robot Controller를 통해 제어하게 하려면 UI 실행 전에 아래 환경변수를 켭니다.
+
+Windows:
+
+```powershell
+$env:ROBOT_CONTROL_MODE="mqtt"
+```
+
+Mac:
+
+```bash
+export ROBOT_CONTROL_MODE=mqtt
+```
+
+기본값은 `auto`입니다. MQTT Broker가 연결되어 있으면 Docker Robot Controller를 사용하고, 없으면 기존 직접 연결 방식을 사용합니다.
+
 전체 종료:
 
 ```powershell

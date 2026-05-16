@@ -6,6 +6,8 @@ Neuromeka(뉴로메카) **Indy7 협동 로봇**을 위한 PC 기반 HMI 소프�
 
 처음 실행하는 사용자는 먼저 [BEGINNER_RUN_GUIDE.md](./BEGINNER_RUN_GUIDE.md)를 보세요. UI 실행, Windows Docker 설치, Docker 실행, 통신 정상 확인 방법을 순서대로 정리했습니다.
 
+로봇/DB/Digital Twin 간 데이터 흐름은 [ROBOT_COMMUNICATION_FLOW.md](./ROBOT_COMMUNICATION_FLOW.md)에 정리되어 있습니다.
+
 ---
 
 ## 📁 프로젝트 모노레포 구조 (Frontend & Backend)

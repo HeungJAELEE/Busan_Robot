@@ -23,6 +23,12 @@ services:
       MQTT_PORT: 1883
       ROBOT_IP: ${ROBOT_A_IP:-192.168.3.11}
       ROBOT_NAME: ${ROBOT_NAME:-Indy7}
+      ROBOT_MODEL: ${ROBOT_MODEL:-NRMK-Indy7}
+      DEFAULT_ROBOT_ID: ${DEFAULT_ROBOT_ID:-Robot A}
+      ROBOT_AUTOCONNECT: ${ROBOT_AUTOCONNECT:-0}
+      ROBOT_A_IP: ${ROBOT_A_IP:-192.168.3.11}
+      ROBOT_B_IP: ${ROBOT_B_IP:-192.168.3.12}
+      ROBOT_C_IP: ${ROBOT_C_IP:-192.168.3.13}
     depends_on:
       - message_broker
     restart: unless-stopped
