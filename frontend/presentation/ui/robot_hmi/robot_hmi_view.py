@@ -745,7 +745,7 @@ class ProgramTreeEditor:
                 self.node_joint_targets.clear()
                 self.node_data.clear()
 
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, 'r', encoding='utf-8-sig') as f:
                     data = json.load(f)
                 self.current_program_tcp = None
 
@@ -1960,7 +1960,7 @@ class ProgramTreeEditor:
             print(">> [DRY RUN] DI 대기와 DO/툴 출력을 실제 I/O 없이 검증합니다.")
         if is_virtual_test:
             cycle_label = "무한" if virtual_target_cycles <= 0 else f"{virtual_target_cycles}회"
-            print(f">> [가상화 테스트] session={virtual_session_id} target={cycle_label} sample={virtual_sample_interval_ms}ms")
+            print(f">> [로봇 점검 Data수집] session={virtual_session_id} target={cycle_label} sample={virtual_sample_interval_ms}ms")
         virtual_di_raw = virtual_cfg.get("virtual_di", {})
         virtual_di_manual = bool(virtual_cfg.get("virtual_di_mode") == "manual" or virtual_cfg.get("virtual_di_manual"))
         virtual_di_map = {}
@@ -2366,6 +2366,19 @@ class ProgramTreeEditor:
             op_map = {0: "==", 1: "!=", 2: ">", 3: ">=", 4: "<", 5: "<="}
             return f"{left} {op_map.get(cond.get('op', 0), '==')} {right}"
 
+        def _di_condition_text(di_list):
+            if not di_list:
+                return "DI 미지정"
+            parts = []
+            for cond in di_list:
+                try:
+                    idx = int(cond.get("idx", 0))
+                    val = "ON" if int(cond.get("value", 1) or 0) else "OFF"
+                except (TypeError, ValueError):
+                    continue
+                parts.append(f"DI{idx:02d}={val}")
+            return ", ".join(parts) if parts else "DI 미지정"
+
         def _execute_condition_chain(node_list, start_idx):
             chain = []
             idx2 = start_idx
@@ -2400,6 +2413,34 @@ class ProgramTreeEditor:
                     break
             return len(chain)
 
+        def _execute_di_condition_chain(node_list, start_idx):
+            chain = []
+            idx2 = start_idx
+            while idx2 < len(node_list):
+                raw2 = node_list[idx2]["data"].get("__raw__", {})
+                branch_type = raw2.get("type", -1)
+                if idx2 == start_idx:
+                    if branch_type not in (29, 30):
+                        break
+                elif branch_type != 30:
+                    break
+                chain.append(node_list[idx2])
+                idx2 += 1
+
+            for branch in chain:
+                b_data = branch["data"]
+                b_raw = b_data.get("__raw__", {})
+                b_type = b_raw.get("type", -1)
+                di_list = b_data.get("diList", b_raw.get("diList", []))
+                label = "If DI" if b_type == 29 else "Elif DI"
+                result = _di_condition_met(di_list, label) if di_list else False
+                print(f">>   🔀 {label} ({_di_condition_text(di_list)}) → {'TRUE' if result else 'FALSE'}")
+                if result:
+                    _highlight(branch["id"])
+                    _execute_node_list(branch["children"])
+                    break
+            return len(chain)
+
         def _execute_node_list(node_list):
             skip_indices = set()  # 인터리빙으로 이미 처리된 노드 인덱스
             for idx, node in enumerate(node_list):
@@ -2424,6 +2465,10 @@ class ProgramTreeEditor:
                 _check_robot_fault(text, item_id)
                 if node_type in (24, 25, 26):
                     consumed = _execute_condition_chain(node_list, idx)
+                    skip_indices.update(range(idx + 1, idx + consumed))
+                    continue
+                if node_type in (29, 30) and node["children"]:
+                    consumed = _execute_di_condition_chain(node_list, idx)
                     skip_indices.update(range(idx + 1, idx + consumed))
                     continue
 
@@ -2475,12 +2520,20 @@ class ProgramTreeEditor:
                                 pallet_size = max(pallet_size, m_ * n_ * l_)
                     if pallet_size > 0:
                         if count is None:
-                            effective = None
-                            print(f">> 🔄 Loop 무한 반복 (팔레트 슬롯 {pallet_size}개 순환)")
+                            if is_virtual_test:
+                                effective = 1
+                                print(f">> 🔄 점검 수집 모드: 내부 무한 Loop를 이번 Cycle에서 1회전만 실행 (팔레트 슬롯 {pallet_size}개)")
+                            else:
+                                effective = None
+                                print(f">> 🔄 Loop 무한 반복 (팔레트 슬롯 {pallet_size}개 순환)")
                         else:
                             effective = count
                     else:
-                        effective = count  # None이면 무한
+                        if count is None and is_virtual_test:
+                            effective = 1
+                            print(">> 🔄 점검 수집 모드: 내부 무한 Loop를 이번 Cycle에서 1회전만 실행")
+                        else:
+                            effective = count  # None이면 무한
 
                     iteration = 0
                     prev_slot = getattr(self, "_pallet_loop_idx", None)
@@ -3154,14 +3207,14 @@ class ProgramTreeEditor:
                         cycle_index += 1
                         self._virtual_cycle_index = cycle_index
                         if is_virtual_test:
-                            print(f">> [가상화 테스트] Cycle {cycle_index}/{cycle_limit if cycle_limit > 0 else '무한'} 시작")
+                            print(f">> [로봇 점검 Data수집] Cycle {cycle_index}/{cycle_limit if cycle_limit > 0 else '무한'} 시작")
                             _notify_virtual("cycle_start", cycle_index, "running")
                         _execute_node_list(all_nodes)
                         if self._exec_stop:
                             break
                         completed_cycles = cycle_index
                         if is_virtual_test:
-                            print(f">> [가상화 테스트] Cycle {cycle_index} 완료")
+                            print(f">> [로봇 점검 Data수집] Cycle {cycle_index} 완료")
                             _notify_virtual("cycle_done", cycle_index, "running")
                         if not is_virtual_test:
                             break
@@ -3939,7 +3992,7 @@ class OptionsEditor:
         cfg_path = os.path.join(base_dir, 'user_programs', '_custom_paths.json')
         try:
             if os.path.exists(cfg_path):
-                with open(cfg_path, 'r', encoding='utf-8') as f:
+                with open(cfg_path, 'r', encoding='utf-8-sig') as f:
                     paths = json.load(f)
                 path = paths.get(robot_name)
                 if path:
@@ -3955,7 +4008,7 @@ class OptionsEditor:
                 print(f">> [TCP] 현재 프로그램 파일을 찾을 수 없습니다: {path}")
             return False
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(path, 'r', encoding='utf-8-sig') as f:
                 data = json.load(f)
             tcp = _extract_first_program_tcp(data)
             if not tcp:
@@ -3983,7 +4036,7 @@ class OptionsEditor:
                 print(f">> [툴 매핑] 현재 프로그램 파일을 찾을 수 없습니다: {path}")
             return False
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(path, 'r', encoding='utf-8-sig') as f:
                 data = json.load(f)
 
             cfg_node = None

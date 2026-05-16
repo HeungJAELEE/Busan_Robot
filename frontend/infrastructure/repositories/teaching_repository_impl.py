@@ -9,7 +9,7 @@ class TeachingRepositoryImpl:
         if not os.path.exists(filepath):
             return ContyProgram("New_Program")
             
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, 'r', encoding='utf-8-sig') as f:
             data = json.load(f)
             
         prog_name = data.get("info", {}).get("name", "Loaded_Program")
@@ -479,6 +479,11 @@ class TeachingRepositoryImpl:
         }
 
         nodes = list(getattr(program, "nodes", []) or [])
+        raw_wp_by_id = {
+            str(wp.get("id")): wp
+            for wp in (getattr(program, "_raw_wpList", []) or [])
+            if isinstance(wp, dict) and wp.get("id") is not None
+        }
 
         # ─── 1) Config(999) / Variables(2) 강제 첫 두 항목 ───────────
         config_node = next((n for n in nodes if n.type == 999), None)
@@ -553,35 +558,53 @@ class TeachingRepositoryImpl:
 
             t = node.type
 
-            if t in (102, 103):
+            if t in (102, 103, 104, 105, 106):
                 # ─ Move: program 메타 + moveList + wpList 분리 ─
                 name = node.name or (f"jmove-{new_id:02d}" if t == 102 else f"tmove-{new_id:02d}")
+                move_data = getattr(node, "move_data", None)
+                if not isinstance(move_data, dict):
+                    move_data = {}
 
                 # waypoint 수집: resolved_waypoints 우선, 없으면 raw q/p에서 단일 생성
                 wps = getattr(node, "resolved_waypoints", []) or []
                 wp_refs = []
-                for wp_entry in wps:
-                    wp_vo = wp_entry.get("wp") if isinstance(wp_entry, dict) else None
-                    if wp_vo is not None:
-                        q_v = list(wp_vo.j_pos) if wp_vo.j_pos else [0]*6
-                        p_v = list(wp_vo.t_pos) if wp_vo.t_pos else [0]*6
-                        blend_r = float(getattr(wp_vo, "blend_radius", 0) or 0)
-                    else:
-                        q_v = list(wp_entry.get("q", [0]*6))
-                        p_v = list(wp_entry.get("p", [0]*6))
-                        blend_r = float(wp_entry.get("blendRadius", 0) or 0)
-                    out["wpList"].append({
-                        "id": next_wp_id,
-                        "type": 0,
-                        "tBase": 0,
-                        "stopBlend": True,
-                        "blendRadius": blend_r,
-                        "name": f"{name}-{next_wp_id:02d}",
-                        "q": q_v,
-                        "p": p_v,
-                    })
-                    wp_refs.append({"t": 2, "id": next_wp_id})
-                    next_wp_id += 1
+                if t in (104, 105, 106) and move_data.get("wpList"):
+                    for ref in move_data.get("wpList", []) or []:
+                        old_id = str(ref.get("id", ""))
+                        wp_src = raw_wp_by_id.get(old_id)
+                        if not isinstance(wp_src, dict):
+                            continue
+                        wp_copy = dict(wp_src)
+                        wp_copy["id"] = next_wp_id
+                        out["wpList"].append(wp_copy)
+                        ref_copy = dict(ref)
+                        ref_copy["id"] = next_wp_id
+                        wp_refs.append(ref_copy)
+                        next_wp_id += 1
+
+                if not wp_refs:
+                    for wp_entry in wps:
+                        wp_vo = wp_entry.get("wp") if isinstance(wp_entry, dict) else None
+                        if wp_vo is not None:
+                            q_v = list(wp_vo.j_pos) if wp_vo.j_pos else [0]*6
+                            p_v = list(wp_vo.t_pos) if wp_vo.t_pos else [0]*6
+                            blend_r = float(getattr(wp_vo, "blend_radius", 0) or 0)
+                        else:
+                            q_v = list(wp_entry.get("q", [0]*6))
+                            p_v = list(wp_entry.get("p", [0]*6))
+                            blend_r = float(wp_entry.get("blendRadius", 0) or 0)
+                        out["wpList"].append({
+                            "id": next_wp_id,
+                            "type": 0,
+                            "tBase": 0,
+                            "stopBlend": True,
+                            "blendRadius": blend_r,
+                            "name": f"{name}-{next_wp_id:02d}",
+                            "q": q_v,
+                            "p": p_v,
+                        })
+                        wp_refs.append({"t": 2, "id": next_wp_id})
+                        next_wp_id += 1
 
                 if not wp_refs:
                     # all_waypoints fallback (제거된 raw에서 다시 한번 조회는 안 되므로 원본에서)
@@ -613,18 +636,19 @@ class TeachingRepositoryImpl:
                         next_wp_id += 1
 
                 # moveList 항목
-                mv_entry = {
+                mv_entry = dict(move_data) if move_data else {}
+                mv_entry.update({
                     "type": t,
                     "name": name,
-                    "intpl": raw.get("intpl", 1),
-                    "tcp": raw.get("tcp", [0.0]*6),
-                    "refFrame": raw.get("refFrame", {"type": 1, "tref": [0]*6}),
-                    "boundary": raw.get("boundary", {"velLevel": 3, "accLevel": 3}),
-                    "blendOpt": raw.get("blendOpt", {"processLoop": False, "constant": False}),
                     "wpList": wp_refs,
-                }
+                })
+                mv_entry.setdefault("intpl", raw.get("intpl", 1))
+                mv_entry.setdefault("tcp", raw.get("tcp", [0.0]*6))
+                mv_entry.setdefault("refFrame", raw.get("refFrame", {"type": 1, "tref": [0]*6}))
+                mv_entry.setdefault("boundary", raw.get("boundary", {"velLevel": 3, "accLevel": 3}))
+                mv_entry.setdefault("blendOpt", raw.get("blendOpt", {"processLoop": False, "constant": False}))
                 if t == 103:
-                    mv_entry["offset"] = raw.get("offset", {"type": 0, "pos": [0, 0, 0]})
+                    mv_entry.setdefault("offset", raw.get("offset", {"type": 0, "pos": [0, 0, 0]}))
                 out["moveList"].append(mv_entry)
 
                 # program 메타

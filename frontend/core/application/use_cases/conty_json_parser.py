@@ -65,7 +65,7 @@ class ContyJsonParser:
     def parse_to_tree_nodes(filepath: str):
         """Conty JSON을 트리 노드로 파싱"""
         try:
-            with open(filepath, 'r', encoding='utf-8') as f:
+            with open(filepath, 'r', encoding='utf-8-sig') as f:
                 data = json.load(f)
         except Exception as e:
             return {"error": f"Failed to load JSON: {str(e)}"}

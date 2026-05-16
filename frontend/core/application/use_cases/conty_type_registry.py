@@ -66,6 +66,7 @@ TYPE_REGISTRY: Dict[int, ContyTypeInfo] = {
     901: ContyTypeInfo(901, "Call", False, "PC-only placeholder; do not export as APK-compatible Call yet."),
     902: ContyTypeInfo(902, "Force", False, "PC-only placeholder; APK type is not confirmed."),
     903: ContyTypeInfo(903, "Comment", False, "PC-only annotation."),
+    999: ContyTypeInfo(999, "Program Settings", True),
 }
 
 

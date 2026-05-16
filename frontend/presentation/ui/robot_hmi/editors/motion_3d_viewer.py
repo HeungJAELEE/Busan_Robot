@@ -389,6 +389,34 @@ class Motion3DViewer:
                             break
                     continue
 
+                if t in (29, 30) and self.tree.get_children(item):
+                    chain = []
+                    scan_idx = child_idx
+                    while scan_idx < len(children):
+                        sd = self.node_data.get(children[scan_idx], {})
+                        sr = sd.get("__raw__", {})
+                        branch_type = sr.get("type", -1)
+                        if scan_idx == child_idx:
+                            if branch_type not in (29, 30):
+                                break
+                        elif branch_type != 30:
+                            break
+                        chain.append(children[scan_idx])
+                        scan_idx += 1
+                    skip_indices.update(range(child_idx + 1, child_idx + len(chain)))
+                    for branch_item in chain:
+                        bd = self.node_data.get(branch_item, {})
+                        br = bd.get("__raw__", {})
+                        di_list = bd.get("diList", br.get("diList", []))
+                        label = "If DI" if br.get("type", -1) == 29 else "Elif DI"
+                        passed = _eval_di_list(di_list)
+                        emit_io_step(f"{label} {'TRUE' if passed else 'FALSE'} ({_di_text(di_list)})",
+                                     "#66BB6A" if passed else "#78909C")
+                        if passed:
+                            walk(branch_item, iter_slot)
+                            break
+                    continue
+
                 if t == 100:  # Home
                     if p and any(v != 0 for v in p):
                         xyz = [p[0]*1000, p[1]*1000, p[2]*1000]
@@ -496,12 +524,15 @@ class Motion3DViewer:
         self.display_vars = dict(sim_vars)
         self.required_di_values = self._collect_required_di_values()
 
-    def _collect_required_di_values(self):
+    def _collect_required_di_values(self, wait_only=False):
         required = {}
         for data in self.node_data.values():
             if not isinstance(data, dict):
                 continue
             raw = data.get("__raw__", {}) if isinstance(data.get("__raw__", {}), dict) else {}
+            node_type = raw.get("type", data.get("type", -1))
+            if wait_only and node_type != 28:
+                continue
             for key in ("diList", "endtoolDiList"):
                 for cond in data.get(key, raw.get(key, [])) or []:
                     if not isinstance(cond, dict):
@@ -615,9 +646,14 @@ class Motion3DViewer:
         ctk.CTkButton(header, text="DI/DO 초기화", height=28,
                       command=self._reset_io,
                       fg_color="#424242", hover_color="#616161").pack(fill="x", padx=8, pady=(0, 8))
-        ctk.CTkButton(header, text="필요 DI 적용", height=28,
+        preset_row = ctk.CTkFrame(header, fg_color="transparent")
+        preset_row.pack(fill="x", padx=8, pady=(0, 8))
+        ctk.CTkButton(preset_row, text="대기 DI 적용", height=28,
+                      command=self._apply_wait_di,
+                      fg_color="#1565C0", hover_color="#1976D2").pack(side="left", fill="x", expand=True, padx=(0, 3))
+        ctk.CTkButton(preset_row, text="전체 DI 적용", height=28,
                       command=self._apply_required_di,
-                      fg_color="#2E7D32", hover_color="#388E3C").pack(fill="x", padx=8, pady=(0, 8))
+                      fg_color="#2E7D32", hover_color="#388E3C").pack(side="left", fill="x", expand=True, padx=(3, 0))
 
         ctk.CTkLabel(parent, text="DI 입력 (외부 신호)", font=("Pretendard", 13, "bold"),
                      text_color="#81D4FA").pack(anchor="w", padx=10, pady=(8, 2))
@@ -665,6 +701,14 @@ class Motion3DViewer:
 
     def _apply_required_di(self):
         required = self.required_di_values or self._collect_required_di_values()
+        for idx, value in required.items():
+            if 0 <= idx < len(self.di_state):
+                self.di_state[idx] = value
+        self.current_step = 0
+        self._rebuild_simulation()
+
+    def _apply_wait_di(self):
+        required = self._collect_required_di_values(wait_only=True)
         for idx, value in required.items():
             if 0 <= idx < len(self.di_state):
                 self.di_state[idx] = value

@@ -456,15 +456,62 @@ class RobotControlUseCase:
             try:
                 def _do():
                     try:
-                        try:
-                            inst.stop_motion()
-                        except Exception:
-                            pass
-                        ret = inst.reset_robot()
-                        if ret not in (None, 0):
-                            print(f">> [리셋 경고] reset_robot 응답 코드={ret}")
+                        def _status():
+                            try:
+                                return inst.get_robot_status()
+                            except Exception:
+                                return {}
+
+                        def _fault_text(status):
+                            if not isinstance(status, dict):
+                                return "상태 조회 실패"
+                            faults = []
+                            if status.get("emergency", 0):
+                                faults.append("비상정지")
+                            if status.get("collision", 0):
+                                faults.append("충돌")
+                            if status.get("error", 0):
+                                faults.append("로봇 에러")
+                            if status.get("resetting", 0):
+                                faults.append("리셋중")
+                            return ", ".join(faults)
+
+                        before = _status()
+                        print(f">> [리셋] {name} 복구 시퀀스 시작: {_fault_text(before) or 'fault 없음'}")
+
+                        for fn_name in ("stop_motion", "stop_current_program"):
+                            fn = getattr(inst, fn_name, None)
+                            if not fn:
+                                continue
+                            try:
+                                fn()
+                                time.sleep(0.15)
+                            except Exception:
+                                pass
+
+                        last_status = before
+                        for attempt in range(1, 4):
+                            try:
+                                ret = inst.reset_robot()
+                                if ret not in (None, 0):
+                                    print(f">> [리셋 경고] reset_robot #{attempt} 응답 코드={ret}")
+                            except Exception as e:
+                                print(f">> [리셋 에러] reset_robot #{attempt} 실패: {e}")
+
+                            deadline = time.time() + 3.0
+                            while time.time() < deadline:
+                                time.sleep(0.25)
+                                last_status = _status()
+                                if not last_status.get("resetting", 0):
+                                    break
+
+                            fault_msg = _fault_text(last_status)
+                            if not fault_msg:
+                                print(f">> [리셋] {name} 에러/충돌 리셋 완료")
+                                break
+                            print(f">> [리셋 확인] #{attempt} 후 상태 유지: {fault_msg}")
                         else:
-                            print(">> [리셋] 로봇 에러/충돌 리셋 명령 전송 완료")
+                            print(f">> [리셋 경고] {name} 리셋 명령 후에도 fault가 남아있습니다. APK 리셋 또는 전원/서보 상태 확인이 필요합니다.")
                     except Exception as e:
                         print(f">> [리셋 에러] {e}")
                     finally:
@@ -1222,7 +1269,7 @@ class RobotControlUseCase:
         if not inst: return False
         def _do():
             try:
-                with open(json_path, 'r', encoding='utf-8') as f:
+                with open(json_path, 'r', encoding='utf-8-sig') as f:
                     prog_data = _json.load(f)
                 prog_str = _json.dumps(prog_data, ensure_ascii=False)
                 inst.set_and_start_json_program(prog_str)

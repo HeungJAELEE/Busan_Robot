@@ -16,7 +16,7 @@ from presentation.ui.theme import Theme
 
 
 class VirtualTestRecorder:
-    """Asynchronous MySQL writer for virtual dry-run sessions."""
+    """Asynchronous MySQL writer for robot diagnostic collection sessions."""
 
     def __init__(self):
         self.conn = None
@@ -253,10 +253,10 @@ class VirtualTestRecorder:
 
 
 class LocalVirtualTestStore:
-    """Local JSONL writer for virtual-test sessions."""
+    """Local JSONL writer for robot diagnostic collection sessions."""
 
     def __init__(self, base_dir=None):
-        default_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "logs", "virtual_tests"))
+        default_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "logs", "robot_diagnostic_data"))
         self.base_dir = base_dir or default_dir
         self.sessions = {}
         self.lock = threading.Lock()
@@ -357,9 +357,9 @@ class VirtualTestView:
         left = ctk.CTkFrame(self.parent, fg_color=Theme.BG_SURFACE, corner_radius=10)
         left.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
-        ctk.CTkLabel(left, text="가상화 테스트", font=Theme.font(size=20, weight="bold", role="display"),
+        ctk.CTkLabel(left, text="로봇 점검 Data수집", font=Theme.font(size=20, weight="bold", role="display"),
                      text_color=Theme.WARNING).pack(anchor="w", padx=16, pady=(16, 2))
-        ctk.CTkLabel(left, text="Dry Run Auto + MySQL Recorder", font=Theme.font(size=12),
+        ctk.CTkLabel(left, text="점검 Dry Run + Torque/Position Recorder", font=Theme.font(size=12),
                      text_color=Theme.TEXT_SECONDARY).pack(anchor="w", padx=16, pady=(0, 12))
 
         settings = ctk.CTkFrame(left, fg_color=Theme.BG_BASE, corner_radius=8)
@@ -379,6 +379,9 @@ class VirtualTestView:
         ctk.CTkButton(di_head, text="ALL OFF", width=64, height=24,
                       command=lambda: self._set_all_virtual_di(0),
                       **Theme.get_button_style("secondary")).pack(side="right", padx=2)
+        ctk.CTkButton(di_head, text="대기 DI", width=64, height=24,
+                      command=self._apply_wait_di_from_programs,
+                      **Theme.get_button_style("primary")).pack(side="right", padx=2)
 
         grid = ctk.CTkFrame(di_box, fg_color="transparent")
         grid.pack(fill="x", padx=8, pady=(0, 10))
@@ -478,7 +481,7 @@ class VirtualTestView:
         self.db_status_label.pack(fill="x", padx=16, pady=(2, 10))
 
         table_info = (
-            "저장 테이블\n"
+            "저장 테이블(내부명)\n"
             "robot_virtual_test_sessions\n"
             "robot_virtual_test_samples\n"
             "robot_virtual_test_events"
@@ -506,19 +509,19 @@ class VirtualTestView:
             self.db_name_entry.get().strip(),
         )
         self.db_status_label.configure(text=msg, text_color=Theme.SUCCESS if ok else Theme.DANGER)
-        print(f">> [가상화 테스트] {msg}")
+        print(f">> [로봇 점검 Data수집] {msg}")
         return ok
 
     def choose_local_dir(self):
         selected = fd.askdirectory(
-            title="가상화 테스트 로컬 저장 위치 선택",
+            title="로봇 점검 Data수집 로컬 저장 위치 선택",
             initialdir=self.local_store.base_dir,
         )
         if not selected:
             return
         self.local_store.set_base_dir(selected)
         self.local_path_label.configure(text=self.local_store.base_dir)
-        print(f">> [가상화 테스트] 로컬 저장 위치: {self.local_store.base_dir}")
+        print(f">> [로봇 점검 Data수집] 로컬 저장 위치: {self.local_store.base_dir}")
 
     def _sync_local_recording_enabled(self):
         try:
@@ -568,6 +571,68 @@ class VirtualTestView:
             var.set(1 if value else 0)
             self._refresh_virtual_di_button(idx)
 
+    def _frontend_root(self):
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+    def _program_path_for_robot(self, robot):
+        runner = self.runners.get(robot)
+        if runner:
+            return runner.get_current_program_path(robot)
+        base_dir = self._frontend_root()
+        cfg_path = os.path.join(base_dir, "user_programs", "_custom_paths.json")
+        try:
+            with open(cfg_path, "r", encoding="utf-8-sig") as f:
+                custom_paths = json.load(f)
+            if isinstance(custom_paths, dict) and custom_paths.get(robot):
+                return custom_paths[robot]
+        except Exception:
+            pass
+        return os.path.join(base_dir, "user_programs", robot.replace(" ", "_"), "program.json")
+
+    def _collect_wait_di_from_program(self, path):
+        required = {}
+        if not path or not os.path.exists(path):
+            return required
+        try:
+            with open(path, "r", encoding="utf-8-sig") as f:
+                data = json.load(f)
+        except Exception as exc:
+            print(f">> [로봇 점검 Data수집] 대기 DI 로드 실패: {path} / {exc}")
+            return required
+        for raw in data.get("program", []) or []:
+            if not isinstance(raw, dict) or raw.get("type") != 28:
+                continue
+            for key in ("diList", "endtoolDiList"):
+                for cond in raw.get(key, []) or []:
+                    if not isinstance(cond, dict):
+                        continue
+                    try:
+                        idx = int(cond.get("idx", 0))
+                        value = 1 if int(cond.get("value", 1) or 0) else 0
+                    except (TypeError, ValueError):
+                        continue
+                    if 0 <= idx < 32:
+                        required[idx] = value
+        return required
+
+    def _apply_wait_di_from_programs(self):
+        for idx, var in self.virtual_di_vars.items():
+            var.set(0)
+        required = {}
+        sources = []
+        for robot in ["Robot A", "Robot B", "Robot C"]:
+            path = self._program_path_for_robot(robot)
+            robot_required = self._collect_wait_di_from_program(path)
+            if robot_required:
+                sources.append(f"{robot}:{','.join(f'DI{k:02d}' for k in sorted(robot_required))}")
+            required.update(robot_required)
+        for idx, value in required.items():
+            self.virtual_di_vars[idx].set(value)
+        for idx in self.virtual_di_vars:
+            self._refresh_virtual_di_button(idx)
+        msg = ", ".join(sources) if sources else "대기 DI 없음"
+        print(f">> [로봇 점검 Data수집] 대기 DI 프리셋 적용: {msg}")
+
     def _refresh_virtual_di_button(self, idx):
         btn = self.virtual_di_buttons.get(idx)
         if not btn:
@@ -584,7 +649,7 @@ class VirtualTestView:
         info = robot_manager.get_robot_info(robot)
         if not info or info.get("instance") is None:
             self._set_status(robot, "미연결", Theme.DANGER)
-            print(f">> [가상화 테스트] {robot} 연결이 필요합니다.")
+            print(f">> [로봇 점검 Data수집] {robot} 연결이 필요합니다.")
             return
 
         self._sync_local_recording_enabled()
@@ -594,13 +659,13 @@ class VirtualTestView:
 
         runner = self._get_runner(robot)
         if runner.is_execution_running():
-            print(f">> [가상화 테스트] {robot} 테스트가 이미 실행 중입니다.")
+            print(f">> [로봇 점검 Data수집] {robot} 수집이 이미 실행 중입니다.")
             return
 
         target_cycles = self._target_cycles()
         interval_ms = self._sample_interval_ms()
         safe_robot = robot.replace(" ", "_")
-        session_id = f"VT_{safe_robot}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        session_id = f"RD_{safe_robot}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
         program_path = runner.get_current_program_path(robot)
         payload = {
             "session_id": session_id,
@@ -612,7 +677,7 @@ class VirtualTestView:
             "virtual_di_mode": "manual",
             "virtual_di": self._virtual_di_payload(),
             "status": "running",
-            "note": "Page3 virtualization dry run",
+            "note": "Page3 robot diagnostic data collection",
         }
 
         app = self.parent.winfo_toplevel()
@@ -633,11 +698,11 @@ class VirtualTestView:
         local_msg = f"\n로컬: {local_path}" if local_path else ""
         self.session_label.configure(text=f"최근 세션: {session_id}\n프로그램: {program_path}{local_msg}")
 
-        print(f">> [가상화 테스트] {robot} Dry Run 시작: {target_cycles}회, {interval_ms}ms")
+        print(f">> [로봇 점검 Data수집] {robot} Dry Run 시작: {target_cycles}회, {interval_ms}ms")
         runner.run_program_for_robot(robot, dry_run=True, virtual_test=payload)
 
     def stop_robot_test(self, robot):
-        print(f">> [가상화 테스트] {robot} 정지 요청")
+        print(f">> [로봇 점검 Data수집] {robot} 정지 요청")
         RobotControlUseCase.request_stop(robot)
         runner = self.runners.get(robot)
         if runner:

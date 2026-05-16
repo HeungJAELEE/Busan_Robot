@@ -66,7 +66,7 @@ class ModernContyApp(ctk.CTk):
         self.btn_page2 = ctk.CTkButton(tab_container, text="[Page 2] Setting / Teaching Mode", corner_radius=15, command=lambda: self.switch_page(2), **self.style_active)
         self.btn_page2.pack(side="left", padx=5)
 
-        self.btn_page3 = ctk.CTkButton(tab_container, text="[Page 3] Virtual Test", corner_radius=15, command=lambda: self.switch_page(3), **self.style_inactive)
+        self.btn_page3 = ctk.CTkButton(tab_container, text="[Page 3] 로봇 점검 Data수집", corner_radius=15, command=lambda: self.switch_page(3), **self.style_inactive)
         self.btn_page3.pack(side="left", padx=5)
 
         self.btn_page4 = ctk.CTkButton(tab_container, text="[Page 4] AI Teaching", corner_radius=15, command=lambda: self.switch_page(4), **self.style_inactive)
@@ -128,6 +128,7 @@ class ModernContyApp(ctk.CTk):
         self._program_running_robots = set()
         self._virtual_test_sessions = {}
         self._virtual_last_sample_ts = {}
+        self._virtual_snapshot_last_ts = {}
         
         # 기본 페이지 설정
         self.active_page = 2
@@ -355,10 +356,16 @@ class ModernContyApp(ctk.CTk):
                                     self.mqtt_broker.publish("robot/virtual_test_sample", vt_payload)
                                 except Exception:
                                     pass
-                            try:
-                                self.after(0, lambda n=name, q=j_pos, p=t_pos, tq=torque: self.virtual_test_view.update_robot_snapshot(n, q, p, tq))
-                            except Exception:
-                                pass
+                            vt_state = self._virtual_test_sessions.get(name, {})
+                            if self.active_page == 3 or vt_state.get("active"):
+                                now = time.time()
+                                last_snapshot = self._virtual_snapshot_last_ts.get(name, 0.0)
+                                if now - last_snapshot >= 0.5:
+                                    self._virtual_snapshot_last_ts[name] = now
+                                    try:
+                                        self.after(0, lambda n=name, q=j_pos, p=t_pos, tq=torque: self.virtual_test_view.update_robot_snapshot(n, q, p, tq))
+                                    except Exception:
+                                        pass
                             
                             # Page 1일 때만 3D 뷰어 UI 갱신
                             if self.active_page == 1:
