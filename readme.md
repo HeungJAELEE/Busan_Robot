@@ -4,6 +4,8 @@ Neuromeka(뉴로메카) **Indy7 협동 로봇**을 위한 PC 기반 HMI 소프�
 
 기존의 얽혀있던 구조에서 벗어나 **프론트엔드 UI와 백엔드 마이크로서비스(스레드 기반/도커 기반 선택 가능)를 분리**하여 개발된 클린 아키텍처 기반의 모노레포(Monorepo) 프로젝트입니다.
 
+처음 실행하는 사용자는 먼저 [BEGINNER_RUN_GUIDE.md](./BEGINNER_RUN_GUIDE.md)를 보세요. UI 실행, Windows Docker 설치, Docker 실행, 통신 정상 확인 방법을 순서대로 정리했습니다.
+
 ---
 
 ## 📁 프로젝트 모노레포 구조 (Frontend & Backend)

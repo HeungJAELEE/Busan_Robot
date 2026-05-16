@@ -1,0 +1,372 @@
+# Indy7 HMI 초보자 실행 가이드
+
+이 문서는 처음 실행하는 사람 기준으로 작성한 안내서입니다.
+
+가장 먼저 이것만 기억하면 됩니다.
+
+- **UI 화면**은 Docker Desktop 안에서 뜨지 않습니다.
+- **UI 화면**은 Python으로 직접 실행합니다.
+- **Docker**는 MQTT, DB Worker, Digital Twin, Robot Controller 같은 백그라운드 서비스를 실행합니다.
+- Docker Desktop에서 봐야 하는 곳은 `Images`가 아니라 보통 **Containers** 화면입니다.
+
+## 1. 전체 실행 순서
+
+```text
+1. Windows PC에 Docker Desktop 설치
+2. 프로젝트 폴더 준비
+3. backend/.env 파일 확인
+4. Docker 백그라운드 서비스 실행
+5. frontend UI 실행
+6. 통신 정상 여부 확인
+```
+
+## 2. UI 실행 방법
+
+UI는 Docker가 아니라 Python으로 실행합니다.
+
+### Windows에서 실행
+
+PowerShell을 엽니다.
+
+```powershell
+cd C:\Users\leejaeheung\Documents\Busan_Project\Indy7_HMI_Clean
+py -m pip install -r requirements.txt
+cd frontend
+py run_ui_only.py
+```
+
+만약 `py` 명령이 안 되면 아래처럼 시도합니다.
+
+```powershell
+python -m pip install -r requirements.txt
+cd frontend
+python run_ui_only.py
+```
+
+정상이라면 `INDY7 COMMAND CENTER` 창이 뜹니다.
+
+### Mac에서 실행
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+python3 -m pip install -r requirements.txt
+cd frontend
+python3 run_ui_only.py
+```
+
+## 3. Docker 설치 방법 (Windows)
+
+### 3-1. WSL2 설치
+
+관리자 권한 PowerShell을 열고 실행합니다.
+
+```powershell
+wsl --install
+```
+
+설치 후 Windows를 재부팅합니다.
+
+> 참고: `wsl`은 Windows 전용 명령입니다. Mac에서 실행하면 `command not found`가 뜨는 것이 정상입니다.
+
+### 3-2. Docker Desktop 설치
+
+Docker Desktop for Windows를 설치합니다.
+
+- 설치 중 `Use WSL 2 instead of Hyper-V` 옵션을 선택합니다.
+- 설치 후 Docker Desktop을 실행합니다.
+- 화면 왼쪽 아래 또는 상태 표시가 `Engine running`이면 정상입니다.
+
+설치 확인:
+
+```powershell
+docker version
+docker compose version
+```
+
+정상이라면 Docker Client/Server 버전과 Docker Compose 버전이 표시됩니다.
+
+## 4. Docker 실행 방법
+
+Docker 명령은 반드시 `backend` 폴더에서 실행합니다.
+
+### 4-1. backend 폴더로 이동
+
+Windows:
+
+```powershell
+cd C:\Users\leejaeheung\Documents\Busan_Project\Indy7_HMI_Clean\backend
+```
+
+Mac:
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+```
+
+현재 폴더에 `docker-compose.yml`이 있는지 확인합니다.
+
+Windows:
+
+```powershell
+dir docker-compose.yml
+```
+
+Mac:
+
+```bash
+ls docker-compose.yml
+```
+
+`docker-compose.yml`이 안 보이면 `docker compose` 명령은 실패합니다.
+
+### 4-2. .env 파일 만들기
+
+Windows:
+
+```powershell
+copy .env.example .env
+notepad .env
+```
+
+Mac:
+
+```bash
+cp .env.example .env
+open -e .env
+```
+
+현장 IP를 확인합니다.
+
+```env
+ROBOT_A_IP=192.168.3.11
+ROBOT_B_IP=192.168.3.12
+ROBOT_C_IP=192.168.3.13
+MYSQL_HOST=192.168.3.45
+PLC_IP=192.168.3.39
+```
+
+### 4-3. Docker 서비스 실행
+
+처음 실행하거나 소스에서 직접 빌드할 때:
+
+```powershell
+docker compose build
+docker compose up -d message_broker db_worker digital_twin
+```
+
+실제 로봇까지 연결할 때:
+
+```powershell
+docker compose up -d robot_controller
+```
+
+PLC까지 연결할 때:
+
+```powershell
+docker compose up -d plc_bridge
+```
+
+전체 종료:
+
+```powershell
+docker compose down
+```
+
+## 5. Docker Desktop에서 확인하는 방법
+
+Docker Desktop을 열고 왼쪽 메뉴에서 **Containers**를 클릭합니다.
+
+정상이라면 `indy7-hmi` 프로젝트 아래에 아래 컨테이너들이 보입니다.
+
+```text
+indy7_mqtt_broker
+indy7_db_worker
+indy7_digital_twin
+indy7_robot_controller
+indy7_plc_bridge
+```
+
+초록색 또는 `Running`이면 실행 중입니다.
+
+`Images` 메뉴는 빌드된 이미지 목록을 보는 곳입니다. 프로그램 화면이 나오는 곳이 아닙니다.
+
+## 6. 통신 정상 실행 여부 확인
+
+### 6-1. 컨테이너 상태 확인
+
+`backend` 폴더에서 실행합니다.
+
+```powershell
+docker compose ps
+```
+
+정상 예시:
+
+```text
+indy7_mqtt_broker      Up
+indy7_db_worker        Up
+indy7_digital_twin     Up
+indy7_robot_controller Up
+```
+
+### 6-2. MQTT 브로커 확인
+
+```powershell
+docker compose logs -f message_broker
+```
+
+정상 로그:
+
+```text
+mosquitto version ... running
+Opening ipv4 listen socket on port 1883
+Opening ipv4 listen socket on port 9001
+```
+
+### 6-3. Digital Twin 확인
+
+```powershell
+docker compose logs -f digital_twin
+```
+
+정상 로그:
+
+```text
+Digital Twin 시작됨
+3D 뷰어용 웹소켓 스트리밍 서버 오픈 (ws://0.0.0.0:8080)
+```
+
+### 6-4. Robot Controller 확인
+
+```powershell
+docker compose logs -f robot_controller
+```
+
+정상 연결 예시:
+
+```text
+IndyDCP(192.168.3.11, Indy7) 로봇 접속 시도...
+실시간 상태 10Hz 폴링 및 MQTT 브로드캐스트 시작
+```
+
+아래 로그가 나오면 Docker 문제가 아니라 PC가 로봇 네트워크에 연결되지 않은 상태입니다.
+
+```text
+Socket connection error: timed out
+로봇 연결 실패. 더미 모드로 폴링합니다.
+```
+
+### 6-5. DB Worker 확인
+
+```powershell
+docker compose logs -f db_worker
+```
+
+아래 로그가 나오면 Docker 문제라기보다 MySQL 서버에 접근하지 못하는 상태입니다.
+
+```text
+Can't connect to MySQL server on '192.168.3.45'
+```
+
+현장 PC가 MySQL 서버와 같은 네트워크에 있어야 합니다.
+
+### 6-6. PLC Bridge 확인
+
+```powershell
+docker compose logs -f plc_bridge
+```
+
+아래 로그가 나오면 PLC IP/포트 또는 네트워크 연결을 확인합니다.
+
+```text
+PLC 연결 실패: timed out
+```
+
+## 7. 네트워크 확인 명령
+
+Windows PowerShell에서 실행합니다.
+
+로봇 A:
+
+```powershell
+Test-NetConnection 192.168.3.11 -Port 6066
+```
+
+PLC:
+
+```powershell
+Test-NetConnection 192.168.3.39 -Port 5000
+```
+
+MySQL:
+
+```powershell
+Test-NetConnection 192.168.3.45 -Port 3306
+```
+
+정상이라면 `TcpTestSucceeded : True`가 나옵니다.
+
+`False`가 나오면 Docker 문제가 아니라 네트워크, IP, 방화벽, 장비 전원, 장비 포트를 확인해야 합니다.
+
+## 8. 자주 나는 에러
+
+### no configuration file provided: not found
+
+원인: `docker-compose.yml`이 없는 폴더에서 실행했습니다.
+
+해결:
+
+```powershell
+cd C:\Users\leejaeheung\Documents\Busan_Project\Indy7_HMI_Clean\backend
+docker compose ps
+```
+
+### zsh: command not found: wsl
+
+원인: Mac에서 Windows 명령을 실행했습니다.
+
+해결: Mac에서는 `wsl`을 쓰지 않습니다.
+
+### zsh: command not found: docker
+
+원인: Docker Desktop이 설치되지 않았거나 실행되지 않았습니다.
+
+해결: Docker Desktop 설치 후 실행하고 다시 확인합니다.
+
+```bash
+docker version
+```
+
+### Docker Desktop에 UI 화면이 안 보임
+
+정상입니다.
+
+Docker Desktop은 백그라운드 서비스 상태를 보는 도구입니다. 실제 HMI UI는 Python으로 실행합니다.
+
+```powershell
+cd C:\Users\leejaeheung\Documents\Busan_Project\Indy7_HMI_Clean\frontend
+py run_ui_only.py
+```
+
+## 9. 현장 실행 최소 명령 모음
+
+Windows PowerShell:
+
+```powershell
+cd C:\Users\leejaeheung\Documents\Busan_Project\Indy7_HMI_Clean\backend
+copy .env.example .env
+notepad .env
+docker compose build
+docker compose up -d message_broker db_worker digital_twin
+docker compose up -d robot_controller plc_bridge
+docker compose ps
+```
+
+UI 실행:
+
+```powershell
+cd C:\Users\leejaeheung\Documents\Busan_Project\Indy7_HMI_Clean
+py -m pip install -r requirements.txt
+cd frontend
+py run_ui_only.py
+```

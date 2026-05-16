@@ -3,6 +3,8 @@
 이 폴더는 Indy7 로봇을 조종하는 **데스크톱 GUI(화면) 프로그램**입니다.
 Docker가 아닌, PC의 터미널에서 직접 실행합니다.
 
+처음 실행하는 사용자는 루트의 [`BEGINNER_RUN_GUIDE.md`](../BEGINNER_RUN_GUIDE.md)를 먼저 확인하세요.
+
 ## 🚀 실행 방법
 ```bash
 # 패키지 설치 (최초 1회)
