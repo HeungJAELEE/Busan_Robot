@@ -46,6 +46,7 @@ docker compose -f docker-compose.registry.yml up -d message_broker db_worker dig
 ```
 
 자세한 배포 절차와 `.env` 항목은 [`DOCKER_DEPLOYMENT.md`](./DOCKER_DEPLOYMENT.md)를 기준으로 관리합니다.
+Windows 현장 PC 기준 배포는 [`DOCKER_WINDOWS_DEPLOYMENT.md`](./DOCKER_WINDOWS_DEPLOYMENT.md)를 참고합니다.
 
 ---
 

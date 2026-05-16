@@ -2,6 +2,8 @@
 
 Indy7 HMI의 백엔드 서비스는 Docker Compose로 실행할 수 있습니다. 현재 구성은 HMI 화면은 로컬에서 실행하고, MQTT/로봇 상태 수집/DB 저장/디지털 트윈/PLC/비전 서비스를 컨테이너로 분리하는 형태입니다.
 
+Windows 현장 PC에서 실행할 때는 [`DOCKER_WINDOWS_DEPLOYMENT.md`](./DOCKER_WINDOWS_DEPLOYMENT.md)를 먼저 참고합니다.
+
 ## 1. 준비
 
 Docker Desktop 또는 Docker Engine과 Docker Compose v2가 필요합니다.
