@@ -453,9 +453,9 @@ class VirtualTestView:
         left = ctk.CTkFrame(self.parent, fg_color=Theme.BG_SURFACE, corner_radius=10)
         left.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
-        ctk.CTkLabel(left, text="로봇 점검 Data수집", font=Theme.font(size=20, weight="bold", role="display"),
+        ctk.CTkLabel(left, text="Dry Run Recording", font=Theme.font(size=20, weight="bold", role="display"),
                      text_color=Theme.WARNING).pack(anchor="w", padx=16, pady=(16, 2))
-        ctk.CTkLabel(left, text="점검 Dry Run + Torque/Position Recorder", font=Theme.font(size=12),
+        ctk.CTkLabel(left, text="Robot diagnostic dry run + torque/position recorder", font=Theme.font(size=12),
                      text_color=Theme.TEXT_SECONDARY).pack(anchor="w", padx=16, pady=(0, 12))
 
         settings = ctk.CTkFrame(left, fg_color=Theme.BG_BASE, corner_radius=8)
@@ -606,19 +606,19 @@ class VirtualTestView:
             self.db_name_entry.get().strip(),
         )
         self.db_status_label.configure(text=msg, text_color=Theme.SUCCESS if ok else Theme.DANGER)
-        print(f">> [로봇 점검 Data수집] {msg}")
+        print(f">> [Dry Run Recording] {msg}")
         return ok
 
     def choose_local_dir(self):
         selected = fd.askdirectory(
-            title="로봇 점검 Data수집 로컬 저장 위치 선택",
+            title="Dry Run Recording 로컬 저장 위치 선택",
             initialdir=self.local_store.base_dir,
         )
         if not selected:
             return
         self.local_store.set_base_dir(selected)
         self.local_path_label.configure(text=self.local_store.base_dir)
-        print(f">> [로봇 점검 Data수집] 로컬 저장 위치: {self.local_store.base_dir}")
+        print(f">> [Dry Run Recording] 로컬 저장 위치: {self.local_store.base_dir}")
 
     def _sync_local_recording_enabled(self):
         try:
@@ -698,7 +698,7 @@ class VirtualTestView:
             with open(path, "r", encoding="utf-8-sig") as f:
                 data = json.load(f)
         except Exception as exc:
-            print(f">> [로봇 점검 Data수집] 대기 DI 로드 실패: {path} / {exc}")
+            print(f">> [Dry Run Recording] 대기 DI 로드 실패: {path} / {exc}")
             return required
         for raw in data.get("program", []) or []:
             if not isinstance(raw, dict) or raw.get("type") != 28:
@@ -732,7 +732,7 @@ class VirtualTestView:
         for idx in self.virtual_di_vars:
             self._refresh_virtual_di_button(idx)
         msg = ", ".join(sources) if sources else "대기 DI 없음"
-        print(f">> [로봇 점검 Data수집] 대기 DI 프리셋 적용: {msg}")
+        print(f">> [Dry Run Recording] 대기 DI 프리셋 적용: {msg}")
 
     def _refresh_virtual_di_button(self, idx):
         btn = self.virtual_di_buttons.get(idx)
@@ -750,7 +750,7 @@ class VirtualTestView:
         info = robot_manager.get_robot_info(robot)
         if not info or info.get("instance") is None:
             self._set_status(robot, "미연결", Theme.DANGER)
-            print(f">> [로봇 점검 Data수집] {robot} 연결이 필요합니다.")
+            print(f">> [Dry Run Recording] {robot} 연결이 필요합니다.")
             return
 
         self._sync_local_recording_enabled()
@@ -760,7 +760,7 @@ class VirtualTestView:
 
         runner = self._get_runner(robot)
         if runner.is_execution_running():
-            print(f">> [로봇 점검 Data수집] {robot} 수집이 이미 실행 중입니다.")
+            print(f">> [Dry Run Recording] {robot} 수집이 이미 실행 중입니다.")
             return
 
         target_cycles = self._target_cycles()
@@ -778,7 +778,7 @@ class VirtualTestView:
             "virtual_di_mode": "manual",
             "virtual_di": self._virtual_di_payload(),
             "status": "running",
-            "note": "Page3 robot diagnostic data collection",
+            "note": "Page3 Dry Run Recording",
         }
 
         app = self.parent.winfo_toplevel()
@@ -799,11 +799,11 @@ class VirtualTestView:
         local_msg = f"\n로컬: {local_path}" if local_path else ""
         self.session_label.configure(text=f"최근 세션: {session_id}\n프로그램: {program_path}{local_msg}")
 
-        print(f">> [로봇 점검 Data수집] {robot} Dry Run 시작: {target_cycles}회, {interval_ms}ms")
+        print(f">> [Dry Run Recording] {robot} Dry Run 시작: {target_cycles}회, {interval_ms}ms")
         runner.run_program_for_robot(robot, dry_run=True, virtual_test=payload)
 
     def stop_robot_test(self, robot):
-        print(f">> [로봇 점검 Data수집] {robot} 정지 요청")
+        print(f">> [Dry Run Recording] {robot} 정지 요청")
         RobotControlUseCase.request_stop(robot)
         runner = self.runners.get(robot)
         if runner:

@@ -68,7 +68,7 @@ class ModernContyApp(ctk.CTk):
         self.btn_page2 = ctk.CTkButton(tab_container, text="[Page 2] Setting / Teaching Mode", corner_radius=15, command=lambda: self.switch_page(2), **self.style_active)
         self.btn_page2.pack(side="left", padx=5)
 
-        self.btn_page3 = ctk.CTkButton(tab_container, text="[Page 3] 로봇 점검 Data수집", corner_radius=15, command=lambda: self.switch_page(3), **self.style_inactive)
+        self.btn_page3 = ctk.CTkButton(tab_container, text="[Page 3] Dry Run Recording", corner_radius=15, command=lambda: self.switch_page(3), **self.style_inactive)
         self.btn_page3.pack(side="left", padx=5)
 
         self.btn_page4 = ctk.CTkButton(tab_container, text="[Page 4] AI Teaching", corner_radius=15, command=lambda: self.switch_page(4), **self.style_inactive)
@@ -110,7 +110,7 @@ class ModernContyApp(ctk.CTk):
         self.page2_frame.grid(row=0, column=0, sticky="nsew")
         self.hmi_view = RobotHmiView(self.page2_frame, on_back=lambda: self.switch_page(1))
 
-        # Page 3 (Virtual Dry Run / DB Recorder)
+        # Page 3 (Dry Run Recording / DB Recorder)
         self.page3_frame = ctk.CTkFrame(self.pages_container, fg_color="transparent")
         self.page3_frame.grid(row=0, column=0, sticky="nsew")
         self.virtual_test_view = VirtualTestView(self.page3_frame)

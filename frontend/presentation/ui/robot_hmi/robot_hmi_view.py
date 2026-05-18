@@ -243,10 +243,19 @@ class ProgramTreeEditor:
         return True
 
     def run_program_for_robot(self, robot_name, dry_run=False, virtual_test=None):
+        virtual_cfg = dict(virtual_test or {})
+        explicit_path = str(virtual_cfg.get("program_path") or "").strip()
+        if explicit_path:
+            explicit_path = self._resolve_program_path(explicit_path)
+            if os.path.exists(explicit_path):
+                self._set_custom_path(robot_name, explicit_path)
+            else:
+                print(f">> [에러] 지정한 프로그램 경로를 찾을 수 없습니다: {explicit_path}")
+                return False
         if not self.load_robot_program_for_execution(robot_name):
             return False
         self.dry_run_mode = bool(dry_run)
-        self.virtual_test_config = dict(virtual_test or {})
+        self.virtual_test_config = virtual_cfg
         self._run_program()
         return True
 
@@ -2006,7 +2015,7 @@ class ProgramTreeEditor:
             print(">> [DRY RUN] DI 대기와 DO/툴 출력을 실제 I/O 없이 검증합니다.")
         if is_virtual_test:
             cycle_label = "무한" if virtual_target_cycles <= 0 else f"{virtual_target_cycles}회"
-            print(f">> [로봇 점검 Data수집] session={virtual_session_id} target={cycle_label} sample={virtual_sample_interval_ms}ms")
+            print(f">> [Dry Run Recording] session={virtual_session_id} target={cycle_label} sample={virtual_sample_interval_ms}ms")
         skip_json_tcp = bool(virtual_cfg.get("skip_json_tcp") or virtual_cfg.get("ignore_tcp"))
         if skip_json_tcp:
             print(">> [TCP] 점검 설정: JSON TCP 적용 생략")
@@ -3269,14 +3278,14 @@ class ProgramTreeEditor:
                         cycle_index += 1
                         self._virtual_cycle_index = cycle_index
                         if is_virtual_test:
-                            print(f">> [로봇 점검 Data수집] Cycle {cycle_index}/{cycle_limit if cycle_limit > 0 else '무한'} 시작")
+                            print(f">> [Dry Run Recording] Cycle {cycle_index}/{cycle_limit if cycle_limit > 0 else '무한'} 시작")
                             _notify_virtual("cycle_start", cycle_index, "running")
                         _execute_node_list(all_nodes)
                         if self._exec_stop:
                             break
                         completed_cycles = cycle_index
                         if is_virtual_test:
-                            print(f">> [로봇 점검 Data수집] Cycle {cycle_index} 완료")
+                            print(f">> [Dry Run Recording] Cycle {cycle_index} 완료")
                             _notify_virtual("cycle_done", cycle_index, "running")
                         if not is_virtual_test:
                             break
