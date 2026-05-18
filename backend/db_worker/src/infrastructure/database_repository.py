@@ -29,6 +29,7 @@ class DatabaseRepository:
     def __init__(self):
         self._conn = None
         self._lock = threading.Lock()
+        self._operational_tables_ready = False
         self._virtual_tables_ready = False
         self._plc_event_table_ready = False
 
@@ -48,9 +49,47 @@ class DatabaseRepository:
                     print(f">> [DB 에러] ping 실패 재연결 중: {e}")
                     try:
                         self._conn = pymysql.connect(**self.DB_CONFIG)
-                    except:
+                    except Exception as reconnect_error:
+                        print(f">> [DB 에러] 재연결 실패: {reconnect_error}")
                         return None
             return self._conn
+
+    def _ensure_operational_tables(self):
+        if self._operational_tables_ready:
+            return
+        conn = self._get_persistent_connection()
+        if not conn:
+            return
+        queries = [
+            """
+            CREATE TABLE IF NOT EXISTS robot_realtime_status (
+                robot_id VARCHAR(64) PRIMARY KEY,
+                j1_deg DOUBLE, j2_deg DOUBLE, j3_deg DOUBLE,
+                j4_deg DOUBLE, j5_deg DOUBLE, j6_deg DOUBLE,
+                t1_nm DOUBLE, t2_nm DOUBLE, t3_nm DOUBLE,
+                t4_nm DOUBLE, t5_nm DOUBLE, t6_nm DOUBLE,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    ON UPDATE CURRENT_TIMESTAMP
+            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS robot_task_history (
+                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                robot_id VARCHAR(64) NOT NULL,
+                action_type VARCHAR(64) NOT NULL,
+                pos_x DOUBLE, pos_y DOUBLE, pos_z DOUBLE,
+                completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_task_robot_time (robot_id, completed_at)
+            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+            """,
+        ]
+        try:
+            with conn.cursor() as cursor:
+                for query in queries:
+                    cursor.execute(query)
+            self._operational_tables_ready = True
+        except Exception as e:
+            print(f">> [DB 에러] 운영 테이블 준비 실패: {e}")
 
     def _ensure_virtual_test_tables(self):
         if self._virtual_tables_ready:
@@ -141,13 +180,14 @@ class DatabaseRepository:
         )
 
         try:
+            self._ensure_operational_tables()
             conn = self._get_persistent_connection()
             if conn:
                 with conn.cursor() as cursor:
                     cursor.execute(query, values)
                 conn.commit()
         except Exception as e:
-            pass
+            print(f">> [DB 에러] 실시간 상태 저장 실패: {e}")
 
     def insert_task_completion(self, robot_id: str, action_type: str, pos: list):
         """
@@ -155,7 +195,6 @@ class DatabaseRepository:
         - action_type: 'Pick' 또는 'Place'
         - pos: [x, y, z, u, v, w] (task_pos)
         """
-        # TODO: 실제 구축하신 테이블 구조에 맞게 컬럼명 수정 필요!
         query = """
             INSERT INTO robot_task_history 
             (robot_id, action_type, pos_x, pos_y, pos_z, completed_at) 
@@ -167,6 +206,7 @@ class DatabaseRepository:
         values = (robot_id, action_type, px, py, pz)
 
         try:
+            self._ensure_operational_tables()
             conn = self._get_persistent_connection()
             if conn:
                 with conn.cursor() as cursor:

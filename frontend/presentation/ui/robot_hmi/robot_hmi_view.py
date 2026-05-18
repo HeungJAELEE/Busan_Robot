@@ -141,6 +141,42 @@ class ProgramTreeEditor:
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
         return os.path.join(base_dir, 'user_programs', '_custom_paths.json')
 
+    def _frontend_root_dir(self):
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+
+    def _serialize_program_path(self, file_path):
+        if not file_path:
+            return ""
+        try:
+            base_dir = self._frontend_root_dir()
+            abs_path = os.path.abspath(file_path)
+            if os.path.commonpath([base_dir, abs_path]) == base_dir:
+                return os.path.relpath(abs_path, base_dir)
+        except Exception:
+            pass
+        return file_path
+
+    def _resolve_program_path(self, file_path):
+        if not file_path:
+            return ""
+        if os.path.isabs(file_path):
+            return file_path
+        return os.path.abspath(os.path.join(self._frontend_root_dir(), file_path))
+
+    def _set_custom_path(self, robot, file_path):
+        if robot and file_path:
+            self.custom_paths[robot] = self._serialize_program_path(file_path)
+
+    def _get_custom_path(self, robot):
+        path = self.custom_paths.get(robot, "")
+        resolved = self._resolve_program_path(path)
+        if resolved and os.path.exists(resolved):
+            return resolved
+        if path:
+            self.custom_paths.pop(robot, None)
+            self._save_custom_paths()
+        return ""
+
     def _save_custom_paths(self):
         """custom_paths를 디스크에 저장 (앱 재시작 후에도 유지)"""
         try:
@@ -157,7 +193,11 @@ class ProgramTreeEditor:
             cfg = self._get_paths_config_file()
             if os.path.exists(cfg):
                 with open(cfg, 'r', encoding='utf-8') as f:
-                    self.custom_paths = json.load(f)
+                    loaded_paths = json.load(f)
+                self.custom_paths = loaded_paths if isinstance(loaded_paths, dict) else {}
+                for robot, path in list(self.custom_paths.items()):
+                    if not os.path.exists(self._resolve_program_path(path)):
+                        self.custom_paths.pop(robot, None)
                 print(f">> [정보] 저장된 프로그램 경로 복원: {self.custom_paths}")
         except Exception as e:
             print(f">> [경고] custom_paths 복원 실패: {e}")
@@ -287,7 +327,7 @@ class ProgramTreeEditor:
         # 항상 user_programs 경로에 저장 (기본)
         default_path = self.get_program_path(robot)
         # custom_path가 있으면 거기에도 저장
-        custom_path = self.custom_paths.get(robot)
+        custom_path = self._get_custom_path(robot)
 
         path = custom_path if custom_path else default_path
 
@@ -546,7 +586,7 @@ class ProgramTreeEditor:
                     print(f">> [경고] 백업 저장 실패: {_e}")
 
             # 현재 경로 기록
-            self.custom_paths[robot] = path
+            self._set_custom_path(robot, path)
             self._save_custom_paths()
 
             print(f">> [성공] 프로그램 {prog.name} 저장 완료: {path}")
@@ -679,7 +719,7 @@ class ProgramTreeEditor:
 
 
     def get_current_program_path(self, robot_name):
-        return self.custom_paths.get(robot_name, self.get_program_path(robot_name))
+        return self._get_custom_path(robot_name) or self.get_program_path(robot_name)
 
     def _get_selected_robot_name(self):
         robot = None
@@ -1108,7 +1148,7 @@ class ProgramTreeEditor:
                                 self.node_data[n_id]["scriptCode"] = raw.get("scriptCode", "")
 
                 print(f">> [성공] {file_path} 에서 프로그램을 로드했습니다.")
-                self.custom_paths[self.current_robot] = file_path
+                self._set_custom_path(self.current_robot, file_path)
                 self._save_custom_paths()  # 경로를 디스크에 영구 저장
                 self.refresh_info()
             except Exception as e:
@@ -1147,7 +1187,7 @@ class ProgramTreeEditor:
             json.dump(template, f, ensure_ascii=False, indent=2)
 
         # 경로 등록 후 로드
-        self.custom_paths[robot] = file_path
+        self._set_custom_path(robot, file_path)
         self._save_custom_paths()
         self._load_from_path(file_path)
         print(f">> [새파일] '{name}' 프로그램이 생성되었습니다: {file_path}")
@@ -4008,7 +4048,9 @@ class OptionsEditor:
                     paths = json.load(f)
                 path = paths.get(robot_name)
                 if path:
-                    return path
+                    resolved = self._resolve_program_path(path)
+                    if os.path.exists(resolved):
+                        return resolved
         except Exception:
             pass
         return os.path.join(base_dir, 'user_programs', robot_name.replace(" ", "_"), 'program.json')

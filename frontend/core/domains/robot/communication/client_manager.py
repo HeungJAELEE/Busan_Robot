@@ -3,9 +3,15 @@ import time
 import os
 import uuid
 
+try:
+    from core.runtime_config import env_str
+except Exception:
+    def env_str(name, default=""):
+        return os.getenv(name, default)
+
 
 def _gateway_mode():
-    return os.getenv("ROBOT_CONTROL_MODE", "auto").strip().lower()
+    return env_str("ROBOT_CONTROL_MODE", "auto").strip().lower()
 
 
 class GatewayRobotProxy:

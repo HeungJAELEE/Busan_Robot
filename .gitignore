@@ -21,4 +21,5 @@ frontend/logs/
 backend/.env
 
 # 사용자 개인 티칭 데이터 (예제 외)
+frontend/user_programs/_custom_paths.json
 frontend/user_programs/Robot_*/20260514*.json

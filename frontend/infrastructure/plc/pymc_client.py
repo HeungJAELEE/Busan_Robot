@@ -21,7 +21,7 @@ class PyMcPlcClient(IPlcRepository):
         except Exception as e:
             self.is_connected = False
             print(f"❌ [Infra] 미쓰비시 PLC 연결 실패: {e}")
-            raise e
+            raise
 
     def disconnect(self) -> None:
         if self.is_connected:

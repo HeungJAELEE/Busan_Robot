@@ -586,7 +586,11 @@ class VirtualTestView:
             with open(cfg_path, "r", encoding="utf-8-sig") as f:
                 custom_paths = json.load(f)
             if isinstance(custom_paths, dict) and custom_paths.get(robot):
-                return custom_paths[robot]
+                path = custom_paths[robot]
+                if not os.path.isabs(path):
+                    path = os.path.abspath(os.path.join(base_dir, path))
+                if os.path.exists(path):
+                    return path
         except Exception:
             pass
         return os.path.join(base_dir, "user_programs", robot.replace(" ", "_"), "program.json")
