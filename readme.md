@@ -10,6 +10,266 @@ Neuromeka(뉴로메카) **Indy7 협동 로봇**을 위한 PC 기반 HMI 소프�
 
 ---
 
+## ✅ 왕초보 실행 가이드: 이것만 그대로 따라 하세요
+
+아래 명령어는 **Mac 기준**입니다. Windows에서 실행할 때도 원리는 같고, `cd` 경로만 본인 PC 경로에 맞추면 됩니다.
+
+가장 많이 나는 에러는 이겁니다.
+
+```text
+no configuration file provided: not found
+```
+
+이건 Docker 문제가 아니라 **현재 폴더에 `docker-compose.yml`이 없다는 뜻**입니다. 반드시 `backend` 폴더 안에서 `docker compose`를 실행해야 합니다.
+
+### 0. 처음 Git에서 받는 사람
+
+이미 `/Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean` 폴더가 있으면 이 단계는 건너뛰세요.
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project
+git clone https://github.com/HeungJAELEE/Busan_Robot.git Indy7_HMI_Clean
+cd Indy7_HMI_Clean
+```
+
+이미 받은 프로젝트를 최신으로 업데이트할 때는:
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+git pull origin main
+```
+
+### 1. Python 기본 설치
+
+처음 한 번만 하면 됩니다.
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+
+python3 -m venv .venv
+source .venv/bin/activate
+
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+pip install -r frontend/requirements.txt
+```
+
+다음에 다시 실행할 때는 가상환경만 켜면 됩니다.
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+source .venv/bin/activate
+```
+
+### 2. Docker Desktop 켜기
+
+Docker 명령어를 치기 전에 Docker Desktop 앱이 켜져 있어야 합니다.
+
+```bash
+open -a Docker
+```
+
+30초~2분 정도 기다린 뒤 확인합니다.
+
+```bash
+docker version
+```
+
+정상 상태는 `Client:`와 `Server:`가 둘 다 나옵니다.
+
+`Server:`가 안 나오고 아래처럼 나오면:
+
+```text
+failed to connect to the docker API
+check if the daemon is running
+```
+
+아직 Docker Desktop 엔진이 안 켜진 겁니다. Docker Desktop 창에서 `Engine running` 상태가 될 때까지 기다리세요.
+
+### 3. Docker 백엔드 실행
+
+반드시 `backend` 폴더로 들어가서 실행합니다.
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+
+cp .env.example .env
+
+docker compose build
+docker compose up -d message_broker db_worker digital_twin robot_controller
+docker compose ps
+```
+
+`docker compose ps` 결과에서 아래 서비스들이 `Up`이면 정상입니다.
+
+```text
+indy7_mqtt_broker
+indy7_db_worker
+indy7_digital_twin
+indy7_robot_controller
+```
+
+PLC까지 연결할 때만 `plc_bridge`를 추가로 켭니다.
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+docker compose up -d plc_bridge
+```
+
+### 4. UI 실행
+
+새 터미널을 하나 더 열고 실행합니다.
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+source .venv/bin/activate
+
+ROBOT_CONTROL_MODE=mqtt python frontend/run_ui_only.py
+```
+
+`ROBOT_CONTROL_MODE=mqtt`는 UI가 로봇에 직접 붙지 않고, Docker의 `robot_controller`를 통해 명령을 보내는 운영 권장 모드입니다.
+
+랩에서 UI만 테스트하거나 Docker 없이 직접 연결할 때는:
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+source .venv/bin/activate
+
+ROBOT_CONTROL_MODE=direct python frontend/run_ui_only.py
+```
+
+### 5. 상태 확인 명령어
+
+Docker 서비스 상태:
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+docker compose ps
+```
+
+Robot Controller 로그:
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+docker compose logs --tail=100 robot_controller
+```
+
+실시간 로그:
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+docker compose logs -f robot_controller
+```
+
+전체 백엔드 중지:
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+docker compose down
+```
+
+### 6. 자주 나는 에러
+
+#### 에러 1. `no configuration file provided: not found`
+
+원인:
+
+```text
+docker-compose.yml이 없는 폴더에서 docker compose를 실행함
+```
+
+해결:
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+docker compose ps
+```
+
+#### 에러 2. `failed to connect to the docker API`
+
+원인:
+
+```text
+Docker Desktop 앱이 꺼져 있거나 아직 Engine이 켜지는 중
+```
+
+해결:
+
+```bash
+open -a Docker
+docker version
+```
+
+`Server:`가 보일 때까지 기다립니다.
+
+#### 에러 3. DB Worker가 DB 접속 실패
+
+원인:
+
+```text
+현장 MySQL 네트워크에 안 붙어 있음
+```
+
+랩/사무실에서는 정상적으로 실패할 수 있습니다. MQTT, Digital Twin, Robot Controller만 테스트할 때는 큰 문제 아닙니다.
+
+#### 에러 4. Robot Controller가 로봇 연결 timeout
+
+원인:
+
+```text
+로봇 IP 대역에 PC가 붙어 있지 않음
+또는 Robot A/B/C IP가 .env와 다름
+```
+
+확인:
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+nano .env
+```
+
+Robot IP 설정:
+
+```text
+ROBOT_A_IP=192.168.3.11
+ROBOT_B_IP=192.168.3.12
+ROBOT_C_IP=192.168.3.13
+```
+
+현장 IP에 맞게 바꾼 뒤:
+
+```bash
+docker compose up -d robot_controller
+```
+
+### 7. 하루 작업 시작용 복붙 세트
+
+Docker 백엔드:
+
+```bash
+open -a Docker
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+docker compose up -d message_broker db_worker digital_twin robot_controller
+docker compose ps
+```
+
+UI:
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+source .venv/bin/activate
+ROBOT_CONTROL_MODE=mqtt python frontend/run_ui_only.py
+```
+
+### 8. 하루 작업 종료용 복붙 세트
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+docker compose down
+```
+
+---
+
 ## 📁 프로젝트 모노레포 구조 (Frontend & Backend)
 
 이 프로젝트는 완전히 역할이 분리된 두 개의 핵심 폴더로 구성되어 있습니다.
@@ -33,15 +293,18 @@ Neuromeka(뉴로메카) **Indy7 협동 로봇**을 위한 PC 기반 HMI 소프�
 
 ---
 
-## 🚀 어떻게 실행하나요? (빠른 시작)
+## 🚀 Docker 없이 UI만 실행하기
 
-현재 시스템은 **도커(Docker) 없이도 파이썬 UI 창 하나에서 모든 마이크로서비스를 제어**할 수 있도록 고도화되었습니다.
+현장 운영 권장 방식은 위의 **왕초보 실행 가이드**처럼 Docker 백엔드를 켜고 `ROBOT_CONTROL_MODE=mqtt`로 UI를 실행하는 것입니다.
+
+다만 랩에서 화면만 확인하거나 Docker 없이 단독 테스트할 때는 아래 방식으로 UI만 실행할 수 있습니다.
 
 ### 실행 명령어
-터미널을 열고 아래 명령어를 입력합니다.
+
 ```bash
-cd frontend
-python run_ui_only.py
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+source .venv/bin/activate
+ROBOT_CONTROL_MODE=direct python frontend/run_ui_only.py
 ```
 
 ### 서비스 켜기 (UI 내부 제어)
