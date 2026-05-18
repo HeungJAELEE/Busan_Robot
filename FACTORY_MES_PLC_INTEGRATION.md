@@ -45,6 +45,24 @@
 
 Vision 쪽에서 PLC에 결과를 직접 쓰므로, HMI 백엔드는 그 값을 중복으로 쓰지 않습니다.
 
+Vision PC의 DB 표준 설정은 아래 값입니다.
+
+```python
+DB_CONFIG = {
+    'host': '192.168.3.141',
+    'port': 3306,
+    'user': 'guest',
+    'password': 'guest1234',
+    'db': 'faictory_mes',
+    'charset': 'utf8mb4',
+    'autocommit': True,
+    'use_unicode': True,
+    'init_command': "SET NAMES utf8mb4"
+}
+```
+
+`factory_mes` 원본은 `localhost/root/1234` 형태로 되어 있으므로, Vision PC 설치 스크립트가 위 값으로 자동 패치합니다.
+
 ## 4. MQTT 이벤트 규격
 
 PLC Bridge는 신호 변화만 MQTT로 발행합니다.

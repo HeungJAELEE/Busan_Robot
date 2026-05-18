@@ -12,7 +12,7 @@ class DatabaseRepository:
     _lock = threading.Lock()
     
     DB_CONFIG = {
-        'host': '192.168.3.45',
+        'host': '192.168.3.141',
         'port': 3306,
         'user': 'guest',
         'password': 'guest1234',

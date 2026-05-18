@@ -134,7 +134,7 @@ def _run_vision_yolo(stop_event):
 def _run_db_worker(stop_event):
     """DB Worker — MySQL 연결 확인"""
     print("🗄 [DB Worker] 서비스 시작...")
-    db_host = os.getenv("DB_HOST", "192.168.3.45")
+    db_host = os.getenv("DB_HOST", "192.168.3.141")
     print(f"🗄 [DB Worker] DB Host: {db_host}")
     
     try:

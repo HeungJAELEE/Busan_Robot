@@ -14,7 +14,7 @@ class DatabaseRepository:
     _lock = threading.Lock()
     
     DB_CONFIG = {
-        'host': os.getenv('DB_HOST', os.getenv('MYSQL_HOST', '192.168.3.45')),
+        'host': os.getenv('DB_HOST', os.getenv('MYSQL_HOST', '192.168.3.141')),
         'port': int(os.getenv('DB_PORT', os.getenv('MYSQL_PORT', '3306'))),
         'user': os.getenv('DB_USER', os.getenv('MYSQL_USER', 'guest')),
         'password': os.getenv('DB_PASS', os.getenv('MYSQL_PASSWORD', 'guest1234')),

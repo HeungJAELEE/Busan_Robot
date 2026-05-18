@@ -73,7 +73,7 @@ services:
     environment:
       MQTT_BROKER: message_broker
       MQTT_PORT: 1883
-      DB_HOST: ${MYSQL_HOST:-192.168.3.45}
+      DB_HOST: ${MYSQL_HOST:-192.168.3.141}
       DB_PORT: ${MYSQL_PORT:-3306}
       DB_USER: ${MYSQL_USER:-guest}
       DB_PASS: ${MYSQL_PASSWORD:-guest1234}

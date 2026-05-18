@@ -468,7 +468,7 @@ class VirtualTestView:
 
         form = ctk.CTkFrame(right, fg_color=Theme.BG_BASE, corner_radius=8)
         form.pack(fill="x", padx=14, pady=8)
-        self.db_host_entry = self._entry_row(form, "Host", os.getenv("DB_HOST", "192.168.3.45"))
+        self.db_host_entry = self._entry_row(form, "Host", os.getenv("DB_HOST", "192.168.3.141"))
         self.db_port_entry = self._entry_row(form, "Port", os.getenv("DB_PORT", "3306"))
         self.db_user_entry = self._entry_row(form, "User", os.getenv("DB_USER", "guest"))
         self.db_pass_entry = self._entry_row(form, "Pass", os.getenv("DB_PASS", "guest1234"), show="*")

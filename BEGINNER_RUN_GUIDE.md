@@ -2,6 +2,12 @@
 
 이 문서는 처음 실행하는 사람 기준으로 작성한 안내서입니다.
 
+현장 배포는 담당 PC별로 나눠서 보는 것이 가장 쉽습니다.
+
+- Robot Controller PC 담당자: [ROBOT_CONTROLLER_PC_SETUP.md](/Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/ROBOT_CONTROLLER_PC_SETUP.md)
+- Vision / YOLO PC 담당자: [VISION_YOLO_PC_SETUP.md](/Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/VISION_YOLO_PC_SETUP.md)
+- 전체 배포 전략: [DEPLOYMENT_STRATEGY.md](/Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/DEPLOYMENT_STRATEGY.md)
+
 가장 먼저 이것만 기억하면 됩니다.
 
 - **UI 화면**은 Docker Desktop 안에서 뜨지 않습니다.
@@ -141,7 +147,7 @@ open -e .env
 ROBOT_A_IP=192.168.3.7
 ROBOT_B_IP=192.168.3.6
 ROBOT_C_IP=192.168.3.5
-MYSQL_HOST=192.168.3.45
+MYSQL_HOST=192.168.3.141
 PLC_IP=192.168.3.150
 PLC_PORT=2000
 PLC_MONITOR_IP=192.168.3.160
@@ -291,7 +297,7 @@ docker compose logs -f db_worker
 아래 로그가 나오면 Docker 문제라기보다 MySQL 서버에 접근하지 못하는 상태입니다.
 
 ```text
-Can't connect to MySQL server on '192.168.3.45'
+Can't connect to MySQL server on '192.168.3.141'
 ```
 
 현장 PC가 MySQL 서버와 같은 네트워크에 있어야 합니다.
@@ -327,7 +333,7 @@ Test-NetConnection 192.168.3.39 -Port 5000
 MySQL:
 
 ```powershell
-Test-NetConnection 192.168.3.45 -Port 3306
+Test-NetConnection 192.168.3.141 -Port 3306
 ```
 
 정상이라면 `TcpTestSucceeded : True`가 나옵니다.
