@@ -18,6 +18,7 @@ pyserial>=3.5                # 시리얼 통신 (그리퍼 등 외부 장비)
 
 # ── 데이터베이스 ──
 PyMySQL>=1.0.2               # MySQL FA DB 연결 (MES 작업이력)
+cryptography>=42.0.0         # MySQL 8 caching_sha2_password 인증 지원
 
 # ── AI 자연어/음성 티칭 ──
 google-genai>=1.0.0          # Google AI Studio / Gemini API 텍스트·오디오 명령 해석

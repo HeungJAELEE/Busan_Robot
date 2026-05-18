@@ -1,3 +1,4 @@
 paho-mqtt>=2.0.0
 PyMySQL>=1.0.2
+cryptography>=42.0.0
 pytest>=7.0.0

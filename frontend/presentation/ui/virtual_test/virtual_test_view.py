@@ -26,6 +26,7 @@ class VirtualTestRecorder:
         self.running = False
         self.lock = threading.Lock()
         self.last_error = ""
+        self.columns_cache = {}
 
     def is_connected(self):
         return self.conn is not None
@@ -41,9 +42,12 @@ class VirtualTestRecorder:
                 database=database,
                 charset="utf8mb4",
                 autocommit=True,
+                use_unicode=True,
                 connect_timeout=5,
+                init_command="SET NAMES utf8mb4",
             )
             self.conn = conn
+            self.columns_cache.clear()
             self._ensure_tables()
             self._start_worker()
             self.last_error = ""
@@ -54,54 +58,67 @@ class VirtualTestRecorder:
             return False, f"MySQL 연결 실패: {exc}"
 
     def _ensure_tables(self):
-        queries = [
+        self._ensure_table(
+            "robot_virtual_test_sessions",
             """
             CREATE TABLE IF NOT EXISTS robot_virtual_test_sessions (
-                session_id VARCHAR(96) PRIMARY KEY,
-                robot_id VARCHAR(64) NOT NULL,
-                program_path TEXT,
-                target_cycles INT DEFAULT 0,
-                sample_interval_ms INT DEFAULT 100,
-                dry_run TINYINT DEFAULT 1,
-                status VARCHAR(32) DEFAULT 'running',
+                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                session_id VARCHAR(96),
                 started_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
-                finished_at DATETIME(3) NULL,
-                total_samples INT DEFAULT 0,
-                note TEXT
+                ended_at DATETIME(3) NULL,
+                metadata JSON,
+                INDEX idx_virtual_session_started (started_at)
             ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
             """,
+        )
+        self._ensure_table(
+            "robot_virtual_test_samples",
             """
             CREATE TABLE IF NOT EXISTS robot_virtual_test_samples (
                 id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                session_id VARCHAR(96) NOT NULL,
-                robot_id VARCHAR(64) NOT NULL,
-                cycle_index INT DEFAULT 0,
-                sample_index BIGINT DEFAULT 0,
-                busy TINYINT DEFAULT 0,
-                q1 DOUBLE, q2 DOUBLE, q3 DOUBLE, q4 DOUBLE, q5 DOUBLE, q6 DOUBLE,
-                x DOUBLE, y DOUBLE, z DOUBLE, rx DOUBLE, ry DOUBLE, rz DOUBLE,
-                tq1 DOUBLE, tq2 DOUBLE, tq3 DOUBLE, tq4 DOUBLE, tq5 DOUBLE, tq6 DOUBLE,
+                session_id VARCHAR(96),
+                sample_id VARCHAR(96),
                 captured_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
-                INDEX idx_virtual_session_cycle (session_id, cycle_index),
-                INDEX idx_virtual_robot_time (robot_id, captured_at)
+                data JSON,
+                INDEX idx_virtual_sample_captured (captured_at)
             ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
             """,
+        )
+        self._ensure_table(
+            "robot_virtual_test_events",
             """
             CREATE TABLE IF NOT EXISTS robot_virtual_test_events (
                 id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                session_id VARCHAR(96) NOT NULL,
-                robot_id VARCHAR(64) NOT NULL,
-                event_type VARCHAR(64) NOT NULL,
-                cycle_index INT DEFAULT 0,
-                payload LONGTEXT,
+                session_id VARCHAR(96),
+                event_type VARCHAR(64),
+                payload JSON,
                 created_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
-                INDEX idx_virtual_event_session (session_id, event_type)
+                INDEX idx_virtual_event_created (created_at)
             ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
             """,
-        ]
+        )
+
+    def _table_exists(self, table_name):
         with self.conn.cursor() as cursor:
-            for query in queries:
-                cursor.execute(query)
+            cursor.execute("SHOW TABLES LIKE %s", (table_name,))
+            return cursor.fetchone() is not None
+
+    def _ensure_table(self, table_name, create_sql):
+        if self._table_exists(table_name):
+            return
+        with self.conn.cursor() as cursor:
+            cursor.execute(create_sql)
+        self.columns_cache.pop(table_name, None)
+
+    def _columns(self, table_name):
+        cached = self.columns_cache.get(table_name)
+        if cached is not None:
+            return cached
+        with self.conn.cursor() as cursor:
+            cursor.execute(f"SHOW COLUMNS FROM `{table_name}`")
+            columns = {row[0] for row in cursor.fetchall()}
+        self.columns_cache[table_name] = columns
+        return columns
 
     def _start_worker(self):
         if self.worker and self.worker.is_alive():
@@ -166,6 +183,21 @@ class VirtualTestRecorder:
                 self.queue.task_done()
 
     def _upsert_session(self, payload):
+        cols = self._columns("robot_virtual_test_sessions")
+        if "metadata" in cols:
+            query = """
+                INSERT INTO robot_virtual_test_sessions
+                  (session_id, started_at, metadata)
+                VALUES (%s, NOW(3), %s)
+            """
+            values = (
+                payload.get("session_id", ""),
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            )
+            with self.conn.cursor() as cursor:
+                cursor.execute(query, values)
+            return
+
         query = """
             INSERT INTO robot_virtual_test_sessions
               (session_id, robot_id, program_path, target_cycles, sample_interval_ms, dry_run, status, note)
@@ -193,6 +225,34 @@ class VirtualTestRecorder:
             cursor.execute(query, values)
 
     def _finish_session(self, payload):
+        cols = self._columns("robot_virtual_test_sessions")
+        if "metadata" in cols:
+            values = (
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                payload.get("session_id"),
+            )
+            with self.conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE robot_virtual_test_sessions
+                       SET ended_at=NOW(3), metadata=%s
+                     WHERE session_id=%s
+                     ORDER BY id DESC
+                     LIMIT 1
+                    """,
+                    values,
+                )
+                if cursor.rowcount == 0:
+                    cursor.execute(
+                        """
+                        INSERT INTO robot_virtual_test_sessions
+                          (session_id, started_at, ended_at, metadata)
+                        VALUES (%s, NOW(3), NOW(3), %s)
+                        """,
+                        (payload.get("session_id"), values[0]),
+                    )
+            return
+
         query = """
             UPDATE robot_virtual_test_sessions
                SET status=%s, finished_at=NOW(3), total_samples=%s, note=%s
@@ -208,6 +268,22 @@ class VirtualTestRecorder:
             cursor.execute(query, values)
 
     def _insert_event(self, payload):
+        cols = self._columns("robot_virtual_test_events")
+        if "payload" in cols and "cycle_index" not in cols:
+            query = """
+                INSERT INTO robot_virtual_test_events
+                  (session_id, event_type, payload, created_at)
+                VALUES (%s, %s, %s, NOW(3))
+            """
+            values = (
+                payload.get("session_id", ""),
+                payload.get("event", payload.get("event_type", "event")),
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            )
+            with self.conn.cursor() as cursor:
+                cursor.execute(query, values)
+            return
+
         query = """
             INSERT INTO robot_virtual_test_events
               (session_id, robot_id, event_type, cycle_index, payload)
@@ -224,6 +300,25 @@ class VirtualTestRecorder:
             cursor.execute(query, values)
 
     def _insert_sample(self, payload):
+        cols = self._columns("robot_virtual_test_samples")
+        if "data" in cols:
+            sample_id = payload.get("sample_id")
+            if not sample_id:
+                sample_id = str(payload.get("sample_index", int(time.time() * 1000)))
+            query = """
+                INSERT INTO robot_virtual_test_samples
+                  (session_id, sample_id, captured_at, data)
+                VALUES (%s, %s, NOW(3), %s)
+            """
+            values = (
+                payload.get("session_id", ""),
+                str(sample_id),
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            )
+            with self.conn.cursor() as cursor:
+                cursor.execute(query, values)
+            return
+
         q = self._six(payload.get("q"))
         p = self._six(payload.get("p"))
         tq = self._six(payload.get("torque"))

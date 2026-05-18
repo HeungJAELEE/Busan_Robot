@@ -20,7 +20,11 @@ def on_task_done(payload):
     robot_id = payload.get("robot_id", "Unknown")
     action_type = payload.get("action_type", "Unknown")
     pos = payload.get("pos", [0,0,0,0,0,0])
-    db_repository.insert_task_completion(robot_id, action_type, pos)
+    db_repository.insert_task_completion(robot_id, action_type, pos, payload)
+
+def on_robot_result(payload):
+    """로봇 명령 완료 결과 수신 콜백"""
+    db_repository.insert_robot_result(payload)
 
 def on_virtual_test_sample(payload):
     """Page3 가상화 테스트 실시간 샘플 저장"""
@@ -47,6 +51,7 @@ def main():
     mqtt_client = MqttManager(broker_ip=broker_ip, port=broker_port, client_id="db_worker")
     mqtt_client.subscribe("robot/realtime", on_realtime_data)
     mqtt_client.subscribe("robot/task_done", on_task_done)
+    mqtt_client.subscribe("robot/result", on_robot_result)
     mqtt_client.subscribe("robot/virtual_test_sample", on_virtual_test_sample)
     mqtt_client.subscribe("robot/virtual_test_event", on_virtual_test_event)
     mqtt_client.subscribe("plc/process/start", on_plc_event)
