@@ -1,5 +1,5 @@
 param(
-    [string]$ProjectRoot = "C:\Busan_Project\Indy7_HMI_Clean",
+    [string]$ProjectRoot = "",
     [string]$MysqlHost = "192.168.3.141",
     [string]$MysqlUser = "guest",
     [string]$MysqlPassword = "guest1234",
@@ -12,6 +12,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+    $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+}
 
 function Require-Command($Name, $InstallHint) {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {

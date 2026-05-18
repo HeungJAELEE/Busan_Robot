@@ -16,6 +16,14 @@ setup_robot_controller.bat
 start_robot_controller.bat
 ```
 
+UI만 켜기:
+
+```text
+start_hmi_ui.bat
+```
+
+GUI가 뜨지 않고 터미널에 `공장 자동화 연속 루프`, `가상 PLC`, `가상 로봇` 로그만 계속 나오면 잘못된 실행 파일을 켠 것입니다. 그 창에서 `Ctrl + C`를 누르고 `start_hmi_ui.bat`을 실행하세요.
+
 ## Vision A PC
 
 처음 설치:
