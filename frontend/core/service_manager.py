@@ -6,6 +6,7 @@ import threading
 import time
 import os
 import json
+from core.runtime_config import mqtt_config, mysql_config, plc_config, env_int
 
 
 class ServiceRunner:
@@ -49,11 +50,17 @@ class ServiceRunner:
 def _run_mqtt_broker_check(stop_event):
     """MQTT 브로커 연결 상태 체크 (실제 Mosquitto 서버가 필요)"""
     import paho.mqtt.client as mqtt
+    config = mqtt_config()
     print("📮 [MQTT] 브로커 연결 확인 중...")
     try:
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, "service_check")
-        client.connect("127.0.0.1", 1883, 10)
-        print("📮 [MQTT] ✅ 브로커 연결 성공 (127.0.0.1:1883)")
+        client.connect(config["broker"], config["port"], 10)
+        print(f"📮 [MQTT] ✅ 브로커 연결 성공 ({config['broker']}:{config['port']})")
+        try:
+            from infrastructure.mqtt.mqtt_manager import mqtt_broker
+            mqtt_broker.connect_and_loop()
+        except Exception:
+            pass
         client.loop_start()
         while not stop_event.is_set():
             time.sleep(1)
@@ -69,11 +76,12 @@ def _run_mqtt_broker_check(stop_event):
 def _run_plc_bridge(stop_event):
     """PLC 브리지 — 미쓰비시 PLC master 신호 감시"""
     print("⚙️ [PLC Bridge] 서비스 시작...")
-    plc_ip = os.getenv("PLC_PROCESS_IP", os.getenv("PLC_IP", "192.168.3.150"))
-    plc_port = int(os.getenv("PLC_PROCESS_PORT", os.getenv("PLC_PORT", "2000")))
-    start_device = os.getenv("PLC_PROCESS_START_DEVICE", "X11")
-    stop_device = os.getenv("PLC_PROCESS_STOP_DEVICE", "X12")
-    complete_device = os.getenv("PLC_ROBOT_COMPLETE_DEVICE", "X145")
+    config = plc_config()
+    plc_ip = config["process_ip"]
+    plc_port = config["process_port"]
+    start_device = config["start_device"]
+    stop_device = config["stop_device"]
+    complete_device = config["complete_device"]
     print(f"⚙️ [PLC Bridge] PLC IP: {plc_ip}:{plc_port} (읽기 전용 감시)")
     
     try:
@@ -134,15 +142,21 @@ def _run_vision_yolo(stop_event):
 def _run_db_worker(stop_event):
     """DB Worker — MySQL 연결 확인"""
     print("🗄 [DB Worker] 서비스 시작...")
-    db_host = os.getenv("DB_HOST", "192.168.3.141")
+    config = mysql_config()
+    db_host = config["host"]
     print(f"🗄 [DB Worker] DB Host: {db_host}")
     
     try:
         import pymysql
         conn = pymysql.connect(
-            host=db_host, user=os.getenv("DB_USER", "guest"),
-            password=os.getenv("DB_PASS", "guest1234"),
-            database=os.getenv("DB_NAME", "faictory_mes"), connect_timeout=5
+            host=db_host,
+            port=config["port"],
+            user=config["user"],
+            password=config["password"],
+            database=config["db"],
+            charset=config["charset"],
+            autocommit=True,
+            connect_timeout=5,
         )
         print("🗄 [DB Worker] ✅ DB 연결 성공!")
         while not stop_event.is_set():
@@ -178,8 +192,9 @@ def _run_digital_twin(stop_event):
                 connected.discard(ws)
         
         async def serve():
-            server = await websockets.serve(handler, "0.0.0.0", 8080)
-            print("🌍 [Digital Twin] ✅ 웹소켓 서버 실행 (ws://0.0.0.0:8080)")
+            port = env_int("DIGITAL_TWIN_PORT", 8080)
+            server = await websockets.serve(handler, "0.0.0.0", port)
+            print(f"🌍 [Digital Twin] ✅ 웹소켓 서버 실행 (ws://0.0.0.0:{port})")
             while not stop_event.is_set():
                 await asyncio.sleep(0.5)
             server.close()

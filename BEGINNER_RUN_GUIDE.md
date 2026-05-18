@@ -14,6 +14,7 @@
 - **UI 화면**은 Python으로 직접 실행합니다.
 - **Docker**는 MQTT, DB Worker, Digital Twin, Robot Controller 같은 백그라운드 서비스를 실행합니다.
 - Docker Desktop에서 봐야 하는 곳은 `Images`가 아니라 보통 **Containers** 화면입니다.
+- UI는 기본적으로 **무연결 모드**로 켜집니다. 로봇/PLC/MySQL은 사용자가 `연결` 버튼을 눌렀을 때만 붙습니다.
 
 ## 1. 전체 실행 순서
 
@@ -147,6 +148,13 @@ open -e .env
 ROBOT_A_IP=192.168.3.7
 ROBOT_B_IP=192.168.3.6
 ROBOT_C_IP=192.168.3.5
+ROBOT_A_PLC_IP=192.168.3.150
+ROBOT_B_PLC_IP=192.168.3.140
+ROBOT_C_PLC_IP=192.168.3.120
+ROBOT_AUTOCONNECT=0
+ROBOT_CONTROL_MODE=auto
+HMI_MQTT_AUTOCONNECT=1
+FACTORY_ORCHESTRATOR_AUTOSTART=0
 MYSQL_HOST=192.168.3.141
 PLC_IP=192.168.3.150
 PLC_PORT=2000
@@ -158,6 +166,8 @@ ROBOT_START_DI=DI0
 PLC_ROBOT_COMPLETE_DEVICE=X145
 PLC_DONE_SIGNAL_MAP=PLC150:M1150,PLC130:M1130,PLC120:M1120
 ```
+
+여기서 제일 중요한 값은 `ROBOT_AUTOCONNECT=0`과 `FACTORY_ORCHESTRATOR_AUTOSTART=0`입니다. 이 값이면 프로그램을 켜도 실제 장비에 바로 붙지 않고, 화면에서 연결 버튼을 눌렀을 때만 접속합니다.
 
 ### 4-3. Docker 서비스 실행
 

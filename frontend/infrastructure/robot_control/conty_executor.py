@@ -2,6 +2,7 @@ import threading
 import time
 import json
 from typing import Optional
+from core.runtime_config import env_str, plc_config, robot_model
 
 try:
     from pymcprotocol import Type3E
@@ -18,11 +19,12 @@ class ContyExecutor:
     Execution Engine that integrates PLC 4-Phase Handshake and Native JSON Program Execution on Indy.
     Follows the 260303_test_plc_pc_robot.py specification.
     """
-    def __init__(self, robot_ip: str, plc_ip: str, plc_port: int = 1025, robot_name: str = "NRMK-Indy7"):
+    def __init__(self, robot_ip: str, plc_ip: str, plc_port: int = None, robot_name: str = None):
+        config = plc_config()
         self.robot_ip = robot_ip
-        self.plc_ip = plc_ip
-        self.plc_port = plc_port
-        self.robot_name = robot_name
+        self.plc_ip = plc_ip or config["process_ip"]
+        self.plc_port = plc_port or config["process_port"]
+        self.robot_name = robot_name or robot_model()
         
         self.indy: Optional[client.IndyDCPClient] = None
         self.plc: Optional[Type3E] = None
@@ -33,11 +35,11 @@ class ContyExecutor:
         self.state_callback = None  # Add UI Callback
 
         # PLC Addresses
-        self.ADDR_START = "M100"   # Cycle Start (PLC -> PC)
-        self.ADDR_BUSY = "M200"    # Robot Busy (PC -> PLC)
-        self.ADDR_COMPLETE = "M101"# Cycle Complete (PC -> PLC)
-        self.ADDR_ACK = "M105"     # PLC Ack (PLC -> PC)
-        self.ADDR_ALARM = "M102"   # Robot Alarm (PC -> PLC)
+        self.ADDR_START = env_str("PLC_CYCLE_START_DEVICE", config["start_device"])
+        self.ADDR_BUSY = env_str("PLC_ROBOT_BUSY_DEVICE", "M200")
+        self.ADDR_COMPLETE = env_str("PLC_CYCLE_COMPLETE_DEVICE", "M101")
+        self.ADDR_ACK = env_str("PLC_ACK_DEVICE", "M105")
+        self.ADDR_ALARM = env_str("PLC_ALARM_DEVICE", "M102")
 
     def connect(self) -> bool:
         try:

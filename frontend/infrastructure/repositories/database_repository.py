@@ -2,6 +2,7 @@ import pymysql
 import threading
 import time
 from contextlib import contextmanager
+from core.runtime_config import mysql_config
 
 class DatabaseRepository:
     """
@@ -11,28 +12,19 @@ class DatabaseRepository:
     _instance = None
     _lock = threading.Lock()
     
-    DB_CONFIG = {
-        'host': '192.168.3.141',
-        'port': 3306,
-        'user': 'guest',
-        'password': 'guest1234',
-        'db': 'faictory_mes',
-        'charset': 'utf8mb4',
-        'autocommit': True,
-        'use_unicode': True,
-        'init_command': "SET NAMES utf8mb4"
-    }
-
     def __init__(self):
         self._conn = None
         self._lock = threading.Lock()
+
+    def _db_config(self):
+        return mysql_config()
 
     def _get_persistent_connection(self):
         """단일 persistent 커넥션을 유지하며, 끊기면 자동 재연결합니다."""
         with self._lock:
             if self._conn is None:
                 try:
-                    self._conn = pymysql.connect(**self.DB_CONFIG)
+                    self._conn = pymysql.connect(**self._db_config())
                 except Exception as e:
                     print(f">> [DB 에러] 연결 실패: {e}")
                     return None
@@ -42,7 +34,7 @@ class DatabaseRepository:
                 except Exception as e:
                     print(f">> [DB 에러] ping 실패 재연결 중: {e}")
                     try:
-                        self._conn = pymysql.connect(**self.DB_CONFIG)
+                        self._conn = pymysql.connect(**self._db_config())
                     except:
                         return None
             return self._conn

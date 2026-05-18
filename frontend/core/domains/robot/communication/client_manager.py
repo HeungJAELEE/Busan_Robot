@@ -18,7 +18,15 @@ class GatewayRobotProxy:
     def _publish(self, command_type, args=None):
         try:
             from infrastructure.mqtt.mqtt_manager import mqtt_broker
-            mqtt_broker.publish("robot/command", {
+            if not getattr(mqtt_broker, "connected", False):
+                mqtt_broker.connect_and_loop()
+                deadline = time.time() + 1.0
+                while time.time() < deadline and not getattr(mqtt_broker, "connected", False):
+                    time.sleep(0.05)
+            if not getattr(mqtt_broker, "connected", False):
+                print(f">> [Gateway] MQTT 브로커 미연결로 {command_type} 발행을 보류합니다.")
+                return False
+            return mqtt_broker.publish("robot/command", {
                 "command_id": uuid.uuid4().hex,
                 "robot_id": self.robot_name,
                 "type": command_type,
@@ -26,7 +34,6 @@ class GatewayRobotProxy:
                 "created_at": time.time(),
                 "source": "frontend_gateway_proxy",
             })
-            return True
         except Exception as exc:
             print(f">> [Gateway] {command_type} 발행 실패: {exc}")
             return False
@@ -198,8 +205,11 @@ class RobotClientManager:
 
         if self.should_use_gateway():
             proxy = GatewayRobotProxy(name, self)
+            if not proxy.connect():
+                self._robots[name]["instance"] = None
+                print(f">> [Gateway] {name} MQTT Robot Controller 연결 요청 실패")
+                return False
             self._robots[name]["instance"] = proxy
-            proxy.connect()
             print(f">> [Gateway] {name} 로봇 통신은 Docker Robot Controller로 위임합니다.")
             return True
         

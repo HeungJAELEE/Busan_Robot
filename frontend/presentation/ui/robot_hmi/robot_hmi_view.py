@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from core.domains.robot.communication.client_manager import robot_manager
 from infrastructure.mqtt.mqtt_manager import mqtt_broker
+from core.runtime_config import default_new_robot_ip, plc_config, robot_defaults
 from .editors.motion_editors import JogController, MoveEditor, MoveByEditor, MoveCEditor, MoveHomeEditor, ForceEditor
 from .editors.logic_editors import (SmartDOEditor, LoopEditor, MathEditor, CallEditor, IfEditor, WaitEditor, WaitDIEditor, WaitAIEditor,
                                     CommentEditor, StopEditor, SwitchEditor, FolderEditor,
@@ -3461,13 +3462,14 @@ class RobotSettingsEditor:
         new_idx = len(all_robots) + 1
         new_name = f"Robot {chr(64 + new_idx)}" # Robot D, E, F...
         if new_name not in all_robots:
-            robot_manager.add_robot(new_name, "192.168.3.100")
+            robot_manager.add_robot(new_name, default_new_robot_ip(), plc_config()["process_ip"])
             print(f">> [알림] 새 로봇 템플릿 '{new_name}'가 추가되었습니다.")
             self.render() # 화면 갱신
 
     def _render_robot_row(self, name, info):
         ip = info.get("ip", "")
-        plc_ip = info.get("plc_ip", "") or "192.168.3.200"
+        default_plc = robot_defaults().get(name, {}).get("plc_ip", plc_config()["process_ip"])
+        plc_ip = info.get("plc_ip", "") or default_plc
         inst = info.get("instance")
         state = "연결됨" if inst is not None else "대기중"
 
@@ -3525,8 +3527,18 @@ class RobotSettingsEditor:
     def connect_plc(self, name):
         print(f">> [PLC 통신] {name}의 PLC 장치와 연결을 시도합니다...")
         def _bg():
-            time.sleep(1)
-            print(f">> [PLC 성공] {name} PLC 연결 완료!")
+            try:
+                from core.domains.plc.communication.plc_manager import plc_manager
+                info = robot_manager.get_robot_info(name) or {}
+                config = plc_config()
+                plc_ip = info.get("plc_ip") or robot_defaults().get(name, {}).get("plc_ip") or config["process_ip"]
+                plc_port = config["process_port"]
+                if plc_manager.connect(plc_ip, plc_port):
+                    print(f">> [PLC 성공] {name} PLC 연결 완료! ({plc_ip}:{plc_port})")
+                else:
+                    print(f">> [PLC 실패] {name} PLC 연결 실패 ({plc_ip}:{plc_port})")
+            except Exception as exc:
+                print(f">> [PLC 실패] {name} PLC 연결 예외: {exc}")
         threading.Thread(target=_bg, daemon=True).start()
 
     def connect_robot(self, name):

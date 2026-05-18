@@ -7,6 +7,7 @@ import math
 from presentation.ui.robot_hmi.robot_hmi_view import ProgramTreeEditor, RobotSettingsEditor
 from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
 from core.domains.robot.use_cases.singularity_analyzer import SingularityAnalyzer
+from core.runtime_config import plc_config, robot_defaults
 
 class DigitalTwinView:
     def __init__(self, parent_tab):
@@ -426,9 +427,14 @@ class DigitalTwinView:
             print(">> [에러] 선택된 활성 로봇이 없습니다.")
             return
             
-        ip = self.plc_ip_entry.get()
-        port = int(self.plc_port_entry.get())
-        robot_ip = robot_manager.get_all_robots().get(active_robot, {}).get("ip", "127.0.0.1")
+        config = plc_config()
+        ip_entry = getattr(self, "plc_ip_entry", None)
+        port_entry = getattr(self, "plc_port_entry", None)
+        ip = ip_entry.get() if ip_entry else config["process_ip"]
+        port = int(port_entry.get()) if port_entry else config["process_port"]
+        robot_ip = robot_manager.get_all_robots().get(active_robot, {}).get("ip", "")
+        if not robot_ip:
+            robot_ip = robot_defaults().get(active_robot, {}).get("ip", "")
         
         # Load the latest program for the active robot
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))

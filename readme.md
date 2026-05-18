@@ -137,6 +137,13 @@ ROBOT_CONTROL_MODE=mqtt python frontend/run_ui_only.py
 
 `ROBOT_CONTROL_MODE=mqtt`는 UI가 로봇에 직접 붙지 않고, Docker의 `robot_controller`를 통해 명령을 보내는 운영 권장 모드입니다.
 
+UI는 기본적으로 무연결 모드로 켜집니다. 창이 뜬다고 해서 Robot/PLC/MySQL에 바로 접속하지 않습니다.
+
+- 로봇: 상단 `로봇 통신 연결` 또는 2Page의 `로봇 연결` 버튼을 누를 때만 연결합니다.
+- PLC/DB/MQTT: `서비스 관리` 또는 2Page 통신체크 화면에서 `연결`을 누를 때만 확인/연결합니다.
+- `backend/.env` 값은 UI도 같이 읽습니다. IP가 바뀌면 코드가 아니라 `.env`를 수정하세요.
+- 오래된 PLC/MES 오케스트레이터를 강제로 실행해야 할 때만 `FACTORY_ORCHESTRATOR_AUTOSTART=1`을 사용합니다.
+
 랩에서 UI만 테스트하거나 Docker 없이 직접 연결할 때는:
 
 ```bash

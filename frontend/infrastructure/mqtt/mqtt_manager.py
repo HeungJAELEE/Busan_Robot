@@ -3,13 +3,19 @@ import json
 import threading
 import time
 
+try:
+    from core.runtime_config import mqtt_config
+except Exception:
+    mqtt_config = None
+
 class MqttManager:
     """
     마이크로서비스 간의 통신을 담당하는 MQTT 공통 매니저
     """
-    def __init__(self, broker_ip="127.0.0.1", port=1883, client_id=""):
-        self.broker_ip = broker_ip
-        self.port = port
+    def __init__(self, broker_ip=None, port=None, client_id=""):
+        config = mqtt_config() if mqtt_config else {}
+        self.broker_ip = broker_ip or config.get("broker", "127.0.0.1")
+        self.port = int(port or config.get("port", 1883))
         self.client_id = client_id
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id)
         self.callbacks = {}
@@ -74,7 +80,10 @@ class MqttManager:
     def publish(self, topic, payload):
         if isinstance(payload, dict) or isinstance(payload, list):
             payload = json.dumps(payload, ensure_ascii=False)
-        self.client.publish(topic, payload)
+        if not self.connected:
+            return False
+        result = self.client.publish(topic, payload)
+        return getattr(result, "rc", 0) == 0
 
 # 싱글톤처럼 쓸 수 있는 기본 인스턴스 (필요 시 각 모듈에서 재정의 가능)
 mqtt_broker = MqttManager()

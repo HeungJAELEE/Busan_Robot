@@ -1,5 +1,6 @@
 import threading
 import time
+from core.runtime_config import plc_config
 
 class PlcManager:
     _instance = None
@@ -17,7 +18,10 @@ class PlcManager:
         self._is_connected = False
         self._plc_lock = threading.Lock()
         
-    def connect(self, ip: str, port: int = 1025) -> bool:
+    def connect(self, ip: str = None, port: int = None) -> bool:
+        config = plc_config()
+        ip = ip or config["process_ip"]
+        port = port or config["process_port"]
         if self._is_connected:
             self.disconnect()
             

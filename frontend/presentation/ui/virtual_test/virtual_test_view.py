@@ -11,6 +11,7 @@ import customtkinter as ctk
 
 from core.domains.robot.communication.client_manager import robot_manager
 from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
+from core.runtime_config import mysql_config
 from presentation.ui.robot_hmi.robot_hmi_view import ProgramTreeEditor
 from presentation.ui.theme import Theme
 
@@ -468,11 +469,12 @@ class VirtualTestView:
 
         form = ctk.CTkFrame(right, fg_color=Theme.BG_BASE, corner_radius=8)
         form.pack(fill="x", padx=14, pady=8)
-        self.db_host_entry = self._entry_row(form, "Host", os.getenv("DB_HOST", "192.168.3.141"))
-        self.db_port_entry = self._entry_row(form, "Port", os.getenv("DB_PORT", "3306"))
-        self.db_user_entry = self._entry_row(form, "User", os.getenv("DB_USER", "guest"))
-        self.db_pass_entry = self._entry_row(form, "Pass", os.getenv("DB_PASS", "guest1234"), show="*")
-        self.db_name_entry = self._entry_row(form, "DB", os.getenv("DB_NAME", "faictory_mes"))
+        db_config = mysql_config()
+        self.db_host_entry = self._entry_row(form, "Host", db_config["host"])
+        self.db_port_entry = self._entry_row(form, "Port", str(db_config["port"]))
+        self.db_user_entry = self._entry_row(form, "User", db_config["user"])
+        self.db_pass_entry = self._entry_row(form, "Pass", db_config["password"], show="*")
+        self.db_name_entry = self._entry_row(form, "DB", db_config["db"])
 
         ctk.CTkButton(right, text="DB 연결 확인", command=self.connect_db,
                       **Theme.get_button_style("primary")).pack(fill="x", padx=16, pady=(8, 4))

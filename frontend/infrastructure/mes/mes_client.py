@@ -1,14 +1,15 @@
 import time
 import threading
 from core.shared.event_store import global_event_store
+from core.runtime_config import mes_url
 
 class MesClient:
     """
     Mock MES (Manufacturing Execution System) Client.
     Listens to EventStore for Job Completed events and sends them to the remote MES server.
     """
-    def __init__(self, mes_url="http://192.168.3.200:8080/api/v1/telemetry"):
-        self.mes_url = mes_url
+    def __init__(self, mes_url_value=None):
+        self.mes_url = mes_url_value or mes_url()
         self._running = False
         self._thread = None
         self._last_processed_idx = 0

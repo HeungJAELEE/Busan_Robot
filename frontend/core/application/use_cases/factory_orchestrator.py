@@ -1,5 +1,6 @@
 import time
 import json
+from core.runtime_config import env_bool, env_float, env_int
 from core.domains.motion_management.entities import RobotEntity
 from core.domains.plc_communication.repositories import IPlcRepository
 from core.domains.mes_integration.repositories import IMesRepository
@@ -27,6 +28,11 @@ class FactoryAutomationUseCase:
         self.plc_config = self._load_config()
         self.ADDR_START = self.plc_config.get("cycle_start", "M100")
         self.ADDR_RUNNING = self.plc_config.get("cycle_complete", "M101") # 동작 중/완료 신호
+        self.simulation_mode = env_bool("FACTORY_ORCHESTRATOR_SIMULATION", False)
+        self.loop_sleep_sec = env_float("FACTORY_ORCHESTRATOR_LOOP_SLEEP_SEC", 0.1)
+        self.max_cycles = env_int("FACTORY_ORCHESTRATOR_MAX_CYCLES", 0)
+        if self.simulation_mode:
+            self._install_simulation_adapters()
 
     def _load_config(self) -> dict:
         try:
@@ -36,6 +42,58 @@ class FactoryAutomationUseCase:
         except Exception as e:
             print(f"⚠️ [App UseCase] PLC 설정 파일 로드 실패: {e}")
             return {"cycle_start": "M100", "cycle_complete": "M101"}
+
+    def _install_simulation_adapters(self):
+        """Explicit simulation mode only. Real hardware methods are not replaced by default."""
+        self._sim_step = 0
+
+        def _read_bit(addr):
+            if addr == self.ADDR_START:
+                self._sim_step += 1
+                return 0 if self._sim_step % 4 == 0 else 1
+            return 0
+
+        self.plc.connect = lambda: print("[SIM PLC] connect skipped")
+        self.plc.disconnect = lambda: print("[SIM PLC] disconnect skipped")
+        self.plc.read_bit = _read_bit
+        self.plc.write_bit = lambda addr, value: print(f"[SIM PLC] {addr}={value}")
+        self.mes.connect = lambda: print("[SIM DB] connect skipped")
+        self.mes.disconnect = lambda: print("[SIM DB] disconnect skipped")
+        self.mes.log_robot_position = lambda robot_id, process_name, pos: print(f"[SIM DB] {robot_id} {process_name}: {pos}")
+
+        self.robot.connect = lambda: print("[SIM Robot] connect skipped")
+        self.robot.disconnect = lambda: print("[SIM Robot] disconnect skipped")
+        self.robot.perform_pick_and_place_glass = lambda: True
+        self.robot.perform_pick_and_place_case = lambda: True
+        self.robot.get_current_joint_pos = lambda: [10.24, -45.12, 90.0, 0.0, 45.0, -10.24]
+
+    def _require_runtime_methods(self):
+        required = {
+            "plc": (self.plc, ("connect", "disconnect", "read_bit", "write_bit")),
+            "robot": (
+                self.robot,
+                (
+                    "connect",
+                    "disconnect",
+                    "perform_pick_and_place_glass",
+                    "perform_pick_and_place_case",
+                    "get_current_joint_pos",
+                    "get_uncommitted_events",
+                ),
+            ),
+            "mes": (self.mes, ("connect", "disconnect", "log_robot_position")),
+        }
+        missing = []
+        for label, (target, methods) in required.items():
+            for method in methods:
+                if not callable(getattr(target, method, None)):
+                    missing.append(f"{label}.{method}")
+        if missing:
+            raise RuntimeError(
+                "Legacy orchestrator cannot start because hardware adapter methods are missing: "
+                + ", ".join(missing)
+                + ". Use the normal UI mode, or set FACTORY_ORCHESTRATOR_SIMULATION=1 for an explicit dry run."
+            )
 
     def handle_mqtt_command(self, event: MqttCommandReceivedEvent):
         """MQTT로 들어온 비동기 명령 처리기"""
@@ -83,12 +141,14 @@ class FactoryAutomationUseCase:
 
     def execute_loop(self):
         """무한 반복되는 핵심 공장 자동화 루프"""
+        self._require_runtime_methods()
         self.plc.connect()
         self.robot.connect()
         self.mes.connect()
         print("🚀 [App UseCase] 공장 자동화 연속 루프가 시작되었습니다.")
 
         try:
+            cycle_count = 0
             while True:
                 # M100 체크
                 if self.plc.read_bit(self.ADDR_START) == 1:
@@ -97,8 +157,12 @@ class FactoryAutomationUseCase:
                     self.plc.write_bit(self.ADDR_RUNNING, 1)
                     
                     self._execute_continuous_loop()
+                    cycle_count += 1
+                    if self.max_cycles > 0 and cycle_count >= self.max_cycles:
+                        print(f"✅ [App UseCase] 최대 사이클 {self.max_cycles}회 완료")
+                        break
                 
-                time.sleep(0.1)
+                time.sleep(self.loop_sleep_sec)
 
         except KeyboardInterrupt:
             print("\n👋 [App UseCase] 사용자에 의해 시스템이 종료됩니다.")

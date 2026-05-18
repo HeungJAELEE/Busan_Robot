@@ -13,6 +13,7 @@ from presentation.ui.ai_teaching.ai_teaching_view import AITeachingView
 from core.domains.robot.communication.client_manager import robot_manager
 from infrastructure.mqtt.mqtt_manager import mqtt_broker
 from core.service_manager import service_mgr
+from core.runtime_config import mqtt_config, robot_defaults
 from presentation.ui.theme import Theme
 
 ctk.set_appearance_mode("dark")
@@ -119,10 +120,9 @@ class ModernContyApp(ctk.CTk):
         self.page4_frame.grid(row=0, column=0, sticky="nsew")
         self.ai_teaching_view = AITeachingView(self.page4_frame)
         
-        # 로봇 기본 설정 (연결은 하지 않음!)
-        robot_manager.add_robot("Robot A", "192.168.3.7")
-        robot_manager.add_robot("Robot B", "192.168.3.6")
-        robot_manager.add_robot("Robot C", "192.168.3.5")
+        # 로봇 기본 설정 (연결은 사용자가 버튼을 눌렀을 때만 수행)
+        for name, config in robot_defaults().items():
+            robot_manager.add_robot(name, config.get("ip", ""), config.get("plc_ip"))
         
         # 프로그램 실행 중 폴링 일시중지 플래그
         self._program_running = False
@@ -146,7 +146,11 @@ class ModernContyApp(ctk.CTk):
         self.mqtt_broker.subscribe("robot/result", self._on_robot_result)
         self.mqtt_broker.subscribe("robot/error", self._on_robot_error)
         self.mqtt_broker.subscribe("robot/connection", self._on_robot_connection)
-        self.mqtt_broker.connect_and_loop()
+        config = mqtt_config()
+        if config.get("autoconnect", True):
+            self.mqtt_broker.connect_and_loop()
+        else:
+            print(">> [MQTT] 자동 연결 대기 모드입니다. 연결 버튼 또는 서비스 관리에서 시작하세요.")
 
     def _on_robot_realtime(self, payload):
         if not isinstance(payload, dict):
