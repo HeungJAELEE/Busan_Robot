@@ -67,22 +67,32 @@ def _run_mqtt_broker_check(stop_event):
 
 
 def _run_plc_bridge(stop_event):
-    """PLC 브리지 — 미쓰비시 PLC 연결 시뮬레이션"""
+    """PLC 브리지 — 미쓰비시 PLC master 신호 감시"""
     print("⚙️ [PLC Bridge] 서비스 시작...")
-    plc_ip = os.getenv("PLC_IP", "192.168.3.39")
-    print(f"⚙️ [PLC Bridge] PLC IP: {plc_ip} (연결 대기)")
+    plc_ip = os.getenv("PLC_PROCESS_IP", os.getenv("PLC_IP", "192.168.3.150"))
+    plc_port = int(os.getenv("PLC_PROCESS_PORT", os.getenv("PLC_PORT", "2000")))
+    start_device = os.getenv("PLC_PROCESS_START_DEVICE", "X11")
+    stop_device = os.getenv("PLC_PROCESS_STOP_DEVICE", "X12")
+    complete_device = os.getenv("PLC_ROBOT_COMPLETE_DEVICE", "X145")
+    print(f"⚙️ [PLC Bridge] PLC IP: {plc_ip}:{plc_port} (읽기 전용 감시)")
     
     try:
         import pymcprotocol
         pymc3e = pymcprotocol.Type3E()
-        pymc3e.connect(plc_ip, 5000)
+        pymc3e.setaccessopt(commtype="binary")
+        pymc3e.connect(plc_ip, plc_port)
         print(f"⚙️ [PLC Bridge] ✅ PLC 연결 성공!")
-        prev_val = None
+        prev_values = {}
         while not stop_event.is_set():
-            val = pymc3e.batchread_wordunits(headdevice="D1000", readsize=1)
-            if val != prev_val:
-                print(f"⚙️ [PLC Bridge] D1000 변경: {prev_val} → {val}")
-                prev_val = val
+            for label, device in (
+                ("공정 시작", start_device),
+                ("공정 정지", stop_device),
+                ("로봇 완료", complete_device),
+            ):
+                val = bool(pymc3e.batchread_bitunits(headdevice=device, readsize=1)[0])
+                if prev_values.get(device) != val:
+                    print(f"⚙️ [PLC Bridge] {label} {device}: {int(val)}")
+                    prev_values[device] = val
             time.sleep(0.1)
         pymc3e.close()
     except ImportError:

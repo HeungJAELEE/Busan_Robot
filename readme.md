@@ -116,6 +116,8 @@ cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
 docker compose up -d plc_bridge
 ```
 
+현장 PLC master 연동 기준은 [FACTORY_MES_PLC_INTEGRATION.md](/Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/FACTORY_MES_PLC_INTEGRATION.md)에 정리되어 있습니다. 현재 기본 신호는 `X11` 시작, `X12` 정지, `Y160 -> Robot DI0` 시작 배선, `X145` 로봇 완료, `M1150/M1130/M1120` 공정 종료 DB 기록입니다.
+
 ### 4. UI 실행
 
 새 터미널을 하나 더 열고 실행합니다.

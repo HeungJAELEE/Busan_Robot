@@ -30,6 +30,7 @@ class DatabaseRepository:
         self._conn = None
         self._lock = threading.Lock()
         self._virtual_tables_ready = False
+        self._plc_event_table_ready = False
 
     def _get_persistent_connection(self):
         """단일 persistent 커넥션을 유지하며, 끊기면 자동 재연결합니다."""
@@ -174,6 +175,68 @@ class DatabaseRepository:
                     # print(f">> [DB] {action_type} 동작 기록 완료: X={px:.3f}, Y={py:.3f}, Z={pz:.3f}")
         except Exception as e:
             print(f">> [DB 에러] {action_type} 이력 저장 실패: {e}")
+
+    def _ensure_plc_event_table(self):
+        if self._plc_event_table_ready:
+            return
+        conn = self._get_persistent_connection()
+        if not conn:
+            return
+        query = """
+            CREATE TABLE IF NOT EXISTS plc_process_events (
+                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                signal_name VARCHAR(64) NOT NULL,
+                station_id VARCHAR(64),
+                device VARCHAR(32) NOT NULL,
+                edge_name VARCHAR(32) NOT NULL,
+                signal_value TINYINT DEFAULT 0,
+                source_name VARCHAR(64),
+                plc_name VARCHAR(64),
+                plc_ip VARCHAR(64),
+                plc_port INT,
+                description TEXT,
+                payload LONGTEXT,
+                created_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+                INDEX idx_plc_event_signal_time (signal_name, created_at),
+                INDEX idx_plc_event_station_time (station_id, created_at)
+            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+        """
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(query)
+            self._plc_event_table_ready = True
+        except Exception as e:
+            print(f">> [DB 에러] PLC 이벤트 테이블 준비 실패: {e}")
+
+    def insert_plc_process_event(self, payload: dict):
+        """PLC master 신호 이벤트를 DB에 저장합니다."""
+        self._ensure_plc_event_table()
+        query = """
+            INSERT INTO plc_process_events
+              (signal_name, station_id, device, edge_name, signal_value,
+               source_name, plc_name, plc_ip, plc_port, description, payload)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        values = (
+            payload.get("signal", ""),
+            payload.get("station_id", ""),
+            payload.get("device", ""),
+            payload.get("edge", ""),
+            int(payload.get("value", 0) or 0),
+            payload.get("source", ""),
+            payload.get("plc_name", ""),
+            payload.get("plc_ip", ""),
+            int(payload.get("plc_port", 0) or 0),
+            payload.get("description", ""),
+            json.dumps(payload, ensure_ascii=False),
+        )
+        try:
+            conn = self._get_persistent_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(query, values)
+        except Exception as e:
+            print(f">> [DB 에러] PLC 이벤트 저장 실패: {e}")
 
     @staticmethod
     def _six(values):

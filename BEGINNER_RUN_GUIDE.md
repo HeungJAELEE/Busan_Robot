@@ -142,7 +142,15 @@ ROBOT_A_IP=192.168.3.7
 ROBOT_B_IP=192.168.3.6
 ROBOT_C_IP=192.168.3.5
 MYSQL_HOST=192.168.3.45
-PLC_IP=192.168.3.39
+PLC_IP=192.168.3.150
+PLC_PORT=2000
+PLC_MONITOR_IP=192.168.3.160
+PLC_PROCESS_START_DEVICE=X11
+PLC_PROCESS_STOP_DEVICE=X12
+PLC_ROBOT_START_OUTPUT=Y160
+ROBOT_START_DI=DI0
+PLC_ROBOT_COMPLETE_DEVICE=X145
+PLC_DONE_SIGNAL_MAP=PLC150:M1150,PLC130:M1130,PLC120:M1120
 ```
 
 ### 4-3. Docker 서비스 실행
@@ -165,6 +173,8 @@ PLC까지 연결할 때:
 ```powershell
 docker compose up -d plc_bridge
 ```
+
+이 PLC 브리지는 쓰기 명령을 보내는 장치가 아니라, 현장 PLC master의 `X11/X12/X145/M1150/M1130/M1120` 상태를 읽어서 MQTT와 DB에 기록하는 감시 장치입니다.
 
 운영 모드에서 UI가 로봇을 직접 잡지 않고 Docker Robot Controller를 통해 제어하게 하려면 UI 실행 전에 아래 환경변수를 켭니다.
 

@@ -1,48 +1,59 @@
-# ⚙️ PLC Bridge 서비스
+# PLC Bridge 서비스
 
-이 마이크로서비스는 공장 현장의 자동화 장비들, 특히 **미쓰비시(Mitsubishi) PLC**와의 통신을 전담하는 게이트웨이(Gateway)입니다. 로봇(Indy7)이 컨베이어 벨트나 레이저 센서의 신호를 알아야 할 때, 이 서비스가 중간에서 통역사 역할을 합니다.
+이 서비스는 미쓰비시 PLC를 읽기 전용으로 감시해서 MQTT 이벤트로 변환합니다. 현장 기준은 **PLC master**입니다.
 
----
-
-## 🧩 아키텍처 및 통신 구조
+## 제어 구조
 
 ```mermaid
 flowchart LR
-    PLC[미쓰비시 PLC<br/>MELSEC Q/R Series]
-    MQTT((📮 MQTT Broker)) 
-    
-    subgraph PLC Bridge Service
-        Poller[MC Protocol Poller]
-        Q[State Machine]
-        Pub[MQTT Publisher]
-    end
+    PLC["PLC Master"]
+    Robot["Robot<br/>DI0 입력"]
+    Vision["Vision PC<br/>factory_mes"]
+    Bridge["plc_bridge<br/>read-only poller"]
+    MQTT["MQTT Broker"]
+    DBW["db_worker"]
+    DB["MySQL"]
 
-    Poller -->|1. 100ms 간격 센서 읽기<br/>D1000, M100| PLC
-    PLC -->|2. 데이터 응답| Poller
-    Poller -->|3. 값의 변화(Rising Edge) 감지| Q
-    Q -->|4. 이벤트 생성| Pub
-    Pub -->|5. 퍼블리시<br/>'plc/sensor/part_arrived'| MQTT
+    PLC -->|"Y160 물리 배선"| Robot
+    Robot -->|"X145 완료 입력"| PLC
+    Vision <-->|"B130/B150/M250/M260 등"| PLC
+    Bridge -->|"X11/X12/X145/M1150/M1130/M1120 읽기"| PLC
+    Bridge --> MQTT
+    MQTT --> DBW
+    DBW --> DB
 ```
 
-## 🛠 주요 기능 (Features)
+## 감시 신호
 
-1. **MC Protocol (Type 3E) 통신**
-   - 파이썬 라이브러리(`pymcprotocol`)를 활용해 미쓰비시 PLC의 데이터 레지스터(D-디바이스)나 비트 레지스터(M-디바이스)를 초고속으로 지속 폴링(Polling)합니다.
+| 환경 변수 | 기본값 | 의미 |
+|---|---|---|
+| `PLC_PROCESS_START_DEVICE` | `X11` | 공정 시작 |
+| `PLC_PROCESS_STOP_DEVICE` | `X12` | 공정 정지 |
+| `PLC_ROBOT_START_OUTPUT` | `Y160` | PLC에서 Robot DI0으로 가는 물리 출력 |
+| `ROBOT_START_DI` | `DI0` | 로봇 시작 입력 |
+| `PLC_ROBOT_COMPLETE_DEVICE` | `X145` | 로봇 완료 입력 |
+| `PLC_DONE_SIGNAL_MAP` | `PLC150:M1150,PLC130:M1130,PLC120:M1120` | DB 기록 기준 종료 비트 |
 
-2. **이벤트 드리븐 (Event-Driven) 최적화**
-   - 무식하게 센서값을 계속 뿌리지 않습니다. 내부 State Machine이 이전 값을 기억하고 있다가, 값이 0에서 1로 변하는 순간(Rising Edge)에만 MQTT 브로커로 "부품 도착!" 같은 명확한 이벤트를 날립니다.
-   - 이를 통해 사내 네트워크의 통신 과부하를 막습니다.
+## MQTT Topic
 
-3. **에러 자동 복구**
-   - 공장 특성상 랜선이 뽑히거나 노이즈로 통신이 끊길 수 있습니다. 이 모듈은 소켓이 끊어지면 자동으로 재접속을 시도하는 예외처리가 내장되어 있습니다.
+| Topic | 조건 |
+|---|---|
+| `plc/process/start` | `X11` 상승 엣지 |
+| `plc/process/stop` | `X12` 상승 엣지 |
+| `plc/robot/complete` | `X145` 상승 엣지 |
+| `plc/process/done` | `M1150/M1130/M1120` 상승 엣지 |
+| `plc/signal` | 감시 중인 신호 값 변경 |
 
-## 🚀 실행 및 테스트
+## 실행
 
 ```bash
-# 개별 모듈 단위 테스트 (TDD)
-cd backend/plc_bridge
-python -m pytest tests/
-
-# 수동 단독 실행 (로컬 테스트용)
-python src/main.py
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+docker compose up -d --build plc_bridge
+docker compose logs -f plc_bridge
 ```
+
+## 주의
+
+- 기본 동작은 PLC/Robot에 쓰기 명령을 보내지 않습니다.
+- Vision 결과는 `factory_mes`의 `*_Process_pendant.py`가 PLC에 직접 씁니다.
+- HMI에서 같은 PLC 비트를 동시에 쓰면 래더와 충돌할 수 있습니다.

@@ -35,6 +35,10 @@ def on_virtual_test_event(payload):
         db_repository.finish_virtual_test_session(payload)
     db_repository.insert_virtual_test_event(payload)
 
+def on_plc_event(payload):
+    """PLC master 신호 이벤트 저장"""
+    db_repository.insert_plc_process_event(payload)
+
 def main():
     broker_ip = os.getenv("MQTT_BROKER", "127.0.0.1")
     broker_port = int(os.getenv("MQTT_PORT", "1883"))
@@ -45,6 +49,10 @@ def main():
     mqtt_client.subscribe("robot/task_done", on_task_done)
     mqtt_client.subscribe("robot/virtual_test_sample", on_virtual_test_sample)
     mqtt_client.subscribe("robot/virtual_test_event", on_virtual_test_event)
+    mqtt_client.subscribe("plc/process/start", on_plc_event)
+    mqtt_client.subscribe("plc/process/stop", on_plc_event)
+    mqtt_client.subscribe("plc/robot/complete", on_plc_event)
+    mqtt_client.subscribe("plc/process/done", on_plc_event)
     
     mqtt_client.connect_and_loop()
 

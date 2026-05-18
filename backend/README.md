@@ -193,25 +193,27 @@ sequenceDiagram
     DB-->>DW: ✅ 1 row inserted
 ```
 
-### 4. PLC 센서 감지 → 비전 → 로봇 자동 Pick 흐름
+### 4. PLC Master 신호 감시 → MQTT/DB 기록 흐름
 
 ```mermaid
 sequenceDiagram
-    participant PLC as PLC 센서
+    participant PLC as PLC Master
+    participant Robot as Robot DI/DO
     participant PB as PLC Bridge
     participant B as 📡 중앙 통신 허브
-    participant V as Vision YOLO
-    participant RC as Robot Controller
-    participant Robot
+    participant DW as DB Worker
+    participant DB as MySQL DB
 
-    PLC->>PB: D1000: 0→1 (부품 도착)
-    PB->>B: publish("plc/sensor/part_arrived")
-    B->>V: (비전 트리거)
-    Note over V: 카메라 촬영, YOLO 추론, 픽셀→mm 변환
-    V->>B: publish("vision/target_coord", {x:150, y:200})
-    B->>RC: on_robot_command()
-    RC->>Robot: task_move_to()
-    Robot-->>RC: 이동 완료
+    PLC->>Robot: Y160 물리 출력 -> Robot DI0
+    Robot-->>PLC: 작업 완료 물리 입력 -> X145
+    loop 매 100ms
+        PB->>PLC: X11/X12/X145/M1150/M1130/M1120 읽기
+    end
+    PB->>B: publish("plc/process/start")
+    PB->>B: publish("plc/robot/complete")
+    PB->>B: publish("plc/process/done")
+    B->>DW: on_plc_event(payload)
+    DW->>DB: INSERT INTO plc_process_events
 ```
 
 ---
@@ -226,7 +228,12 @@ sequenceDiagram
 | `robot/command` | frontend(HMI) | robot_controller | `{"type":"Move", "pos":[0.3,-0.4,0.2,180,0,180]}` |
 | `robot/task_done` | frontend(HMI) | db_worker | `{"robot_id":"Indy7", "action_type":"Pick", "pos":[0.35,-0.45,0.2]}` |
 | `vision/target_coord` | vision_yolo | robot_controller | `{"x":150.5, "y":200.0, "class":"box"}` |
-| `plc/sensor/part_arrived` | plc_bridge | vision_yolo, robot_controller | `{"status":1}` |
+| `plc/sensor/part_arrived` | legacy plc_bridge | vision_yolo, robot_controller | 과거 D1000 예제용. 현재 현장 연동은 아래 PLC master topic 사용 |
+| `plc/process/start` | plc_bridge | db_worker, HMI | `{"signal":"process_start", "device":"X11", "edge":"rising"}` |
+| `plc/process/stop` | plc_bridge | db_worker, HMI | `{"signal":"process_stop", "device":"X12", "edge":"rising"}` |
+| `plc/robot/complete` | plc_bridge | db_worker, HMI | `{"signal":"robot_complete", "device":"X145", "edge":"rising"}` |
+| `plc/process/done` | plc_bridge | db_worker, HMI | `{"signal":"process_done", "station_id":"PLC150", "device":"M1150"}` |
+| `plc/signal` | plc_bridge | HMI/diagnostics | PLC 감시 신호 변경 공통 이벤트 |
 
 ---
 
@@ -253,13 +260,14 @@ sequenceDiagram
 ### ⚙️ plc_bridge (`src/main.py`)
 | 함수 | 역할 |
 |---|---|
-| `main()` | `pymcprotocol.Type3E` 소켓 연결 → 100ms 간격 `batchread_wordunits("D1000")` → 상승 에지 감지 시 MQTT `plc/sensor/part_arrived` 발행 |
+| `main()` | PLC master에 읽기 전용 연결 → 100ms 간격 `X11/X12/X145/M1150/M1130/M1120` 감시 → 상승 에지 감지 시 MQTT PLC 이벤트 발행 |
 
 ### 🗄 db_worker (`src/main.py`)
 | 함수 | 역할 |
 |---|---|
 | `on_realtime_data(payload)` | MQTT `robot/realtime` 수신 → `INSERT ... ON DUPLICATE KEY UPDATE` (UPSERT) |
 | `on_task_done(payload)` | MQTT `robot/task_done` 수신 → `INSERT INTO robot_task_history` |
+| `on_plc_event(payload)` | MQTT `plc/process/start`, `plc/process/stop`, `plc/robot/complete`, `plc/process/done` 수신 → `INSERT INTO plc_process_events` |
 
 ### `database_repository.py` (db_worker 내부)
 | 함수 | 역할 |

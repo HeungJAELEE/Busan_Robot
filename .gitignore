@@ -14,6 +14,7 @@ test_*.py
 *.legacy.bak
 
 # 실행 로그
+logs/
 frontend/logs/
 
 # Docker local deployment secrets

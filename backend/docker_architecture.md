@@ -24,8 +24,8 @@
 - **설계**: 무거운 GPU 연산이 필요합니다. 분석된 객체의 (X, Y) 좌표를 MQTT `vision/detected_objects` 토픽으로 던집니다. 로봇 컨트롤러는 이 토픽만 듣고 이동합니다.
 
 ### 4. ⚙️ PLC 연동 (PLC Bridge)
-- **역할**: 컨베이어 벨트, 공압 실린더, 외부 센서의 접점 데이터를 읽고 씁니다.
-- **설계**: 미쓰비시 MC Protocol 라이브러리가 도는 독립 스레드. 특정 레지스터(D1000 등) 값이 바뀌면 `plc/sensor/part_arrived` 이벤트 알람을 발생시킵니다.
+- **역할**: PLC master의 공정 시작/정지/로봇 완료/공정 종료 접점을 읽어서 MQTT와 DB에 기록합니다.
+- **설계**: 미쓰비시 MC Protocol 라이브러리가 도는 독립 스레드. `X11`, `X12`, `X145`, `M1150`, `M1130`, `M1120`의 상승 엣지를 감지하면 `plc/process/start`, `plc/process/stop`, `plc/robot/complete`, `plc/process/done` 이벤트를 발행합니다.
 
 ### 5. 📮 중앙 통신 브로커 (Communication)
 - **역할**: 모든 컨테이너들이 서로 소통할 수 있도록 이어주는 MQTT Broker (Mosquitto) 또는 Redis Pub/Sub 서버.
@@ -39,9 +39,9 @@
 
 ## 🔄 데이터 통신 시나리오 예시 (Pick & Place)
 
-1. **PLC 컨테이너**: "물건 도착! (`plc/part_arrived` 발행)"
-2. **비전 컨테이너**: 알람을 듣고 카메라 촬영. 좌표 (150, 200) 발견 후 `vision/target_coord` 발행.
-3. **로봇 컨트롤러**: 좌표를 받아 IndyDCP 모션 실행. 완료 후 `robot/task_done` 발행.
-4. **DB 워커**: `robot/task_done`을 듣고 즉시 `robot_task_history` 테이블에 Insert.
+1. **PLC master**: `Y160`을 Robot `DI0`으로 물리 출력해 로봇 시작 조건을 만듭니다.
+2. **Robot**: 펜던트/JSON 로직에 따라 동작하고 완료 신호를 PLC `X145`로 돌려줍니다.
+3. **PLC Bridge**: `X11/X12/X145/M1150/M1130/M1120` 신호 변화를 MQTT 이벤트로 발행합니다.
+4. **DB 워커**: PLC 이벤트를 듣고 `plc_process_events` 테이블에 Insert합니다.
 
 > 위와 같이 구성하면 **각 모듈은 오직 본인의 역할에만 집중**할 수 있어 시스템이 극도로 견고해집니다!
