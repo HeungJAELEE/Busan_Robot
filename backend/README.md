@@ -134,7 +134,7 @@ sequenceDiagram
 
     Note over B: 가장 먼저 실행 (주소 허브)
     R->>B: connect() & subscribe("robot/command")
-    R->>Robot: IndyDCP 소켓 연결 (192.168.3.11)
+    R->>Robot: IndyDCP 소켓 연결 (192.168.3.7)
     
     P->>B: connect()
     P->>PLC: 소켓 연결 (192.168.3.39:5000)

@@ -19,7 +19,7 @@ def _robot_config():
     robot_model = os.getenv("ROBOT_MODEL", os.getenv("ROBOT_NAME", "NRMK-Indy7"))
     configs = {}
     defaults = {
-        "Robot A": os.getenv("ROBOT_A_IP", os.getenv("ROBOT_IP", "192.168.3.11")),
+        "Robot A": os.getenv("ROBOT_A_IP", os.getenv("ROBOT_IP", "192.168.3.7")),
         "Robot B": os.getenv("ROBOT_B_IP", ""),
         "Robot C": os.getenv("ROBOT_C_IP", ""),
     }

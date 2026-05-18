@@ -231,9 +231,9 @@ nano .env
 Robot IP 설정:
 
 ```text
-ROBOT_A_IP=192.168.3.11
-ROBOT_B_IP=192.168.3.12
-ROBOT_C_IP=192.168.3.13
+ROBOT_A_IP=192.168.3.7
+ROBOT_B_IP=192.168.3.6
+ROBOT_C_IP=192.168.3.5
 ```
 
 현장 IP에 맞게 바꾼 뒤:

@@ -11,7 +11,7 @@
 ```mermaid
 flowchart TD
     MQTT((📮 MQTT Broker))
-    Robot[🤖 Indy7 실물 로봇<br/>192.168.3.11]
+    Robot[🤖 Indy7 실물 로봇<br/>192.168.3.7]
     
     subgraph Robot Controller Service
         Sub[MQTT Subscriber<br/>'robot/command']

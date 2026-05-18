@@ -16,10 +16,10 @@ cp .env.example .env
 `.env`에서 현장 네트워크 값만 수정합니다.
 
 ```env
-ROBOT_A_IP=192.168.3.11
-ROBOT_B_IP=192.168.3.12
-ROBOT_C_IP=192.168.3.13
-ROBOT_NAME=Indy7
+ROBOT_A_IP=192.168.3.7
+ROBOT_B_IP=192.168.3.6
+ROBOT_C_IP=192.168.3.5
+ROBOT_NAME=NRMK-Indy7
 
 MYSQL_HOST=192.168.3.45
 MYSQL_PORT=3306
@@ -122,7 +122,7 @@ REGISTRY=ghcr.io/heungjaelee TAG=latest PLATFORM=linux/amd64 ./scripts/docker-bu
 
 ```yaml
 environment:
-  ROBOT_IP: ${ROBOT_B_IP:-192.168.3.12}
+  ROBOT_IP: ${ROBOT_B_IP:-192.168.3.6}
   ROBOT_NAME: Indy7
 ```
 

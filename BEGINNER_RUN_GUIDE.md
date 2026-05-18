@@ -138,9 +138,9 @@ open -e .env
 현장 IP를 확인합니다.
 
 ```env
-ROBOT_A_IP=192.168.3.11
-ROBOT_B_IP=192.168.3.12
-ROBOT_C_IP=192.168.3.13
+ROBOT_A_IP=192.168.3.7
+ROBOT_B_IP=192.168.3.6
+ROBOT_C_IP=192.168.3.5
 MYSQL_HOST=192.168.3.45
 PLC_IP=192.168.3.39
 ```
@@ -261,7 +261,7 @@ docker compose logs -f robot_controller
 정상 연결 예시:
 
 ```text
-IndyDCP(192.168.3.11, Indy7) 로봇 접속 시도...
+IndyDCP(192.168.3.7, NRMK-Indy7) 로봇 접속 시도...
 실시간 상태 10Hz 폴링 및 MQTT 브로드캐스트 시작
 ```
 
@@ -305,7 +305,7 @@ Windows PowerShell에서 실행합니다.
 로봇 A:
 
 ```powershell
-Test-NetConnection 192.168.3.11 -Port 6066
+Test-NetConnection 192.168.3.7 -Port 6066
 ```
 
 PLC:
