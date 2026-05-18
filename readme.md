@@ -14,6 +14,8 @@ Neuromeka(뉴로메카) **Indy7 협동 로봇**을 위한 PC 기반 HMI 소프�
 
 로봇/DB/Digital Twin 간 데이터 흐름은 [ROBOT_COMMUNICATION_FLOW.md](./ROBOT_COMMUNICATION_FLOW.md)에 정리되어 있습니다.
 
+Robot A의 2026-05-18 Dry Run Recording 결과와 다음 테스트 레시피는 [docs/robot_a_dry_run_analysis_20260518.md](./docs/robot_a_dry_run_analysis_20260518.md)에 정리되어 있습니다.
+
 ---
 
 ## ✅ 왕초보 실행 가이드: 이것만 그대로 따라 하세요
@@ -939,6 +941,32 @@ Page 1 Digital Twin과 Page 2 `Play(가상)` 3D Motion Viewer에는 기존 티�
 - 관절값이 없는 가상 포인트는 TCP 위치 기준의 작업공간 경계 추정값으로 보수적인 위험도를 표시합니다.
 - Page 1은 매 프레임마다 정밀 계산을 반복하지 않고, TCP가 약 20mm 이상 이동했을 때만 샘플링하여 위험 존 점을 누적합니다. 계산 결과는 관절 0.1도/TCP 20mm 단위로 캐시합니다.
 - 이 레이어는 안내용입니다. 프로그램 JSON, 학습 좌표, 루프, DI/DO 조건은 자동으로 변경하지 않습니다.
+
+2026-05-19부터 Page 1과 Page 2 가상화 화면에는 현장 치수 기반의 투명 설비 존도 같이 표시합니다.
+
+현장 치수:
+
+```text
+Robot A/B/C 간격: 1850mm
+로봇 전면 rail 거리: 500mm
+Robot A 기준 rail 끝단 여유: 약 1000mm
+Robot A 공통 Place 감시 좌표: X552 / Y-99 / Z220~420mm 주변
+```
+
+표시 기준:
+
+- **Rail clearance guide**: 로봇 전면 rail 근처 저고도 접근 시 주황/빨강 가이드
+- **Place watch zone**: 2026-05-18 Robot A Dry Run에서 충돌 플래그가 확인된 공통 Place 하강 주변
+- **Robot reach overlap**: 1850mm 간격에서 Robot A/B, B/C 작업영역이 겹칠 수 있는 경계
+
+참고한 제조사 자료:
+
+- [neuromeka-robotics/indy-ros](https://github.com/neuromeka-robotics/indy-ros)
+- [Indy7 kinematics.yaml](https://github.com/neuromeka-robotics/indy-ros/blob/main/src/indy_description/urdf/config/indy7/kinematics.yaml)
+- [Indy7 visual/collision mesh map](https://github.com/neuromeka-robotics/indy-ros/blob/main/src/indy_description/urdf/config/indy7/visual_parameters.yaml)
+- [MoveIt SRDF collision rules](https://github.com/neuromeka-robotics/indy-ros/blob/main/src/indy_moveit/config/indy_macro.srdf.xacro)
+
+주의: `indy-ros`는 URDF/SRDF/MoveIt 기반 충돌 모델 자료입니다. 현재 HMI는 ROS/MoveIt 런타임을 직접 띄우지 않으므로, 충돌 존은 **정밀 충돌판정**이 아니라 **현장 작업자가 보기 위한 경량 권장 가이드**입니다.
 
 ### 16. Python / pip 설치 가이드
 

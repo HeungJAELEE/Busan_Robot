@@ -15,6 +15,8 @@
 - **Docker**는 MQTT, DB Worker, Digital Twin, Robot Controller 같은 백그라운드 서비스를 실행합니다.
 - Docker Desktop에서 봐야 하는 곳은 `Images`가 아니라 보통 **Containers** 화면입니다.
 - UI는 기본적으로 **무연결 모드**로 켜집니다. 로봇/PLC/MySQL은 사용자가 `연결` 버튼을 눌렀을 때만 붙습니다.
+- Page 1/2의 3D 화면에는 초록/주황/빨강 위험 가이드와 rail/place 투명 존이 표시됩니다. 이 표시는 실제 JSON을 바꾸지 않는 확인용 안내입니다.
+- Robot A의 2026-05-18 테스트 분석과 다음날 테스트 순서는 [docs/robot_a_dry_run_analysis_20260518.md](/Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/docs/robot_a_dry_run_analysis_20260518.md)를 보세요.
 
 ## 1. 전체 실행 순서
 
@@ -328,6 +330,33 @@ docker compose logs -f plc_bridge
 
 ```text
 PLC 연결 실패: timed out
+```
+
+## 6-7. 3D 위험 존 확인
+
+UI를 실행한 뒤 Page 1 또는 Page 2의 `Play(가상)` 화면을 봅니다.
+
+```text
+녹색: 권장 안전
+주황: 감속/확인 권장
+빨강: 회피/분리 테스트 권장
+투명 박스: rail, Place 하강 감시, 로봇 간 작업영역 겹침 안내
+```
+
+현장 기준 치수:
+
+```text
+Robot A/B/C 간격: 185cm
+로봇과 rail 사이 거리: 50cm
+Robot A부터 rail 끝단까지: 약 100cm
+```
+
+주의:
+
+```text
+3D 위험 존은 안내용입니다.
+실제 충돌이 발생하면 즉시 정지하고 에러 리셋 후 Home으로 복귀합니다.
+충돌이 난 상태에서 반복 테스트를 계속 밀어넣지 않습니다.
 ```
 
 ## 7. 네트워크 확인 명령

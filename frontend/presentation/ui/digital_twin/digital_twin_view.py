@@ -2,10 +2,12 @@ import customtkinter as ctk
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from core.domains.robot.communication.client_manager import robot_manager
 import math
 from presentation.ui.robot_hmi.robot_hmi_view import ProgramTreeEditor, RobotSettingsEditor
 from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
+from core.domains.robot.use_cases.factory_safety_zones import FactorySafetyZones
 from core.domains.robot.use_cases.singularity_analyzer import SingularityAnalyzer
 from core.runtime_config import plc_config, robot_defaults
 
@@ -50,6 +52,7 @@ class DigitalTwinView:
         # TCP offset (Tool Center Point) - loaded from JSON or default Indy7 gripper
         self.tcp_offset = np.array([0.0, 0.0, 0.21, 0.0, 0.0, 0.0])
         self.singularity_analyzer = SingularityAnalyzer(self.dh_params, self.tcp_offset)
+        self.factory_safety_zones = FactorySafetyZones()
         
         self.setup_ui()
         self._init_3d_viewer()
@@ -115,7 +118,7 @@ class DigitalTwinView:
         ctk.CTkLabel(zone_box, text="SINGULARITY GUIDE ZONE").pack(anchor="w", padx=10, pady=5)
         self.singularity_label = ctk.CTkLabel(
             zone_box,
-            text="녹색 <70 권장 안전\n주황 70~90 주의\n빨강 90~100 위험",
+            text="녹색 <70 권장 안전\n주황 70~90 주의\n빨강 90~100 위험\nRail/Place 투명 존 표시",
             text_color=SingularityAnalyzer.COLOR_SAFE,
             font=ctk.CTkFont(family="Consolas", size=13, weight="bold"),
             justify="left",
@@ -144,16 +147,13 @@ class DigitalTwinView:
         
         self.ax.grid(color='#2A2A35', linestyle=':', linewidth=0.5)
         self.ax.tick_params(colors="#8B8B96", labelsize=8)
-        self.ax.set_xlim([-0.8, 0.8])
-        self.ax.set_ylim([-1.5, 1.5])
+        self.ax.set_xlim([-0.8, 1.0])
+        self.ax.set_ylim([-3.2, 2.5])
         self.ax.set_zlim([0, 1.2])
         self.ax.view_init(elev=20, azim=45)
         
-        self.robot_offsets = {
-            "Robot C": np.array([0, 1.0, 0]),
-            "Robot B": np.array([0, 0.0, 0]),
-            "Robot A": np.array([0, -1.0, 0])
-        }
+        self.robot_offsets = self.factory_safety_zones.robot_offsets_np()
+        self._draw_static_safety_zones()
 
         color_map = {"Robot C": "#FF1744", "Robot B": "#00E5FF", "Robot A": "#00FF41"}
         self.robot_base_colors = dict(color_map)
@@ -182,6 +182,48 @@ class DigitalTwinView:
             
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.viewer_container)
         self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=2, pady=2)
+
+    def _draw_static_safety_zones(self):
+        for zone in self.factory_safety_zones.static_zone_boxes_m():
+            faces = self._box_faces(zone["center"], zone["size"])
+            collection = Poly3DCollection(
+                faces,
+                facecolors=zone["color"],
+                edgecolors=zone["color"],
+                linewidths=0.6,
+                alpha=zone["alpha"],
+            )
+            self.ax.add_collection3d(collection)
+            cx, cy, cz = zone["center"]
+            if zone["id"] in ("rail_body", "rail_keepout") or zone["id"].endswith("_place_watch"):
+                self.ax.text(
+                    cx,
+                    cy,
+                    cz + zone["size"][2] / 2.0 + 0.03,
+                    zone["label"],
+                    color=zone["color"],
+                    fontsize=7,
+                    alpha=0.75,
+                )
+
+    @staticmethod
+    def _box_faces(center, size):
+        cx, cy, cz = center
+        sx, sy, sz = [float(v) / 2.0 for v in size]
+        corners = [
+            (cx - sx, cy - sy, cz - sz), (cx + sx, cy - sy, cz - sz),
+            (cx + sx, cy + sy, cz - sz), (cx - sx, cy + sy, cz - sz),
+            (cx - sx, cy - sy, cz + sz), (cx + sx, cy - sy, cz + sz),
+            (cx + sx, cy + sy, cz + sz), (cx - sx, cy + sy, cz + sz),
+        ]
+        return [
+            [corners[i] for i in (0, 1, 2, 3)],
+            [corners[i] for i in (4, 5, 6, 7)],
+            [corners[i] for i in (0, 1, 5, 4)],
+            [corners[i] for i in (2, 3, 7, 6)],
+            [corners[i] for i in (1, 2, 6, 5)],
+            [corners[i] for i in (0, 3, 7, 4)],
+        ]
         
     def compute_forward_kinematics(self, joint_angles):
         T_matrices = [np.eye(4)] 
@@ -262,7 +304,9 @@ class DigitalTwinView:
                 should_append = dist > self.zone_sample_distance_m
             guide = self.last_singularity_guides.get(name)
             if should_append or not guide:
-                guide = self.singularity_analyzer.analyze(j_pos, tcp_pos_m=P6)
+                singularity_guide = self.singularity_analyzer.analyze(j_pos, tcp_pos_m=P6)
+                factory_guide = self.factory_safety_zones.evaluate_world_m(P6, name)
+                guide = self.factory_safety_zones.combine(singularity_guide, factory_guide)
                 self.last_singularity_guides[name] = guide
             zone_color = guide["color"]
             self.robot_tcp_dots[name].set_data([P6[0]], [P6[1]])
@@ -291,8 +335,11 @@ class DigitalTwinView:
                 self.singularity_label.configure(
                     text=(
                         f"{guide['label']}  risk={guide['score']:.0f}/100\n"
-                        f"Manip={guide['manipulability']:.4f}  Cond={guide['condition']:.1f}\n"
-                        "녹색 <70 | 주황 70~90 | 빨강 90~100"
+                        f"Sing={guide.get('singularity_score', guide['score']):.0f}  "
+                        f"Zone={guide.get('factory_score', 0):.0f}\n"
+                        f"Manip={guide.get('manipulability', 0):.4f}  "
+                        f"Cond={guide.get('condition', 0):.1f}\n"
+                        "Rail 500mm / Place Watch / Robot 간격 1850mm"
                     ),
                     text_color=zone_color,
                 )

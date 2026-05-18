@@ -5,6 +5,8 @@ Pick/Place 팔레트 그리드, 접근/후퇴 경로, 이동 순서를 모두 �
 import tkinter as tk
 import customtkinter as ctk
 import math
+from core.domains.robot.communication.client_manager import robot_manager
+from core.domains.robot.use_cases.factory_safety_zones import FactorySafetyZones
 from core.domains.robot.use_cases.singularity_analyzer import SingularityAnalyzer
 
 
@@ -64,6 +66,7 @@ class Motion3DViewer:
             {"a": 0.0,    "alpha": -math.pi/2, "d": 0.228,  "theta_offset": 0.0},
         ]
         self.singularity_analyzer = SingularityAnalyzer(self.dh_params)
+        self.factory_safety_zones = FactorySafetyZones()
 
         self._build_steps()
 
@@ -284,7 +287,10 @@ class Motion3DViewer:
             step_meta["do"] = list(sim_do)
             step_meta["vars"] = dict(sim_vars)
             step_meta.setdefault("p_mm", list(xyz))
-            guide = self.singularity_analyzer.analyze(step_meta.get("q"), tcp_pos_mm=xyz)
+            singularity_guide = self.singularity_analyzer.analyze(step_meta.get("q"), tcp_pos_mm=xyz)
+            active_robot = robot_manager.get_active_robot_name() or "Robot A"
+            factory_guide = self.factory_safety_zones.evaluate_local_mm(xyz, active_robot)
+            guide = self.factory_safety_zones.combine(singularity_guide, factory_guide)
             step_meta["singularity"] = guide
             step_meta["zone_color"] = guide["color"]
             self.steps.append((label, xyz, color, step_meta))
@@ -840,6 +846,9 @@ class Motion3DViewer:
         for _, _, _, meta in self.steps:
             q = meta.get("q") if isinstance(meta, dict) else None
             all_pts.extend(self._fk_points_mm(q))
+        active_robot = robot_manager.get_active_robot_name() or "Robot A"
+        for zone in self.factory_safety_zones.static_zone_boxes_mm(active_robot):
+            all_pts.extend(self._box_corners_mm(zone["center"], zone["size"]))
         if not all_pts:
             return None
         xs = [p[0] for p in all_pts]
@@ -880,6 +889,52 @@ class Motion3DViewer:
         sy = cy - y2 * s  # y 반전
 
         return sx, sy, z2  # z2는 깊이(정렬용)
+
+    @staticmethod
+    def _box_corners_mm(center, size):
+        cx, cy, cz = center
+        sx, sy, sz = [float(v) / 2.0 for v in size]
+        return [
+            [cx - sx, cy - sy, cz - sz],
+            [cx + sx, cy - sy, cz - sz],
+            [cx + sx, cy + sy, cz - sz],
+            [cx - sx, cy + sy, cz - sz],
+            [cx - sx, cy - sy, cz + sz],
+            [cx + sx, cy - sy, cz + sz],
+            [cx + sx, cy + sy, cz + sz],
+            [cx - sx, cy + sy, cz + sz],
+        ]
+
+    def _draw_zone_box(self, canvas, norm, zone):
+        corners = self._box_corners_mm(zone["center"], zone["size"])
+        faces = [
+            (0, 1, 2, 3),
+            (4, 5, 6, 7),
+            (0, 1, 5, 4),
+            (2, 3, 7, 6),
+            (1, 2, 6, 5),
+            (0, 3, 7, 4),
+        ]
+        projected = []
+        for point in corners:
+            sx, sy, depth = self._project(*norm(point))
+            projected.append((sx, sy, depth))
+        color = zone["color"]
+        for face in sorted(faces, key=lambda f: sum(projected[i][2] for i in f) / len(f)):
+            coords = []
+            for idx in face:
+                coords.extend([projected[idx][0], projected[idx][1]])
+            canvas.create_polygon(
+                coords,
+                fill=color,
+                outline=color,
+                stipple="gray12",
+                width=1,
+            )
+        cx, cy, cz = zone["center"]
+        sx, sy, _ = self._project(*norm([cx, cy, cz + zone["size"][2] / 2.0]))
+        canvas.create_text(sx, sy - 8, text=zone["label"], fill=color,
+                           font=("Pretendard", 8, "bold"))
 
     # ─────────── 렌더링 ───────────
     def _draw(self):
@@ -936,6 +991,11 @@ class Motion3DViewer:
             ex, ey, _ = self._project(*end)
             c.create_line(ox, oy, ex, ey, fill=color, width=2, arrow="last", arrowshape=(10, 12, 5))
             c.create_text(ex + 5, ey - 12, text=label, fill=color, font=("Consolas", 11, "bold"))
+
+        # ── 현장 안전 가이드 존 (투명 박스 느낌의 stipple 표시) ──
+        active_robot = robot_manager.get_active_robot_name() or "Robot A"
+        for zone in self.factory_safety_zones.static_zone_boxes_mm(active_robot):
+            self._draw_zone_box(c, norm, zone)
 
         # ── 팔레트 그리드 (번호 표시) ──
         for plabel, pcolor, gpts, psize in self.pallet_grids:
@@ -1045,7 +1105,11 @@ class Motion3DViewer:
             guide = cur[3].get("singularity", {}) if isinstance(cur[3], dict) else {}
             zone_text = ""
             if guide:
-                zone_text = f" | {guide.get('label', '')} {guide.get('score', 0):.0f}/100"
+                zone_text = (
+                    f" | {guide.get('label', '')} {guide.get('score', 0):.0f}/100"
+                    f" S:{guide.get('singularity_score', guide.get('score', 0)):.0f}"
+                    f" Z:{guide.get('factory_score', 0):.0f}"
+                )
             self.info_label.configure(
                 text=f"X:{cur[1][0]:.0f} Y:{cur[1][1]:.0f} Z:{cur[1][2]:.0f} mm{q_text}{zone_text}"
             )
@@ -1062,7 +1126,8 @@ class Motion3DViewer:
             legend_y += 20
         for label, color in [("안전 <70", SingularityAnalyzer.COLOR_SAFE),
                              ("주의 70~90", SingularityAnalyzer.COLOR_WARN),
-                             ("위험 90~100", SingularityAnalyzer.COLOR_DANGER)]:
+                             ("위험 90~100", SingularityAnalyzer.COLOR_DANGER),
+                             ("Rail/Place 존", FactorySafetyZones.COLOR_RAIL)]:
             c.create_rectangle(w-120, legend_y, w-110, legend_y+10, fill=color, outline="")
             c.create_text(w-105, legend_y+5, text=label, fill=self.C_TEXT,
                           font=("Pretendard", 10), anchor="w")
