@@ -207,6 +207,12 @@ class RobotControlUseCase:
         if not inst:
             return False
         timeout_sec = max(float(timeout_sec or 0.0), RobotControlUseCase.DEFAULT_MOVE_TIMEOUT_SEC)
+        if getattr(inst, "is_gateway_proxy", False):
+            result = inst.wait_for_last_result(timeout_sec)
+            if result and result.get("ok") and result.get("target_reached", True):
+                return True
+            print(f">> [경고] Gateway 이동 완료 확인 실패: {result}")
+            return False
         start = time.time()
         while (time.time() - start) < timeout_sec:
             # 로봇별 정지 플래그 체크 — A 정지가 B/C 실행을 끊지 않도록 분리
@@ -349,6 +355,8 @@ class RobotControlUseCase:
         inst = RobotControlUseCase._get_instance(name)
         if not inst:
             return False
+        if getattr(inst, "is_gateway_proxy", False):
+            return inst.joint_move_to(q)
         try:
             threading.Thread(target=inst.joint_move_to, args=(q,), daemon=True).start()
             return True
@@ -368,6 +376,8 @@ class RobotControlUseCase:
         inst = RobotControlUseCase._get_instance(name)
         if not inst:
             return False
+        if getattr(inst, "is_gateway_proxy", False):
+            return inst.task_move_to(p)
         try:
             threading.Thread(target=inst.task_move_to, args=(p,), daemon=True).start()
             return True
@@ -396,6 +406,8 @@ class RobotControlUseCase:
         inst = RobotControlUseCase._get_instance(name)
         if not inst:
             return False
+        if getattr(inst, "is_gateway_proxy", False):
+            return inst.go_home()
         threading.Thread(target=inst.go_home, daemon=True).start()
         return True
 
@@ -410,6 +422,8 @@ class RobotControlUseCase:
         inst = RobotControlUseCase._get_instance(name)
         if not inst:
             return False
+        if getattr(inst, "is_gateway_proxy", False):
+            return inst.go_zero()
         threading.Thread(target=inst.go_zero, daemon=True).start()
         return True
 

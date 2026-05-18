@@ -20,6 +20,8 @@ class GatewayRobotProxy:
     def __init__(self, robot_name, manager):
         self.robot_name = robot_name
         self.manager = manager
+        self.is_gateway_proxy = True
+        self.last_command_id = ""
 
     def _publish(self, command_type, args=None):
         try:
@@ -32,8 +34,14 @@ class GatewayRobotProxy:
             if not getattr(mqtt_broker, "connected", False):
                 print(f">> [Gateway] MQTT 브로커 미연결로 {command_type} 발행을 보류합니다.")
                 return False
+            session_id = env_str("ROBOT_COMMAND_SESSION_ID", "").strip()
+            command_id = uuid.uuid4().hex
+            if session_id:
+                command_id = f"{session_id}:{command_id}"
+            self.last_command_id = command_id
+            self.manager.prepare_gateway_command(command_id)
             return mqtt_broker.publish("robot/command", {
-                "command_id": uuid.uuid4().hex,
+                "command_id": command_id,
                 "robot_id": self.robot_name,
                 "type": command_type,
                 "args": args or {},
@@ -137,6 +145,11 @@ class GatewayRobotProxy:
         state = self.manager.get_robot_state(self.robot_name) or {}
         return state.get("do") or []
 
+    def wait_for_last_result(self, timeout_sec=240.0):
+        if not self.last_command_id:
+            return None
+        return self.manager.wait_gateway_result(self.last_command_id, timeout_sec)
+
 class RobotClientManager:
     _instance = None
     _lock = threading.Lock()
@@ -156,6 +169,10 @@ class RobotClientManager:
         # 로봇의 최신 상태(좌표 + 상태)를 저장할 메모장
         self._latest_states = {} 
         self._state_lock = threading.Lock()
+        self._gateway_results = {}
+        self._gateway_errors = {}
+        self._gateway_result_lock = threading.Lock()
+        self._gateway_result_listeners_ready = False
 
     def should_use_gateway(self) -> bool:
         mode = _gateway_mode()
@@ -168,6 +185,68 @@ class RobotClientManager:
             return bool(getattr(mqtt_broker, "connected", False))
         except Exception:
             return False
+
+    def _ensure_gateway_result_listeners(self):
+        if self._gateway_result_listeners_ready:
+            return
+        try:
+            from infrastructure.mqtt.mqtt_manager import mqtt_broker
+            mqtt_broker.subscribe("robot/result", self._on_gateway_result)
+            mqtt_broker.subscribe("robot/error", self._on_gateway_error)
+            self._gateway_result_listeners_ready = True
+        except Exception as exc:
+            print(f">> [Gateway] 결과 구독 설정 실패: {exc}")
+
+    def prepare_gateway_command(self, command_id: str):
+        self._ensure_gateway_result_listeners()
+        if not command_id:
+            return
+        with self._gateway_result_lock:
+            self._gateway_results.pop(command_id, None)
+            self._gateway_errors.pop(command_id, None)
+
+    def _on_gateway_result(self, payload):
+        if not isinstance(payload, dict):
+            return
+        command_id = payload.get("command_id", "")
+        if not command_id:
+            return
+        with self._gateway_result_lock:
+            self._gateway_results[command_id] = payload
+
+    def _on_gateway_error(self, payload):
+        if not isinstance(payload, dict):
+            return
+        command_id = payload.get("command_id", "")
+        if not command_id:
+            return
+        with self._gateway_result_lock:
+            self._gateway_errors[command_id] = payload
+
+    def wait_gateway_result(self, command_id: str, timeout_sec: float = 240.0):
+        self._ensure_gateway_result_listeners()
+        timeout_sec = max(float(timeout_sec or 0.0), 1.0)
+        deadline = time.time() + timeout_sec
+        while time.time() < deadline:
+            with self._gateway_result_lock:
+                result = self._gateway_results.get(command_id)
+                error = self._gateway_errors.get(command_id)
+            if result:
+                return result
+            if error:
+                return {
+                    "command_id": command_id,
+                    "ok": False,
+                    "message": error.get("message", "robot/error"),
+                    "error": error,
+                }
+            time.sleep(0.05)
+        return {
+            "command_id": command_id,
+            "ok": False,
+            "message": f"gateway result timeout({timeout_sec:g}s)",
+            "motion_state": "timeout",
+        }
         
     def add_robot(self, name: str, ip: str, plc_ip: str = None):
         if name not in self._robots:

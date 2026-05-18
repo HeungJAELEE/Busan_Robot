@@ -1,0 +1,60 @@
+{
+  "info": {
+    "name": "Page3 Loop30 MoveZero Home Diagnostic",
+    "type": 7
+  },
+  "wpList": [],
+  "moveList": [],
+  "program": [
+    {
+      "enable": true,
+      "type": 999,
+      "pId": 0,
+      "id": 1,
+      "indyCareInfo": {
+        "useIndyCare": false,
+        "ipAddr": "0.0.0.0",
+        "dataConfig": [
+          {"name": "", "type": 0},
+          {"name": "", "type": 0},
+          {"name": "", "type": 0},
+          {"name": "", "type": 0},
+          {"name": "", "type": 0}
+        ]
+      },
+      "conveyorConfigInfo": {"conveyorConfig": []},
+      "toolInfo": [],
+      "visionInfo": {"useVision": false},
+      "collisionPolicy": {"policy": 0, "time": 2},
+      "palletInfo": []
+    },
+    {
+      "enable": true,
+      "type": 2,
+      "pId": 0,
+      "id": 2,
+      "varList": []
+    },
+    {
+      "enable": true,
+      "type": 20,
+      "pId": 0,
+      "id": 3,
+      "count": 30
+    },
+    {
+      "enable": true,
+      "type": 101,
+      "pId": 3,
+      "id": 4,
+      "name": "Move Zero"
+    },
+    {
+      "enable": true,
+      "type": 100,
+      "pId": 3,
+      "id": 5,
+      "name": "Home"
+    }
+  ]
+}

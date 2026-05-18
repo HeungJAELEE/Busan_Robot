@@ -45,8 +45,14 @@ class MqttManager:
         except:
             payload = msg.payload.decode('utf-8')
 
-        if topic in self.callbacks:
-            self.callbacks[topic](payload)
+        callbacks = self.callbacks.get(topic, [])
+        if callable(callbacks):
+            callbacks = [callbacks]
+        for callback in list(callbacks):
+            try:
+                callback(payload)
+            except Exception as exc:
+                print(f">> [MQTT] 콜백 처리 실패({topic}): {exc}")
 
     def connect_and_loop(self):
         if self._loop_started:
@@ -71,7 +77,12 @@ class MqttManager:
         return True
 
     def subscribe(self, topic, callback):
-        self.callbacks[topic] = callback
+        callbacks = self.callbacks.setdefault(topic, [])
+        if callable(callbacks):
+            callbacks = [callbacks]
+            self.callbacks[topic] = callbacks
+        if callback not in callbacks:
+            callbacks.append(callback)
         try:
             self.client.subscribe(topic)
         except Exception:

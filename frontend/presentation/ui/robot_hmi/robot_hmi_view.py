@@ -957,6 +957,8 @@ class ProgramTreeEditor:
                                 node_str = f" Tool Sensing ({sens})" if sens else " Tool Sensing"
                             elif t == 100:  # Home (Conty type=100)
                                 node_str = f" Home ({name})" if name else " Home"
+                            elif t == 101:  # Move Zero (Conty type=101)
+                                node_str = f" Move Zero ({name})" if name else " Move Zero"
                             elif t == 200: node_str = f" Pick Group ({name})" if name else " Pick Group"
                             elif t in (201, 202):  # Pick / Place: 기준 좌표 표시
                                 raw_n = getattr(node, "__raw__", {})
@@ -1092,6 +1094,9 @@ class ProgramTreeEditor:
                                 self.node_data[n_id]["sensName"] = raw.get("sensName", "")
 
                             elif t == 100:  # Home / Folder
+                                pass
+
+                            elif t == 101:  # Move Zero
                                 pass
 
                             elif t == 200:  # Pick Group
@@ -2612,6 +2617,12 @@ class ProgramTreeEditor:
                     print(f">>   → Home 이동")
                     _apply_motion_speed({"velLevel": 5, "accLevel": 5}, is_joint=True, label=text)
                     RobotControlUseCase.go_home(exec_robot)
+                    _wait_for_move_or_ng(stage=text, item_id=item_id)
+
+                elif node_type == 101:  # Move Zero
+                    print(f">>   → Zero 이동")
+                    _apply_motion_speed({"velLevel": 5, "accLevel": 5}, is_joint=True, label=text)
+                    RobotControlUseCase.go_zero(exec_robot)
                     _wait_for_move_or_ng(stage=text, item_id=item_id)
 
                 elif node_type == 1:  # Stop
