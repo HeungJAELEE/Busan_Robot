@@ -12,7 +12,7 @@
    - **결과:** `Pick(P1) → 사이 노드(Home) → Place → Pick(P2) → 사이 노드(Home) → Place...` 형태로 실제 공정에 맞게 동작하도록 완벽 동기화 달성.
 
 2. **MES 데이터베이스 연동 (PyMySQL)**
-   - 로봇의 실시간 상태와 작업 완료 이력을 외부 MySQL DB(`192.168.3.45`)로 전송하는 `database_repository.py` 작성.
+   - 로봇의 실시간 상태와 작업 완료 이력을 외부 MySQL DB(`192.168.3.141`)로 전송하는 `database_repository.py` 작성.
    - **실시간 상태:** 100ms 폴링 루프에서 각 관절의 각도(q)와 제어 토크(torque)를 수집하여 DB에 전송. 데이터가 쌓이지 않도록 `ON DUPLICATE KEY UPDATE` (UPSERT) 적용. 커넥션 부하를 막기 위해 Persistent Connection 구현.
    - **작업 이력:** Pick 또는 Place 동작이 타겟 지점에서 완료된 직후, 동작의 이름과 XYZ 좌표를 DB에 Insert.
 
