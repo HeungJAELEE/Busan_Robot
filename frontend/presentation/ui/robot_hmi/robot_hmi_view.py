@@ -1237,7 +1237,7 @@ class ProgramTreeEditor:
     def play_simulation(self):
         """3D 단계별 동작 시각화 뷰어를 엽니다."""
         from presentation.ui.robot_hmi.editors.motion_3d_viewer import Motion3DViewer
-        Motion3DViewer(self.parent, self.node_data, self.tree)
+        Motion3DViewer(self.parent, self.node_data, self.tree, robot_name=self._get_selected_robot_name())
 
     def render(self):
         for w in self.parent.winfo_children(): w.destroy()

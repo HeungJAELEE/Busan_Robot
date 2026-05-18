@@ -273,3 +273,59 @@ reset_robot
 Home
 로그 백업
 ```
+
+## 7. 2026-05-19 재검증 결과
+
+목적:
+
+```text
+사용자가 실제로 JSON을 로드하고 Page2 / Page3에서 동작을 넣는 기준으로,
+어제 확인한 Robot A 흐름이 시뮬레이션/Dry Run Recording에서 같은 순서로 해석되는지 재점검했다.
+```
+
+확인 파일:
+
+```text
+/Users/leejaeheung/Downloads/class3_test.7.json
+```
+
+검증 결과:
+
+```text
+1. Page2 시뮬레이션 엔진
+   - DI10 미입력: Wait DI10에서 정지 표시, Pick/Place 없음
+   - DI10/11/12/13 ON: Red/Blue/Green 각각 1번 위치 -> 2번 위치 순서로 실행
+   - DI10/13 ON, DI11/12 OFF: Red/Blue를 건너뛰고 Green만 실행
+   - 즉 DI11이 OFF라고 해서 DI12/DI13 분기가 막히는 문제는 재현되지 않음
+
+2. Page3 Dry Run Recording 경로
+   - 선택된 program_path를 runner에 명시 주입하는 구조 확인
+   - virtual_di_mode=manual 기준으로 DI 입력값을 실제 I/O 없이 조건 판정에 사용
+   - 내부 Loop count=6, 외부 target_cycles=N 구조로 동작
+   - class3_test 기준 target_cycles=3이면 내부 6회 루프를 3번 반복한다
+   - 실시간 샘플은 q(관절), p(좌표), torque(토크), busy, cycle_index를 함께 저장한다
+
+3. JSON 호환 저장 경로
+   - class3_test.7.json 로드 후 Conty export 임시 저장 검증
+   - program node 63개 유지
+   - id 1~63 unique 유지
+   - 비표준 내부 필드(p_data/app_data/ret_data 등)는 export 결과에서 제거됨
+
+4. Docker backend compose
+   - backend/docker-compose.yml config 검증 통과
+```
+
+수정 사항:
+
+```text
+Page2 3D 가상 재생에서 안전 존 계산과 표시가 전역 active robot에 기대지 않도록 수정했다.
+이제 프로그래밍 화면 상단에서 선택한 Robot A/B/C 값을 Motion3DViewer에 직접 전달한다.
+```
+
+현재 해석:
+
+```text
+이번 재검증 범위에서는 class3_test JSON 자체의 분기/카운트/1번-2번 위치 반복 로직은 정상이다.
+실제 충돌/토크 에러는 JSON 문법 문제보다는 Robot A 물리 자세, TCP 적용 여부, 속도, Place 하강 존,
+또는 컨트롤러의 collision sensitivity 쪽을 다음 현장 테스트에서 좁혀보는 것이 맞다.
+```

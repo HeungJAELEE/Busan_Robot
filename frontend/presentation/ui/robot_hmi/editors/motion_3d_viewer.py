@@ -31,10 +31,11 @@ class Motion3DViewer:
     C_ROBOT    = "#00E5FF"
     C_PLAN     = "#5C6BC0"
 
-    def __init__(self, parent, node_data_dict, tree_widget):
+    def __init__(self, parent, node_data_dict, tree_widget, robot_name=None):
         self.parent = parent
         self.node_data = node_data_dict
         self.tree = tree_widget
+        self.robot_name = robot_name or robot_manager.get_active_robot_name() or "Robot A"
 
         self.steps = []       # [(label, xyz_mm, color, extras)]
         self.current_step = 0
@@ -288,8 +289,7 @@ class Motion3DViewer:
             step_meta["vars"] = dict(sim_vars)
             step_meta.setdefault("p_mm", list(xyz))
             singularity_guide = self.singularity_analyzer.analyze(step_meta.get("q"), tcp_pos_mm=xyz)
-            active_robot = robot_manager.get_active_robot_name() or "Robot A"
-            factory_guide = self.factory_safety_zones.evaluate_local_mm(xyz, active_robot)
+            factory_guide = self.factory_safety_zones.evaluate_local_mm(xyz, self.robot_name)
             guide = self.factory_safety_zones.combine(singularity_guide, factory_guide)
             step_meta["singularity"] = guide
             step_meta["zone_color"] = guide["color"]
@@ -846,8 +846,7 @@ class Motion3DViewer:
         for _, _, _, meta in self.steps:
             q = meta.get("q") if isinstance(meta, dict) else None
             all_pts.extend(self._fk_points_mm(q))
-        active_robot = robot_manager.get_active_robot_name() or "Robot A"
-        for zone in self.factory_safety_zones.static_zone_boxes_mm(active_robot):
+        for zone in self.factory_safety_zones.static_zone_boxes_mm(self.robot_name):
             all_pts.extend(self._box_corners_mm(zone["center"], zone["size"]))
         if not all_pts:
             return None
@@ -993,8 +992,7 @@ class Motion3DViewer:
             c.create_text(ex + 5, ey - 12, text=label, fill=color, font=("Consolas", 11, "bold"))
 
         # ── 현장 안전 가이드 존 (투명 박스 느낌의 stipple 표시) ──
-        active_robot = robot_manager.get_active_robot_name() or "Robot A"
-        for zone in self.factory_safety_zones.static_zone_boxes_mm(active_robot):
+        for zone in self.factory_safety_zones.static_zone_boxes_mm(self.robot_name):
             self._draw_zone_box(c, norm, zone)
 
         # ── 팔레트 그리드 (번호 표시) ──
