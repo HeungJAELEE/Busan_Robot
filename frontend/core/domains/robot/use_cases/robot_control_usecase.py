@@ -493,6 +493,16 @@ class RobotControlUseCase:
                         before = _status()
                         print(f">> [리셋] {name} 복구 시퀀스 시작: {_fault_text(before) or 'fault 없음'}")
 
+                        if getattr(inst, "is_gateway_proxy", False) and hasattr(inst, "wait_for_last_result"):
+                            inst.reset_robot(attempts=5, wait_sec=5.0, settle_sec=0.3, poll_sec=0.25)
+                            result = inst.wait_for_last_result(35.0)
+                            status = (result or {}).get("status") or {}
+                            if result and result.get("ok"):
+                                print(f">> [리셋] {name} Gateway 리셋 완료: {_fault_text(status) or 'fault 없음'}")
+                            else:
+                                print(f">> [리셋 경고] {name} Gateway 리셋 실패/미확인: {result}")
+                            return
+
                         for fn_name in ("stop_motion", "stop_current_program"):
                             fn = getattr(inst, fn_name, None)
                             if not fn:

@@ -150,6 +150,30 @@ class RobotHandle:
             return "충돌 감지"
         return ""
 
+    def _fault_flags(self, status):
+        if not isinstance(status, dict):
+            return ["상태 조회 실패"]
+        faults = []
+        if status.get("emergency", 0):
+            faults.append("비상정지")
+        if status.get("collision", 0):
+            faults.append("충돌 감지")
+        if status.get("error", 0):
+            faults.append("로봇 에러")
+        if status.get("resetting", 0):
+            faults.append("리셋중")
+        return faults
+
+    def _call_locked(self, fn_name, *args):
+        with self.lock:
+            fn = getattr(self.inst, fn_name, None)
+            if not fn:
+                return None
+            return fn(*args)
+
+    def _status_locked(self):
+        return self._call_locked("get_robot_status") or {}
+
     def _ensure_ready(self, command_id, allow_when_fault=False):
         if not self.connected or not self.inst:
             if not self.connect():
@@ -158,7 +182,7 @@ class RobotHandle:
         if allow_when_fault:
             return True
         try:
-            status = self.inst.get_robot_status()
+            status = self._status_locked()
         except Exception as exc:
             self.publish_error(command_id, f"상태 조회 실패: {exc}")
             return False
@@ -169,17 +193,18 @@ class RobotHandle:
         return True
 
     def _motion_snapshot(self):
-        status = self.inst.get_robot_status()
-        q = []
-        p = []
-        try:
-            q = self.inst.get_joint_pos() or []
-        except Exception:
+        with self.lock:
+            status = self.inst.get_robot_status()
             q = []
-        try:
-            p = self.inst.get_task_pos() or []
-        except Exception:
             p = []
+            try:
+                q = self.inst.get_joint_pos() or []
+            except Exception:
+                q = []
+            try:
+                p = self.inst.get_task_pos() or []
+            except Exception:
+                p = []
         return {"status": status or {}, "q": list(q or []), "p": list(p or [])}
 
     def _max_abs_delta(self, before, after, key):
@@ -204,7 +229,7 @@ class RobotHandle:
 
         while time.time() < deadline:
             try:
-                status = self.inst.get_robot_status()
+                status = self._status_locked()
             except Exception as exc:
                 return False, {
                     "motion_state": "status_read_failed",
@@ -270,6 +295,80 @@ class RobotHandle:
             "status": last.get("status") or {},
         }
 
+    def _reset_fault_sequence(self, args):
+        attempts = max(int(args.get("attempts", 4) or 4), 1)
+        settle_sec = max(float(args.get("settle_sec", 0.25) or 0.25), 0.05)
+        wait_sec = max(float(args.get("wait_sec", 4.0) or 4.0), 0.5)
+        poll_sec = max(float(args.get("poll_sec", 0.2) or 0.2), 0.05)
+        steps = []
+
+        try:
+            before = self._status_locked()
+        except Exception as exc:
+            before = {}
+            steps.append({"step": "pre_status", "ok": False, "error": str(exc)})
+
+        for fn_name in ("stop_motion", "stop_current_program"):
+            try:
+                ret = self._call_locked(fn_name)
+                steps.append({"step": fn_name, "ok": ret in (None, 0), "ret": ret})
+            except Exception as exc:
+                steps.append({"step": fn_name, "ok": False, "error": str(exc)})
+            time.sleep(settle_sec)
+
+        last_status = before
+        for attempt in range(1, attempts + 1):
+            try:
+                ret = self._call_locked("reset_robot")
+                steps.append({"step": "reset_robot", "attempt": attempt, "ok": ret in (None, 0), "ret": ret})
+            except Exception as exc:
+                steps.append({"step": "reset_robot", "attempt": attempt, "ok": False, "error": str(exc)})
+
+            deadline = time.time() + wait_sec
+            while time.time() < deadline:
+                time.sleep(poll_sec)
+                try:
+                    last_status = self._status_locked()
+                except Exception as exc:
+                    steps.append({"step": "status_after_reset", "attempt": attempt, "ok": False, "error": str(exc)})
+                    continue
+
+                faults = self._fault_flags(last_status)
+                if not faults:
+                    return {
+                        "ok": True,
+                        "message": "reset cleared",
+                        "attempts": attempt,
+                        "before_status": before,
+                        "status": last_status,
+                        "steps": steps,
+                    }
+
+                if not last_status.get("resetting", 0) and time.time() + poll_sec >= deadline:
+                    break
+
+        emg_info = None
+        try:
+            if hasattr(self.inst, "get_last_emergency_info"):
+                emg_info = self._call_locked("get_last_emergency_info")
+        except Exception as exc:
+            emg_info = {"error": str(exc)}
+
+        faults = self._fault_flags(last_status)
+        message = "reset did not clear fault"
+        if faults:
+            message += ": " + ", ".join(faults)
+        return {
+            "ok": False,
+            "message": message,
+            "attempts": attempts,
+            "before_status": before,
+            "status": last_status,
+            "faults": faults,
+            "emergency_info": emg_info,
+            "steps": steps,
+        }
+
     def execute(self, payload):
         command_id = payload.get("command_id", "")
         command_type = payload.get("type", "")
@@ -290,6 +389,14 @@ class RobotHandle:
             allow_fault = command_type in ("stop_motion", "stop_emergency", "reset_robot", "stop_current_program")
             if not self._ensure_ready(command_id, allow_when_fault=allow_fault):
                 self.publish_result(command_id, command_type, False, "not ready")
+                return
+
+            if command_type == "reset_robot":
+                result = self._reset_fault_sequence(args)
+                ok = bool(result.get("ok"))
+                self.publish_result(command_id, command_type, ok, result.get("message", "reset"), result)
+                if not ok:
+                    self.publish_error(command_id, result.get("message", "reset failed"))
                 return
 
             before = None
@@ -342,14 +449,6 @@ class RobotHandle:
         elif command_type == "stop_current_program":
             return inst.stop_current_program()
         elif command_type == "reset_robot":
-            inst.stop_motion()
-            time.sleep(0.1)
-            if hasattr(inst, "stop_current_program"):
-                try:
-                    inst.stop_current_program()
-                    time.sleep(0.1)
-                except Exception:
-                    pass
             return inst.reset_robot()
         elif command_type == "set_do":
             return inst.set_do(int(args.get("idx", 0)), int(args.get("val", 0)))
@@ -380,6 +479,8 @@ class RobotHandle:
 
     def poll_once(self):
         if not self.connected or not self.inst:
+            return
+        if not self.lock.acquire(timeout=0.02):
             return
         try:
             j_pos = self.inst.get_joint_pos()
@@ -414,6 +515,8 @@ class RobotHandle:
         except Exception as exc:
             self.connected = False
             self.publish_error("", f"폴링 실패: {exc}")
+        finally:
+            self.lock.release()
 
 
 class RobotGateway:

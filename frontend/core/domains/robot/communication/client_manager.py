@@ -85,8 +85,9 @@ class GatewayRobotProxy:
     def stop_current_program(self):
         return self._publish("stop_current_program")
 
-    def reset_robot(self):
-        return self._publish("reset_robot")
+    def reset_robot(self, **kwargs):
+        args = {k: v for k, v in kwargs.items() if v is not None}
+        return self._publish("reset_robot", args)
 
     def set_do(self, idx, val):
         return self._publish("set_do", {"idx": int(idx), "val": int(val)})

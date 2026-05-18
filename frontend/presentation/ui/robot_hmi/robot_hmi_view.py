@@ -2007,6 +2007,9 @@ class ProgramTreeEditor:
         if is_virtual_test:
             cycle_label = "무한" if virtual_target_cycles <= 0 else f"{virtual_target_cycles}회"
             print(f">> [로봇 점검 Data수집] session={virtual_session_id} target={cycle_label} sample={virtual_sample_interval_ms}ms")
+        skip_json_tcp = bool(virtual_cfg.get("skip_json_tcp") or virtual_cfg.get("ignore_tcp"))
+        if skip_json_tcp:
+            print(">> [TCP] 점검 설정: JSON TCP 적용 생략")
         virtual_di_raw = virtual_cfg.get("virtual_di", {})
         virtual_di_manual = bool(virtual_cfg.get("virtual_di_mode") == "manual" or virtual_cfg.get("virtual_di_manual"))
         virtual_di_map = {}
@@ -2280,6 +2283,8 @@ class ProgramTreeEditor:
             _apply_motion_speed({"velLevel": 5, "accLevel": 5}, is_joint=False, label="기본 Task")
 
         def _apply_node_tcp(data, raw, stage="", item_id=None):
+            if skip_json_tcp:
+                return
             target = data.get("target") if isinstance(data.get("target"), dict) else raw.get("target", {})
             tcp = data.get("tcp") or data.get("target_tcp")
             if not tcp and isinstance(target, dict):
@@ -2295,6 +2300,11 @@ class ProgramTreeEditor:
                 _abort_program("로봇 미연결", stage, item_id, ng=True)
             try:
                 ret = inst.set_default_tcp(tcp)
+                if getattr(inst, "is_gateway_proxy", False) and hasattr(inst, "wait_for_last_result"):
+                    result = inst.wait_for_last_result(30.0)
+                    if not (result and result.get("ok")):
+                        _abort_program(f"TCP 적용 실패: {result}", stage, item_id, ng=True)
+                    ret = 0
                 if ret not in (None, 0):
                     _abort_program(f"TCP 적용 실패(code={ret})", stage, item_id, ng=True)
                 self._last_applied_tcp = tcp
