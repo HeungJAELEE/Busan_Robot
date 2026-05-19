@@ -438,7 +438,11 @@ PC 직접 해석 실행은 다음 조건에서만 사용한다.
 - type별 실행은 이 문서의 타입 사전을 따른다.
 - `102`는 joint move, `103`은 task move로 분리한다.
 - 모든 waypoint를 순서대로 실행한다.
+- Pick/Place, Frame Move, Joint Move 실행 전 JSON에 들어있는 TCP를 로봇에 적용하고 `get_default_tcp`로 read-back 확인한다.
+- TCP 확인값이 요청값과 맞지 않으면 동작을 보내지 않고 N.G로 정지한다.
 - If/Elif/Else 체인은 하나의 체인으로 실행한다.
+- `If DI`는 조건이 참일 때만 자식을 실행하고, `Wait DI`/자식 없는 `type=29`는 조건이 들어올 때까지 대기한다.
+- `Wait DI` 타임아웃이 발생하면 다음 명령을 보내지 않고 N.G로 정지한다.
 - `approach.direction`, `retract.direction`을 반영한다.
 - 알 수 없는 타입은 실행하지 말고 로그에 남긴다.
 
@@ -476,6 +480,13 @@ APK JSON / PC UI / AI 생성 로직
 6. `load -> export -> validate` 후에도 위 조건이 유지되어야 한다.
 7. 알 수 없는 타입은 export 후에도 원본 필드가 보존되어야 한다.
 8. PC 생성 JSON도 같은 validator를 통과해야 한다.
+
+2026-05-19 추가 검증 기준:
+
+- APK 원본 파일을 열었다가 다시 내보낼 때, 프로그램 노드에서 직접 참조하지 않는 기존 `moveList`/`wpList` 항목도 보존한다.
+- 이는 과거 티칭 파일에 남아 있는 예비 waypoint, 복사 move, 미사용 move 자산을 임의 삭제하지 않기 위한 보수적 정책이다.
+- Robot C처럼 실제 program에서는 `midmove__copy1`, `finalmove__copy1`만 참조하더라도 원본 파일의 나머지 move/wp 자산은 그대로 유지한다.
+- 2026-05-19 검증 파일 `260519robotc1.7 (1).json`, `20260519robotB1.7 (1).json`, `intel5_prj_color_1.7 (1).json`은 `program`, `moveList`, `wpList`, Pick/Place TCP round-trip이 모두 일치해야 한다.
 
 ## 17. 코드 수정 우선순위
 

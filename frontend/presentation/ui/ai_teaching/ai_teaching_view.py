@@ -456,6 +456,7 @@ class AITeachingView:
             })
         target_type = 1 if m * n * l > 1 else 0
         approach_mm = self._entry_float(self.approach_entry, 50)
+        default_tcp = self._program_tcp(program)
         node = {
             "id": new_id,
             "enable": True,
@@ -472,7 +473,7 @@ class AITeachingView:
                 "pallet": {"palletId": pallet_id} if target_type == 1 else {},
                 "point": {"q": data["q"], "p": data["p"]},
                 "refFrame": {"type": 1, "tref": [0, 0, 0, 0, 0, 0]},
-                "tcp": [0, 0, 0, 0, 0, 0],
+                "tcp": default_tcp,
             },
             "q": data["q"],
             "p": data["p"],
@@ -504,6 +505,48 @@ class AITeachingView:
             except Exception as exc:
                 self._log(f"기존 프로그램 로드 실패, 새 파일로 시작: {exc}")
         return {"info": {"name": "ExportedProgram"}, "wpList": [], "program": [], "moveList": []}
+
+    def _program_tcp(self, program):
+        """Reuse the existing program TCP for AI-created Pick/Place nodes."""
+        first_zero = None
+
+        def _coerce(values):
+            if not isinstance(values, (list, tuple)) or len(values) < 6:
+                return None
+            try:
+                return [float(v) for v in values[:6]]
+            except (TypeError, ValueError):
+                return None
+
+        def _walk(obj):
+            nonlocal first_zero
+            if isinstance(obj, dict):
+                target = obj.get("target")
+                if isinstance(target, dict):
+                    tcp = _coerce(target.get("tcp"))
+                    if tcp:
+                        if any(abs(v) > 1e-9 for v in tcp):
+                            return tcp
+                        if first_zero is None:
+                            first_zero = tcp
+                tcp = _coerce(obj.get("tcp"))
+                if tcp:
+                    if any(abs(v) > 1e-9 for v in tcp):
+                        return tcp
+                    if first_zero is None:
+                        first_zero = tcp
+                for value in obj.values():
+                    found = _walk(value)
+                    if found:
+                        return found
+            elif isinstance(obj, list):
+                for value in obj:
+                    found = _walk(value)
+                    if found:
+                        return found
+            return None
+
+        return _walk(program) or first_zero or [0, 0, 0.21, 0, 0, 0]
 
     def _ensure_config_node(self, nodes):
         config = next((n for n in nodes if n.get("type") == 999), None)

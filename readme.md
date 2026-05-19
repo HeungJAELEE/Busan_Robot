@@ -273,7 +273,9 @@ frontend/logs/robot_diagnostic_data/
 
 - 좌표 `p`는 meter 단위입니다. UI 표시는 mm일 수 있습니다.
 - TCP `[0,0,0.21,0,0,0]`는 Z 210mm입니다.
+- 실제 실행 전에는 JSON TCP를 로봇에 적용한 뒤 read-back으로 확인합니다. TCP가 다르면 다음 motion을 보내지 않고 N.G 정지합니다.
 - `wpList` id와 `moveList.wpList[].id` 참조가 깨지면 안 됩니다.
+- APK 원본 파일을 다시 저장할 때는 program에서 직접 쓰지 않는 기존 `moveList/wpList` 항목도 삭제하지 않고 보존합니다.
 - `program`의 `id/pId` 트리 구조가 유지되어야 합니다.
 - `Loop`, `If DI`, `If Var`, `Variables`, `Var Assignment`는 카운트/분기 동작의 핵심입니다.
 - 모르는 제조사 전용 노드는 삭제하지 않고 원본 JSON을 보존해야 합니다.
@@ -283,6 +285,11 @@ frontend/logs/robot_diagnostic_data/
 - [Json Robot Design Pattern.md](./Json%20Robot%20Design%20Pattern.md)
 - [docs/conty_json_compatibility_spec.md](./docs/conty_json_compatibility_spec.md)
 - [docs/conty_node_reference.md](./docs/conty_node_reference.md)
+
+2026-05-19 오프라인 검증 결과:
+
+- `/Users/leejaeheung/Documents/Busan_Project/학습 파일 모음`의 227개 JSON 파일은 `load -> Conty export` 후 `program.pId`, `moveList.wpList`, `wpList.id` 참조 검사를 모두 통과했습니다.
+- 내일 실제 로봇 투입 대상인 Robot C/B/A 레시피 3개는 `program`, `moveList`, `wpList`, Pick/Place TCP round-trip이 모두 일치했습니다.
 
 ### 최종 배포 전 점검 명령
 

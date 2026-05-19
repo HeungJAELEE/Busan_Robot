@@ -24,6 +24,9 @@ JOG_COMMANDS = {
     "jog_joint_move_by",
     "jog_task_move_by",
 }
+QUERY_COMMANDS = {
+    "get_default_tcp",
+}
 TARGET_STATUS_KEY = {
     "go_home": "home",
     "go_zero": "zero",
@@ -403,6 +406,12 @@ class RobotHandle:
                     self.publish_error(command_id, result.get("message", "reset failed"))
                 return
 
+            if command_type in QUERY_COMMANDS:
+                with self.lock:
+                    value = self._execute_connected(command_type, args)
+                self.publish_result(command_id, command_type, True, "OK", {"value": value})
+                return
+
             before = None
             if command_type in MOTION_COMMANDS:
                 try:
@@ -466,6 +475,8 @@ class RobotHandle:
             return inst.set_do(int(args.get("idx", 0)), int(args.get("val", 0)))
         elif command_type == "set_default_tcp":
             return inst.set_default_tcp(args.get("tcp", [0, 0, 0, 0, 0, 0]))
+        elif command_type == "get_default_tcp":
+            return inst.get_default_tcp()
         elif command_type == "reset_default_tcp":
             return inst.reset_default_tcp()
         elif command_type == "set_reference_frame":

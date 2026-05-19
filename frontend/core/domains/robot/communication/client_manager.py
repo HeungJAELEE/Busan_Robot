@@ -108,6 +108,16 @@ class GatewayRobotProxy:
     def set_default_tcp(self, tcp):
         return self._publish("set_default_tcp", {"tcp": list(tcp or [])[:6]})
 
+    def get_default_tcp(self):
+        if not self._publish("get_default_tcp"):
+            return None
+        result = self.wait_for_last_result(env_float("ROBOT_GATEWAY_SETTING_TIMEOUT_SEC", 30.0))
+        if result and result.get("ok"):
+            value = result.get("value")
+            return list(value or [])[:6] if isinstance(value, (list, tuple)) else value
+        print(f">> [Gateway] get_default_tcp 확인 실패: {result}")
+        return None
+
     def reset_default_tcp(self):
         return self._publish("reset_default_tcp")
 

@@ -432,7 +432,7 @@ class ProgramTreeEditor:
 
                     # Conty 호환 __raw__ 기본 템플릿 생성
                     _ref = {"type": 1, "tref": [0,0,0,0,0,0]}
-                    _tcp = [0,0,0,0,0,0]
+                    _tcp = list(self.current_program_tcp or [0,0,0.21,0,0,0])
                     raw_templates = {
                         1:   {"enable": True, "type": 1, "pId": p_id},
                         2:   {"varList": [], "enable": True, "type": 2, "pId": p_id},
@@ -973,17 +973,23 @@ class ProgramTreeEditor:
                             elif t in (201, 202):  # Pick / Place: 기준 좌표 표시
                                 raw_n = getattr(node, "__raw__", {})
                                 p = getattr(node, "target_p", None) or raw_n.get("p", None)
+                                target_n = raw_n.get("target", {}) if isinstance(raw_n.get("target", {}), dict) else {}
+                                tcp_n = getattr(node, "target_tcp", None) or target_n.get("tcp", [])
                                 xyz = ""
+                                tcp_txt = ""
                                 try:
                                     if p and any(v != 0 for v in p):
                                         xyz = f"X{p[0]*1000:.0f} Y{p[1]*1000:.0f} Z{p[2]*1000:.0f}"
+                                    if tcp_n and len(tcp_n) >= 3 and any(abs(float(v or 0.0)) > 1e-9 for v in tcp_n[:3]):
+                                        tcp_txt = f" TCP Z{float(tcp_n[2])*1000:.0f}"
                                 except Exception:
                                     xyz = ""
+                                    tcp_txt = ""
                                 label = "Pick" if t == 201 else "Place"
                                 if xyz and name:
-                                    node_str = f" {label} ({name}) [{xyz}]"
+                                    node_str = f" {label} ({name}) [{xyz}{tcp_txt}]"
                                 elif xyz:
-                                    node_str = f" {label} [{xyz}]"
+                                    node_str = f" {label} [{xyz}{tcp_txt}]"
                                 elif name:
                                     node_str = f" {label} ({name})"
                                 else:
@@ -2316,23 +2322,21 @@ class ProgramTreeEditor:
             tcp = _coerce_tcp(tcp)
             if not tcp:
                 return
-            prev_tcp = getattr(self, "_last_applied_tcp", None)
-            if prev_tcp and all(abs(a - b) < 1e-9 for a, b in zip(prev_tcp, tcp)):
-                return
             inst = _exec_inst()
             if not inst:
                 _abort_program("로봇 미연결", stage, item_id, ng=True)
             try:
-                ret = inst.set_default_tcp(tcp)
-                if getattr(inst, "is_gateway_proxy", False) and hasattr(inst, "wait_for_last_result"):
-                    result = inst.wait_for_last_result(30.0)
-                    if not (result and result.get("ok")):
-                        _abort_program(f"TCP 적용 실패: {result}", stage, item_id, ng=True)
-                    ret = 0
-                if ret not in (None, 0):
-                    _abort_program(f"TCP 적용 실패(code={ret})", stage, item_id, ng=True)
+                ok = RobotControlUseCase.apply_tcp_sync(
+                    tcp,
+                    name=exec_robot,
+                    inst=inst,
+                    verify=True,
+                    timeout_sec=30.0,
+                    label=f"{stage or 'Pick/Place'} JSON TCP",
+                )
+                if not ok:
+                    _abort_program("TCP 적용/확인 실패", stage, item_id, ng=True)
                 self._last_applied_tcp = tcp
-                print(f">>   [TCP] JSON TCP 적용: {tcp}")
             except _ProgramAbortException:
                 raise
             except Exception as e:
@@ -2459,6 +2463,57 @@ class ProgramTreeEditor:
                 parts.append(f"DI{idx:02d}={val}")
             return ", ".join(parts) if parts else "DI 미지정"
 
+        def _wait_for_di_condition(di_list, label="Wait DI", item_id=None, timeout_sec=None):
+            """Wait until the requested DI condition is met using the Conty JSON timeout rule."""
+            if not di_list:
+                print(f">>   ⏳ {label}: DI 미지정 — 조건 없음으로 통과")
+                return True
+            try:
+                timeout = float(timeout_sec or 0)
+            except (TypeError, ValueError):
+                timeout = 0
+            pins_str = _di_condition_text(di_list)
+            timeout_msg = "무한" if timeout <= 0 else f"{timeout:g}s"
+            print(f">>   ⏳ {label}: {pins_str} (timeout={timeout_msg})")
+            start = time.time()
+            while not self._exec_stop:
+                if _di_condition_met(di_list, label):
+                    print(f">>   ✅ {label} 조건 충족")
+                    return True
+                if timeout > 0 and (time.time() - start) >= timeout:
+                    _abort_program(f"{label} 타임아웃: {pins_str}", label, item_id, ng=True)
+                time.sleep(0.1)
+            raise _ProgramAbortException("사용자 중단")
+
+        def _run_pick_stage_wait(stage_cfg, label, item_id=None):
+            """Apply Conty Pick/Place approach/retract waitTime and waitFor rules."""
+            if not isinstance(stage_cfg, dict):
+                return
+            try:
+                wait_time = float(stage_cfg.get("waitTime", 0) or 0)
+            except (TypeError, ValueError):
+                wait_time = 0
+            if wait_time > 0:
+                print(f">>     ⏳ {label} waitTime {wait_time:g}초")
+                time.sleep(wait_time)
+
+            wait_for = stage_cfg.get("waitFor", {})
+            if not isinstance(wait_for, dict):
+                return
+            try:
+                wait_type = int(wait_for.get("type", 0) or 0)
+            except (TypeError, ValueError):
+                wait_type = 0
+            if wait_type == 0:
+                return
+
+            di_list = wait_for.get("diList") or wait_for.get("endtoolDiList") or []
+            try:
+                timeout = float(wait_for.get("time", 0) or 0)
+            except (TypeError, ValueError):
+                timeout = 0
+            _wait_for_di_condition(di_list, f"{label} waitFor", item_id, timeout_sec=timeout)
+
         def _execute_condition_chain(node_list, start_idx):
             chain = []
             idx2 = start_idx
@@ -2539,6 +2594,10 @@ class ProgramTreeEditor:
                 node_type = raw.get("type", -1)
                 q = data.get("q", [0.0]*6)
                 p = data.get("p", [0.0]*6)
+
+                if raw.get("enable", True) is False:
+                    print(f"\n>> ⏭ 비활성 노드 스킵: {text} (type={node_type})")
+                    continue
 
                 _highlight(item_id)
                 print(f"\n>> ▶ 실행: {text} (type={node_type})")
@@ -2731,23 +2790,7 @@ class ProgramTreeEditor:
                 elif node_type == 28:  # Wait For [DI]
                     di_list = data.get("diList", raw.get("diList", []))
                     wait_time = data.get("time", raw.get("time", 0))
-                    if di_list:
-                        pins_str = ", ".join(f"DI{d['idx']}={'HI' if d['value'] else 'LO'}" for d in di_list)
-                        print(f">>   ⏳ DI 대기: {pins_str} (timeout={wait_time}s)")
-                        timeout = wait_time if wait_time > 0 else self.program_signal_timeout_sec
-                        start = time.time()
-                        while not self._exec_stop and (time.time() - start) < timeout:
-                            all_met = _di_condition_met(di_list, "Wait DI")
-                            if all_met:
-                                print(f">>   ✅ DI 조건 충족")
-                                break
-                            if dry_run and virtual_di_manual:
-                                _abort_program(f"가상 DI 조건 불만족: {pins_str}", text, item_id, ng=True)
-                            time.sleep(0.1)
-                        else:
-                            print(f">>   ⚠️ DI 대기 타임아웃 ({timeout}s)")
-                    else:
-                        print(f">>   ⏳ Wait For [DI] (DI 미지정 — 스킵)")
+                    _wait_for_di_condition(di_list, "Wait DI", item_id, timeout_sec=wait_time)
 
                 elif node_type == 29:  # if[DI] / waitFor[DI]
                     di_list = data.get("diList", raw.get("diList", []))
@@ -2764,21 +2807,7 @@ class ProgramTreeEditor:
                             _execute_node_list(node["children"])
                     else:
                         # waitFor[DI] — DI 조건 대기
-                        if di_list:
-                            pins_str = ", ".join(f"DI{d['idx']}={'HI' if d['value'] else 'LO'}" for d in di_list)
-                            print(f">>   ⏳ Wait For [DI]: {pins_str}")
-                            timeout = self.program_signal_timeout_sec
-                            start = time.time()
-                            while not self._exec_stop and (time.time() - start) < timeout:
-                                all_met = _di_condition_met(di_list, "WaitFor DI")
-                                if all_met:
-                                    print(f">>   ✅ DI 조건 충족")
-                                    break
-                                if dry_run and virtual_di_manual:
-                                    _abort_program(f"가상 DI 조건 불만족: {pins_str}", text, item_id, ng=True)
-                                time.sleep(0.1)
-                        else:
-                            print(f">>   (DI 미지정 — 스킵)")
+                        _wait_for_di_condition(di_list, "WaitFor DI", item_id, timeout_sec=raw.get("time", data.get("time", 0)))
 
                 elif node_type == 23:  # WaitFor
                     cond = data.get("cond", raw.get("cond", {}))
@@ -2791,8 +2820,7 @@ class ProgramTreeEditor:
                             print(">>   ✅ WaitFor 조건 충족")
                             break
                         if deadline and time.time() >= deadline:
-                            print(">>   ⚠️ WaitFor 타임아웃")
-                            break
+                            _abort_program("WaitFor 조건 타임아웃", text, item_id, ng=True)
                         time.sleep(0.1)
 
                 elif node_type == 24:  # If Var / If (조건)
@@ -3035,6 +3063,7 @@ class ProgramTreeEditor:
                                     _apply_motion_speed(app_data.get("boundary", target_boundary), is_joint=False, label=f"{action_label} 접근")
                                     inst.task_move_to(cur_app)
                                     _wait_for_move_or_ng(stage=text, item_id=item_id)
+                                    _run_pick_stage_wait(app_data, f"{action_label} 접근", item_id)
                                     print(f">>     2) 타겟 위치: {[round(v,4) for v in cur_t[:3]]}")
                                     _apply_motion_speed(target_boundary, is_joint=False, label=f"{action_label} 타겟")
                                     inst.task_move_to(cur_t)
@@ -3042,11 +3071,7 @@ class ProgramTreeEditor:
                                     time.sleep(0.2)
                                     print(f">>     3) {'Hold' if is_pick else 'Release'}")
                                     _do_tool_action(is_pick)
-                                    # retract.waitTime 대기
-                                    ret_wait = ret_data.get("waitTime", 0)
-                                    if ret_wait > 0:
-                                        print(f">>     3b) 대기 {ret_wait}초...")
-                                        time.sleep(ret_wait)
+                                    _run_pick_stage_wait(ret_data, f"{action_label} 후퇴", item_id)
                                     payload = {"robot_id": exec_robot, "action_type": 'Pick' if is_pick else 'Place', "pos": cur_t}
                                     _publish_task_done(payload)
                                     print(f">>     4) 후퇴 위치: {[round(v,4) for v in cur_ret[:3]]}")
@@ -3112,6 +3137,7 @@ class ProgramTreeEditor:
                                         _apply_motion_speed(partner_app.get("boundary", partner_boundary), is_joint=False, label=f"{partner_label} 접근")
                                         inst.task_move_to(p_app)
                                         _wait_for_move_or_ng(stage=text, item_id=item_id)
+                                        _run_pick_stage_wait(partner_app, f"{partner_label} 접근", partner_node["id"])
                                         print(f">>     2) 타겟 위치: {[round(v,4) for v in p_target[:3]]}")
                                         _apply_motion_speed(partner_boundary, is_joint=False, label=f"{partner_label} 타겟")
                                         inst.task_move_to(p_target)
@@ -3119,6 +3145,7 @@ class ProgramTreeEditor:
                                         time.sleep(0.2)
                                         print(f">>     3) {'Hold' if partner_is_pick else 'Release'}")
                                         _do_tool_action(partner_is_pick)
+                                        _run_pick_stage_wait(partner_ret, f"{partner_label} 후퇴", partner_node["id"])
                                         payload = {"robot_id": exec_robot, "action_type": 'Pick' if partner_is_pick else 'Place', "pos": p_target}
                                         _publish_task_done(payload)
                                         print(f">>     4) 후퇴 위치: {[round(v,4) for v in p_ret[:3]]}")
@@ -3136,6 +3163,7 @@ class ProgramTreeEditor:
                         _apply_motion_speed(app_data.get("boundary", target_boundary), is_joint=False, label=f"{action_label} 접근")
                         inst.task_move_to(app_p)
                         _wait_for_move_or_ng(stage=text, item_id=item_id)
+                        _run_pick_stage_wait(app_data, f"{action_label} 접근", item_id)
                         print(f">>     2) 타겟 위치: {[round(v,4) for v in target_p[:3]]}")
                         _apply_motion_speed(target_boundary, is_joint=False, label=f"{action_label} 타겟")
                         inst.task_move_to(target_p)
@@ -3143,11 +3171,7 @@ class ProgramTreeEditor:
                         time.sleep(0.2)
                         print(f">>     3) {'Hold(잡기)' if is_pick else 'Release(놓기)'}")
                         _do_tool_action(is_pick)
-                        # retract.waitTime 대기
-                        ret_wait = ret_data.get("waitTime", 0)
-                        if ret_wait > 0:
-                            print(f">>     3b) 대기 {ret_wait}초...")
-                            time.sleep(ret_wait)
+                        _run_pick_stage_wait(ret_data, f"{action_label} 후퇴", item_id)
                         payload = {"robot_id": exec_robot, "action_type": 'Pick' if is_pick else 'Place', "pos": target_p}
                         _publish_task_done(payload)
                         print(f">>     4) 후퇴 위치: {[round(v,4) for v in ret_p[:3]]}")

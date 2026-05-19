@@ -297,6 +297,30 @@ class Motion3DViewer:
             self.steps.append((label, xyz, color, step_meta))
             last_xyz = list(xyz)
 
+        def _tcp_offset_mm_for(data, raw):
+            target = data.get("target") if isinstance(data.get("target"), dict) else raw.get("target", {})
+            tcp = data.get("tcp") or data.get("target_tcp")
+            if not tcp and isinstance(target, dict):
+                tcp = target.get("tcp")
+            if not isinstance(tcp, (list, tuple)) or len(tcp) < 3:
+                return [0.0, 0.0, 0.0]
+            try:
+                return [float(tcp[0]) * 1000.0, float(tcp[1]) * 1000.0, float(tcp[2]) * 1000.0]
+            except (TypeError, ValueError):
+                return [0.0, 0.0, 0.0]
+
+        def _tcp_meta(target_mm, data, raw, extra=None):
+            meta = dict(extra or {})
+            tcp_mm = _tcp_offset_mm_for(data, raw)
+            if any(abs(v) > 1e-9 for v in tcp_mm):
+                meta["tcp_offset_mm"] = tcp_mm
+                meta["tool_mount_mm"] = [
+                    float(target_mm[0]) + tcp_mm[0],
+                    float(target_mm[1]) + tcp_mm[1],
+                    float(target_mm[2]) + tcp_mm[2],
+                ]
+            return meta
+
         def emit_io_step(label, color="#FFB74D"):
             emit_step(label, list(last_xyz), color, {"type": "io"})
 
@@ -361,9 +385,9 @@ class Motion3DViewer:
                     app_pt = offset_mm(gpt, app_dist, app.get("direction", 0) if app else 0, "approach")
                     ret_pt = offset_mm(gpt, ret_dist, ret.get("direction", 1) if ret else 1, "retract")
                     q_meta = d.get("q") if d.get("q") and any(v != 0 for v in d.get("q", [])) else None
-                    emit_step(f"{icon} {label} [{idx+1}/{total}] 접근", app_pt, color, {"type": "approach", "q": q_meta})
-                    emit_step(f"{icon} {label} [{idx+1}/{total}] 동작", gpt[:], color, {"type": "action", "q": q_meta})
-                    emit_step(f"{icon} {label} [{idx+1}/{total}] 후퇴", ret_pt, color, {"type": "retract", "q": q_meta})
+                    emit_step(f"{icon} {label} [{idx+1}/{total}] 접근", app_pt, color, _tcp_meta(app_pt, d, raw, {"type": "approach", "q": q_meta}))
+                    emit_step(f"{icon} {label} [{idx+1}/{total}] 동작", gpt[:], color, _tcp_meta(gpt, d, raw, {"type": "action", "q": q_meta}))
+                    emit_step(f"{icon} {label} [{idx+1}/{total}] 후퇴", ret_pt, color, _tcp_meta(ret_pt, d, raw, {"type": "retract", "q": q_meta}))
             else:
                 if any(v != 0 for v in p):
                     target_m = list(p[:6])
@@ -373,9 +397,9 @@ class Motion3DViewer:
                     xyz = [target_m[0]*1000, target_m[1]*1000, target_m[2]*1000]
                     ret_xyz = [ret_m[0]*1000, ret_m[1]*1000, ret_m[2]*1000]
                     q_meta = d.get("q") if d.get("q") and any(v != 0 for v in d.get("q", [])) else None
-                    emit_step(f"{icon} {label} 접근", app_xyz, color, {"type": "approach", "q": q_meta})
-                    emit_step(f"{icon} {label} 동작", xyz, color, {"type": "action", "q": q_meta})
-                    emit_step(f"{icon} {label} 후퇴", ret_xyz, color, {"type": "retract", "q": q_meta})
+                    emit_step(f"{icon} {label} 접근", app_xyz, color, _tcp_meta(app_xyz, d, raw, {"type": "approach", "q": q_meta}))
+                    emit_step(f"{icon} {label} 동작", xyz, color, _tcp_meta(xyz, d, raw, {"type": "action", "q": q_meta}))
+                    emit_step(f"{icon} {label} 후퇴", ret_xyz, color, _tcp_meta(ret_xyz, d, raw, {"type": "retract", "q": q_meta}))
                 else:
                     emit_io_step(f"{label} 좌표 없음", "#FFB74D")
 
@@ -1081,6 +1105,15 @@ class Motion3DViewer:
             np = norm(spt)
             sx, sy, _ = self._project(*np)
             zone_color = sextra.get("zone_color", scolor)
+            mount = sextra.get("tool_mount_mm")
+            if mount:
+                nm = norm(mount)
+                mx, my, _ = self._project(*nm)
+                c.create_line(sx, sy, mx, my, fill="#FFFFFF", width=1, dash=(2, 3))
+                if si == self.current_step:
+                    tcp_mm = sextra.get("tcp_offset_mm", [0, 0, 0])
+                    c.create_text(mx + 8, my - 8, text=f"TCP +{tcp_mm[2]:.0f}mm",
+                                  fill="#FFFFFF", font=("Consolas", 8), anchor="w")
 
             if si < self.current_step:
                 # 지나간 스텝 — 작은 점 + 번호

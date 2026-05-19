@@ -705,16 +705,81 @@ class RobotControlUseCase:
     # =========================================================================
 
     @staticmethod
+    def _coerce_tcp(tcp):
+        if not isinstance(tcp, (list, tuple)) or len(tcp) < 6:
+            return None
+        try:
+            return [float(v) for v in list(tcp)[:6]]
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _tcp_matches(expected, actual) -> bool:
+        expected = RobotControlUseCase._coerce_tcp(expected)
+        actual = RobotControlUseCase._coerce_tcp(actual)
+        if not expected or not actual:
+            return False
+        linear_tol_m = 0.0005  # 0.5 mm
+        rot_tol_deg = 0.1
+        for idx, (left, right) in enumerate(zip(expected, actual)):
+            tol = linear_tol_m if idx < 3 else rot_tol_deg
+            if abs(left - right) > tol:
+                return False
+        return True
+
+    @staticmethod
+    def apply_tcp_sync(tcp: list, name: str = None, inst=None, verify: bool = True,
+                       timeout_sec: float = 30.0, label: str = "JSON TCP") -> bool:
+        """Apply and optionally read back the robot default TCP before task motion."""
+        tcp = RobotControlUseCase._coerce_tcp(tcp)
+        if not tcp:
+            print(f">> [TCP 에러] {label} 값이 올바르지 않습니다: {tcp}")
+            return False
+
+        name = RobotControlUseCase._active_name(name)
+        inst = inst or RobotControlUseCase._get_instance(name)
+        if not inst:
+            print(f">> [TCP 에러] {label}를 적용할 {name or '로봇'} 연결이 없습니다.")
+            return False
+
+        try:
+            ret = inst.set_default_tcp(tcp)
+            if getattr(inst, "is_gateway_proxy", False) and hasattr(inst, "wait_for_last_result"):
+                result = inst.wait_for_last_result(timeout_sec)
+                if not (result and result.get("ok")):
+                    print(f">> [TCP 에러] {label} 적용 실패: {result}")
+                    return False
+                ret = 0
+            if ret not in (None, 0, True):
+                print(f">> [TCP 에러] {label} 적용 실패(code={ret})")
+                return False
+        except Exception as exc:
+            print(f">> [TCP 에러] {label} 적용 중 예외: {exc}")
+            return False
+
+        if verify and hasattr(inst, "get_default_tcp"):
+            try:
+                time.sleep(0.05)
+                actual = RobotControlUseCase._coerce_tcp(inst.get_default_tcp())
+                if not RobotControlUseCase._tcp_matches(tcp, actual):
+                    print(f">> [TCP N.G] {label} 확인 불일치. 요청={tcp}, 로봇={actual}")
+                    return False
+                print(f">> [TCP OK] {label} 적용/확인: {actual}")
+            except Exception as exc:
+                print(f">> [TCP N.G] {label} 확인 실패: {exc}")
+                return False
+        else:
+            print(f">> [TCP] {label} 적용: {tcp}")
+
+        return True
+
+    @staticmethod
     def set_tcp(tcp: list, name: str = None):
         """Tool Center Point 설정 [X, Y, Z, Rx, Ry, Rz]"""
-        inst = RobotControlUseCase._get_instance(name)
-        if not inst or len(tcp) < 6: return False
+        if not RobotControlUseCase._coerce_tcp(tcp):
+            return False
         def _do():
-            try:
-                inst.set_default_tcp(tcp)
-                print(f">> [TCP] 설정 완료: {tcp[:3]}")
-            except Exception as e:
-                print(f">> [TCP 에러] {e}")
+            RobotControlUseCase.apply_tcp_sync(tcp, name=name, label="화면 TCP")
         threading.Thread(target=_do, daemon=True).start()
         return True
 

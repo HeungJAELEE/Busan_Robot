@@ -24,6 +24,55 @@ class PickPlaceEditor:
         except Exception:
             pass
         return None
+
+    def _current_node_tcp(self):
+        """Return the TCP stored in the selected Pick/Place JSON node."""
+        node_data = getattr(self, "node_data", None)
+        if not isinstance(node_data, dict):
+            return None
+        target = node_data.get("target") if isinstance(node_data.get("target"), dict) else {}
+        tcp = node_data.get("tcp") or node_data.get("target_tcp") or target.get("tcp")
+        if not isinstance(tcp, (list, tuple)) or len(tcp) < 6:
+            return None
+        try:
+            return [float(v) for v in tcp[:6]]
+        except (TypeError, ValueError):
+            return None
+
+    def _apply_current_node_tcp(self, inst=None):
+        """Apply JSON TCP before any Pick/Place manual move.
+
+        APK Conty executes type 201/202 with target.tcp applied. The right-side
+        manual buttons used to send only target.p, which made Pick/Place behave
+        differently from the pendant/program path.
+        """
+        tcp = self._current_node_tcp()
+        if not tcp:
+            return True
+        if not any(abs(v) > 1e-9 for v in tcp):
+            return True
+
+        robot_name = self._selected_robot_name()
+        if inst is None:
+            try:
+                from core.domains.robot.communication.client_manager import robot_manager
+                info = robot_manager.get_robot_info(robot_name) if robot_name else None
+                inst = info.get("instance") if info else robot_manager.get_active_instance()
+            except Exception:
+                inst = None
+        if not inst:
+            print(">> [TCP 경고] TCP를 적용할 로봇 연결을 찾지 못했습니다.")
+            return False
+
+        from core.domains.robot.use_cases.robot_control_usecase import RobotControlUseCase
+        return RobotControlUseCase.apply_tcp_sync(
+            tcp,
+            name=robot_name,
+            inst=inst,
+            verify=True,
+            timeout_sec=30.0,
+            label="Pick/Place JSON TCP",
+        )
         
     def render(self):
         for w in self.parent.winfo_children(): w.destroy()
@@ -643,6 +692,8 @@ class PickPlaceEditor:
 
             app_p = MotionMath.compute_conty_offset_position(target_p, app_dist, self.app_dir_cb.get(), role="approach")
             ret_p = MotionMath.compute_conty_offset_position(target_p, ret_dist, self.ret_dir_cb.get(), role="retract")
+            if not self._apply_current_node_tcp():
+                return
 
             if step == "approach":
                 print(f">> [이동] 투입위치(Approach)로 이동: {app_p}")
@@ -688,6 +739,8 @@ class PickPlaceEditor:
                         inst = info.get("instance") if info else robot_manager.get_active_instance()
                         if not inst:
                             print(">> [에러] 로봇이 연결되지 않았습니다.")
+                            return
+                        if not self._apply_current_node_tcp(inst):
                             return
                         
                         is_suction = "Suction" in self.tool_type_var.get()
@@ -777,6 +830,7 @@ class PickPlaceEditor:
         except Exception as e:
             print(f">> [에러] 이동 스텝 실행 중 오류: {e}")
     def update_ui(self, node_data, all_pallets=None):
+        self.node_data = node_data
         self._all_pallets = all_pallets or []
         # Update Target Type
         ttype = node_data.get("target_type", 0)

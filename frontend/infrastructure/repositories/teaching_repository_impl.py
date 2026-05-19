@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 from core.domains.teaching_management.entities import ContyProgram, TeachingNode, WaypointVO
@@ -479,6 +480,13 @@ class TeachingRepositoryImpl:
         }
 
         nodes = list(getattr(program, "nodes", []) or [])
+        raw_wp_list = copy.deepcopy(getattr(program, "_raw_wpList", []) or [])
+        raw_move_list = copy.deepcopy(getattr(program, "_raw_moveList", []) or [])
+        if raw_wp_list:
+            out["wpList"] = raw_wp_list
+        if raw_move_list:
+            out["moveList"] = raw_move_list
+
         raw_wp_by_id = {
             str(wp.get("id")): wp
             for wp in (getattr(program, "_raw_wpList", []) or [])
@@ -519,7 +527,13 @@ class TeachingRepositoryImpl:
 
         # ─── 2) id 매핑 (object identity 기반: 구 id 중복 안전) ───
         next_id = 3
-        next_wp_id = 0
+        raw_wp_ids = []
+        for wp in raw_wp_list:
+            try:
+                raw_wp_ids.append(int(wp.get("id")))
+            except (TypeError, ValueError):
+                pass
+        next_wp_id = (max(raw_wp_ids) + 1) if raw_wp_ids else 0
         id_map = {id(config_node): 1} if config_node else {}
         if var_node:
             id_map[id(var_node)] = 2
@@ -542,6 +556,50 @@ class TeachingRepositoryImpl:
         if config_node: processed.append(config_node)
         if var_node: processed.append(var_node)
 
+        enable_by_new_id = {}
+
+        def _find_out_wp(wp_id):
+            for wp in out["wpList"]:
+                if isinstance(wp, dict) and str(wp.get("id")) == str(wp_id):
+                    return wp
+            return None
+
+        def _next_unique_wp_id():
+            nonlocal next_wp_id
+            while _find_out_wp(next_wp_id) is not None:
+                next_wp_id += 1
+            value = next_wp_id
+            next_wp_id += 1
+            return value
+
+        def _upsert_wp(preferred_id, name, q_v, p_v, blend_r=0):
+            wp_id = preferred_id if preferred_id is not None else _next_unique_wp_id()
+            existing_wp = _find_out_wp(wp_id)
+            if existing_wp is None:
+                existing_wp = {
+                    "id": wp_id,
+                    "type": 0,
+                    "tBase": 0,
+                    "stopBlend": True,
+                    "blendRadius": float(blend_r or 0),
+                    "name": f"{name}-{wp_id}",
+                }
+                out["wpList"].append(existing_wp)
+            existing_wp["q"] = list(q_v)
+            existing_wp["p"] = list(p_v)
+            existing_wp.setdefault("type", 0)
+            existing_wp.setdefault("tBase", 0)
+            existing_wp.setdefault("stopBlend", True)
+            existing_wp.setdefault("blendRadius", float(blend_r or 0))
+            existing_wp.setdefault("name", f"{name}-{wp_id}")
+            return {"t": 2, "id": wp_id}
+
+        def _find_out_move(name):
+            for mv in out["moveList"]:
+                if isinstance(mv, dict) and mv.get("name") == name:
+                    return mv
+            return None
+
         for node in nodes:
             if node is config_node or node is var_node:
                 continue
@@ -552,6 +610,7 @@ class TeachingRepositoryImpl:
             processed.append(node)
 
             raw = (getattr(node, "__raw__", {}) or {}).copy()
+            enable_by_new_id[new_id] = raw.get("enable", getattr(node, "enable", True))
             # 우리 자체 필드 모두 제거
             for k in STRIP_KEYS:
                 raw.pop(k, None)
@@ -564,6 +623,12 @@ class TeachingRepositoryImpl:
                 move_data = getattr(node, "move_data", None)
                 if not isinstance(move_data, dict):
                     move_data = {}
+                existing_move = _find_out_move(name)
+                existing_refs = []
+                if isinstance(existing_move, dict):
+                    existing_refs = existing_move.get("wpList", []) or []
+                if not existing_refs:
+                    existing_refs = move_data.get("wpList", []) or []
 
                 # waypoint 수집: resolved_waypoints 우선, 없으면 raw q/p에서 단일 생성
                 wps = getattr(node, "resolved_waypoints", []) or []
@@ -575,15 +640,14 @@ class TeachingRepositoryImpl:
                         if not isinstance(wp_src, dict):
                             continue
                         wp_copy = dict(wp_src)
-                        wp_copy["id"] = next_wp_id
-                        out["wpList"].append(wp_copy)
                         ref_copy = dict(ref)
-                        ref_copy["id"] = next_wp_id
+                        ref_copy["id"] = wp_copy.get("id", ref.get("id"))
+                        if _find_out_wp(ref_copy["id"]) is None:
+                            out["wpList"].append(wp_copy)
                         wp_refs.append(ref_copy)
-                        next_wp_id += 1
 
                 if not wp_refs:
-                    for wp_entry in wps:
+                    for wp_idx, wp_entry in enumerate(wps):
                         wp_vo = wp_entry.get("wp") if isinstance(wp_entry, dict) else None
                         if wp_vo is not None:
                             q_v = list(wp_vo.j_pos) if wp_vo.j_pos else [0]*6
@@ -593,18 +657,10 @@ class TeachingRepositoryImpl:
                             q_v = list(wp_entry.get("q", [0]*6))
                             p_v = list(wp_entry.get("p", [0]*6))
                             blend_r = float(wp_entry.get("blendRadius", 0) or 0)
-                        out["wpList"].append({
-                            "id": next_wp_id,
-                            "type": 0,
-                            "tBase": 0,
-                            "stopBlend": True,
-                            "blendRadius": blend_r,
-                            "name": f"{name}-{next_wp_id:02d}",
-                            "q": q_v,
-                            "p": p_v,
-                        })
-                        wp_refs.append({"t": 2, "id": next_wp_id})
-                        next_wp_id += 1
+                        preferred_id = None
+                        if wp_idx < len(existing_refs) and isinstance(existing_refs[wp_idx], dict):
+                            preferred_id = existing_refs[wp_idx].get("id")
+                        wp_refs.append(_upsert_wp(preferred_id, name, q_v, p_v, blend_r))
 
                 if not wp_refs:
                     # all_waypoints fallback (제거된 raw에서 다시 한번 조회는 안 되므로 원본에서)
@@ -612,28 +668,18 @@ class TeachingRepositoryImpl:
                     aw = orig_raw.get("all_waypoints", [])
                     if aw:
                         for awp in aw:
-                            out["wpList"].append({
-                                "id": next_wp_id, "type": 0, "tBase": 0,
-                                "stopBlend": True,
-                                "blendRadius": float(awp.get("blendRadius", 0) or 0),
-                                "name": f"{name}-{next_wp_id:02d}",
-                                "q": list(awp.get("q", [0]*6)),
-                                "p": list(awp.get("p", [0]*6)),
-                            })
-                            wp_refs.append({"t": 2, "id": next_wp_id})
-                            next_wp_id += 1
+                            wp_refs.append(_upsert_wp(
+                                None,
+                                name,
+                                list(awp.get("q", [0]*6)),
+                                list(awp.get("p", [0]*6)),
+                                float(awp.get("blendRadius", 0) or 0),
+                            ))
                     else:
                         # 단일 q/p
                         q_v = raw.get("q") or [0]*6
                         p_v = raw.get("p") or [0]*6
-                        out["wpList"].append({
-                            "id": next_wp_id, "type": 0, "tBase": 0,
-                            "stopBlend": True, "blendRadius": 0,
-                            "name": f"{name}-{next_wp_id:02d}",
-                            "q": list(q_v), "p": list(p_v),
-                        })
-                        wp_refs.append({"t": 2, "id": next_wp_id})
-                        next_wp_id += 1
+                        wp_refs.append(_upsert_wp(None, name, list(q_v), list(p_v), 0))
 
                 # moveList 항목
                 mv_entry = dict(move_data) if move_data else {}
@@ -649,7 +695,11 @@ class TeachingRepositoryImpl:
                 mv_entry.setdefault("blendOpt", raw.get("blendOpt", {"processLoop": False, "constant": False}))
                 if t == 103:
                     mv_entry.setdefault("offset", raw.get("offset", {"type": 0, "pos": [0, 0, 0]}))
-                out["moveList"].append(mv_entry)
+                if existing_move is not None:
+                    existing_move.clear()
+                    existing_move.update(mv_entry)
+                else:
+                    out["moveList"].append(mv_entry)
 
                 # program 메타
                 out["program"].append({
@@ -719,7 +769,7 @@ class TeachingRepositoryImpl:
                     if p_data_raw and isinstance(p_data_raw, dict):
                         # palletId 결정 — 기존 raw 값 우선, 없으면 새 ID 할당
                         existing_pid = (target.get("pallet") or {}).get("palletId")
-                        if not existing_pid:
+                        if existing_pid is None or existing_pid == "":
                             existing_pid = raw.get("target_pallet_id") or raw.get("target_pallet_name") or f"PLT_{new_id}"
 
                         # config_raw["palletInfo"]에서 동일 id/name 항목 탐색
@@ -746,13 +796,16 @@ class TeachingRepositoryImpl:
                         target["pallet"] = dict(target.get("pallet") or {})
                         target["pallet"]["palletId"] = existing_pid
 
-                # target.point.q/p 채우기 (null인 경우 노드 루트 q/p에서)
-                point = (target.get("point") or {}).copy()
-                if not point.get("q") or (isinstance(point["q"], list) and not point["q"]):
-                    point["q"] = raw.get("q") or [0.0]*6
-                if not point.get("p") or (isinstance(point["p"], list) and not point["p"]):
-                    point["p"] = raw.get("p") or [0.0]*6
-                target["point"] = point
+                # target.type=0 단일 위치일 때만 point.q/p를 채운다.
+                # 팔레트 target(type=1)에 빈 point를 새로 추가하면 APK 원본과 달라져
+                # 일부 펜던트/인코더가 다른 명령으로 해석할 수 있다.
+                if tt != 1 or "point" in target:
+                    point = (target.get("point") or {}).copy()
+                    if not point.get("q") or (isinstance(point["q"], list) and not point["q"]):
+                        point["q"] = raw.get("q") or [0.0]*6
+                    if not point.get("p") or (isinstance(point["p"], list) and not point["p"]):
+                        point["p"] = raw.get("p") or [0.0]*6
+                    target["point"] = point
 
                 app_in = raw.get("approach", {}) or {}
                 ret_in = raw.get("retract", {}) or {}
@@ -806,12 +859,15 @@ class TeachingRepositoryImpl:
                 })
 
             elif t == 28:  # Wait (DI)
-                out["program"].append({
+                entry = {
                     "type": 28, "enable": True, "pId": parent_id,
                     "time": raw.get("time", 1),
                     "diList": raw.get("diList", []),
                     "id": new_id,
-                })
+                }
+                if "endtoolDiList" in raw:
+                    entry["endtoolDiList"] = raw.get("endtoolDiList", [])
+                out["program"].append(entry)
 
             elif t == 4:  # SmartDO
                 out["program"].append({
@@ -864,12 +920,14 @@ class TeachingRepositoryImpl:
                 })
 
             elif t in (29, 30):  # If/Else (DI)
-                out["program"].append({
+                entry = {
                     "type": t, "enable": True, "pId": parent_id,
                     "diList": raw.get("diList", []),
-                    "endtoolDiList": raw.get("endtoolDiList", []),
                     "id": new_id,
-                })
+                }
+                if "endtoolDiList" in raw:
+                    entry["endtoolDiList"] = raw.get("endtoolDiList", [])
+                out["program"].append(entry)
 
             elif t in (32, 250):  # Speed Ratio
                 out["program"].append({
@@ -907,6 +965,11 @@ class TeachingRepositoryImpl:
                 if node.name:
                     raw["name"] = node.name
                 out["program"].append(raw)
+
+        for entry in out["program"]:
+            new_id = entry.get("id")
+            if new_id in enable_by_new_id:
+                entry["enable"] = enable_by_new_id[new_id]
 
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(out, f, ensure_ascii=False, indent=4)
