@@ -3,19 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Indy7 Rail Robot View Guide</title>
+  <title>Indy7 Digital Twin Scene Guide</title>
   <style>
     :root {
       color-scheme: dark;
-      --bg: #08080d;
-      --panel: #15151e;
-      --panel-2: #101018;
-      --line: #2b2c39;
-      --text: #f4f5f8;
-      --muted: #9da3b3;
-      --blue: #62b7ff;
-      --green: #62d58f;
-      --amber: #f1b45d;
+      --bg: #07080d;
+      --panel: rgba(14, 18, 28, 0.82);
+      --line: rgba(132, 154, 179, 0.24);
+      --text: #f5f7fb;
+      --muted: #aeb7c5;
+      --green: #67d990;
+      --amber: #f3be56;
+      --blue: #71baff;
     }
 
     * {
@@ -24,176 +23,153 @@
 
     body {
       margin: 0;
-      background: var(--bg);
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(70, 125, 180, 0.28), transparent 32%),
+        radial-gradient(circle at 84% 18%, rgba(239, 160, 72, 0.18), transparent 30%),
+        var(--bg);
       color: var(--text);
       font-family: Inter, Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
     .shell {
       min-height: 100vh;
-      padding: 24px;
+      padding: 22px;
       display: grid;
-      grid-template-rows: auto 1fr;
-      gap: 18px;
+      grid-template-rows: auto 1fr auto;
+      gap: 16px;
+    }
+
+    .topbar,
+    .specs {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.32);
     }
 
     .topbar {
-      min-height: 72px;
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      background: linear-gradient(135deg, #171720, #101018);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 22px;
-      gap: 20px;
+      gap: 18px;
+      padding: 18px 22px;
     }
 
     .brand {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 5px;
     }
 
     .brand strong {
-      font-size: 27px;
+      font-size: clamp(24px, 3vw, 36px);
       line-height: 1.05;
+      letter-spacing: 0;
     }
 
-    .brand span {
+    .brand span,
+    .spec p {
       color: var(--muted);
       font-weight: 650;
-      font-size: 14px;
+      line-height: 1.5;
     }
 
-    .tabs {
+    .layer-pills {
       display: flex;
-      flex-wrap: wrap;
       gap: 10px;
+      flex-wrap: wrap;
       justify-content: flex-end;
     }
 
-    .tab {
-      border: 1px solid #333747;
-      background: #202535;
-      color: #dce0e8;
+    .pill {
+      min-width: 88px;
       border-radius: 999px;
-      padding: 9px 14px;
-      font-weight: 750;
+      border: 1px solid rgba(116, 139, 165, 0.32);
+      background: rgba(24, 32, 46, 0.86);
+      color: #dce4ef;
       font-size: 13px;
+      font-weight: 800;
+      text-align: center;
+      padding: 9px 14px;
     }
 
-    .tab.on {
-      background: #1f3a33;
-      border-color: #3f8f6b;
-      color: #e9fff0;
-    }
-
-    .layout {
-      display: grid;
-      grid-template-columns: minmax(760px, 1fr) 360px;
-      gap: 18px;
-      min-height: 0;
-    }
-
-    .viewer,
-    .side {
-      border: 1px solid var(--line);
-      background: var(--panel);
-      border-radius: 22px;
-      overflow: hidden;
+    .pill.on {
+      border-color: rgba(103, 217, 144, 0.65);
+      background: rgba(24, 63, 49, 0.85);
+      color: #e5fff0;
     }
 
     .viewer {
-      padding: 18px;
+      min-height: 0;
+      border-radius: 24px;
+      overflow: hidden;
+      border: 1px solid rgba(137, 159, 182, 0.25);
+      background: #05070b;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
     }
 
     .viewer img {
       display: block;
       width: 100%;
-      height: auto;
-      border-radius: 18px;
-      border: 1px solid #2d3040;
-      background: #07070d;
+      height: 100%;
+      min-height: 620px;
+      object-fit: cover;
     }
 
-    .side {
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 22px;
-    }
-
-    h1,
-    h2,
-    p {
-      margin: 0;
-    }
-
-    h2 {
-      font-size: 21px;
-    }
-
-    p {
-      color: var(--muted);
-      line-height: 1.55;
-      font-weight: 620;
-    }
-
-    .card {
-      border: 1px solid #292b39;
-      border-radius: 14px;
-      background: var(--panel-2);
-      padding: 16px;
-    }
-
-    .rows {
+    .specs {
       display: grid;
-      gap: 10px;
-      margin-top: 12px;
+      grid-template-columns: repeat(4, minmax(160px, 1fr));
+      gap: 1px;
+      overflow: hidden;
     }
 
-    .row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 0;
-      border-bottom: 1px solid #242634;
-      color: #d8dce5;
-      font-weight: 720;
+    .spec {
+      min-height: 94px;
+      padding: 18px 20px;
+      background: rgba(10, 13, 20, 0.46);
     }
 
-    .row:last-child {
-      border-bottom: 0;
+    .spec strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 8px;
     }
 
-    .state {
-      color: var(--green);
-    }
-
-    .off {
-      color: var(--amber);
-    }
-
-    .note {
-      color: #cbd0db;
+    .spec p {
+      margin: 0;
       font-size: 13px;
     }
 
-    @media (max-width: 1180px) {
-      .layout {
-        grid-template-columns: 1fr;
-      }
+    .green {
+      color: var(--green);
+    }
 
+    .amber {
+      color: var(--amber);
+    }
+
+    .blue {
+      color: var(--blue);
+    }
+
+    @media (max-width: 980px) {
       .topbar {
         align-items: flex-start;
         flex-direction: column;
-        padding: 18px 22px;
       }
 
-      .tabs {
+      .layer-pills {
         justify-content: flex-start;
+      }
+
+      .specs {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .viewer img {
+        min-height: 420px;
       }
     }
   </style>
@@ -202,50 +178,39 @@
   <main class="shell">
     <header class="topbar">
       <div class="brand">
-        <strong>INDY7 Rail Robot View</strong>
-        <span>실제 레일 설비 사진 기준의 단순 표시 UI 제안</span>
+        <strong>INDY7 Digital Twin Scene</strong>
+        <span>레일과 로봇이 먼저 보이는 작업자용 Simple View 시안</span>
       </div>
-      <nav class="tabs" aria-label="view layers">
-        <span class="tab on">Rail only</span>
-        <span class="tab on">Robot A/B/C</span>
-        <span class="tab">TCP trace off</span>
-        <span class="tab">Safety zone off</span>
+      <nav class="layer-pills" aria-label="view layers">
+        <span class="pill on">Rail</span>
+        <span class="pill on">Robot</span>
+        <span class="pill">Trace</span>
+        <span class="pill">Zone</span>
+        <span class="pill">Grid</span>
       </nav>
     </header>
 
-    <section class="layout">
-      <div class="viewer">
-        <img src="./rail_robot_scene_guide.svg" alt="Rail and three Indy7 robot clean scene guide">
+    <section class="viewer" aria-label="scene preview">
+      <img src="./rail_robot_scene_guide.svg" alt="Indy7 rail digital twin scene guide">
+    </section>
+
+    <section class="specs" aria-label="scene rules">
+      <div class="spec">
+        <strong class="green">Simple View</strong>
+        <p>기본은 레일, 로봇, 작업물, 현재 TCP만 표시합니다.</p>
       </div>
-
-      <aside class="side">
-        <section>
-          <h2>화면 방향</h2>
-          <p>작업자가 처음 볼 때 필요한 정보만 남깁니다. 기본 화면은 레일, 로봇 3대, 현재 TCP 위치, 로봇 간 거리만 보여주고, 위험 존과 전체 궤적은 필요할 때만 켭니다.</p>
-        </section>
-
-        <section class="card">
-          <h2>기본 표시값</h2>
-          <div class="rows">
-            <div class="row"><span>Robot 간격</span><span>1850 mm</span></div>
-            <div class="row"><span>전면 rail 거리</span><span>500 mm</span></div>
-            <div class="row"><span>Robot A rail 끝단</span><span>1000 mm</span></div>
-            <div class="row"><span>안전 존</span><span class="off">기본 숨김</span></div>
-            <div class="row"><span>TCP 궤적</span><span class="off">기본 숨김</span></div>
-          </div>
-        </section>
-
-        <section class="card">
-          <h2>실제 앱 반영 순서</h2>
-          <div class="rows">
-            <div class="row"><span>1. Drive 모델 파일 확인</span><span class="state">대기</span></div>
-            <div class="row"><span>2. Simple/Debug 뷰 분리</span><span class="state">권장</span></div>
-            <div class="row"><span>3. Page 1/2 뷰 옵션화</span><span class="state">가능</span></div>
-          </div>
-        </section>
-
-        <p class="note">이 파일은 결정용 가이드입니다. 현재 생산 HMI 동작 로직과 JSON 실행 로직은 변경하지 않습니다.</p>
-      </aside>
+      <div class="spec">
+        <strong class="amber">Debug View</strong>
+        <p>위험 존, 싱귤러리티, 전체 궤적은 필요할 때만 켭니다.</p>
+      </div>
+      <div class="spec">
+        <strong class="blue">현장 치수</strong>
+        <p>Robot 간격 1850mm, 전면 rail 거리 500mm를 기준으로 둡니다.</p>
+      </div>
+      <div class="spec">
+        <strong>Mesh Layer</strong>
+        <p>Drive의 Indy7 모델 파일을 받으면 실제 mesh로 교체합니다.</p>
+      </div>
     </section>
   </main>
 </body>
