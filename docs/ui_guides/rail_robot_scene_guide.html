@@ -239,7 +239,7 @@
     loading.remove();
 
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.target.set(0.4, 0.82, 0.0);
+    controls.target.set(0.4, 0.82, 1.35);
     controls.enableDamping = true;
     controls.minDistance = 4.2;
     controls.maxDistance = 13.5;
@@ -476,17 +476,18 @@
     floor.position.y = -0.02;
     floor.receiveShadow = true;
 
+    const workZ = 2.05;
     const table = mesh(roundedBox(7.6, 0.16, 2.1, 0.04), tableMat);
-    table.position.set(0.15, 0.08, 0);
+    table.position.set(0.15, 0.08, workZ);
     const belt = mesh(roundedBox(7.1, 0.06, 0.64, 0.03), beltMat);
-    belt.position.set(0.15, 0.2, 0);
+    belt.position.set(0.15, 0.2, workZ);
     for (const z of [-0.55, 0.55]) {
       const rail = mesh(roundedBox(7.8, 0.09, 0.08, 0.02), railMat);
-      rail.position.set(0.15, 0.27, z);
+      rail.position.set(0.15, 0.27, workZ + z);
     }
     for (let i = 0; i < 13; i += 1) {
       const rib = mesh(roundedBox(0.03, 0.04, 1.25, 0.008), railMat);
-      rib.position.set(-3.5 + i * 0.58, 0.31, 0);
+      rib.position.set(-3.5 + i * 0.58, 0.31, workZ);
     }
 
     const stations = [
@@ -496,26 +497,26 @@
     ];
     for (const s of stations) {
       const marker = mesh(roundedBox(1.1, 0.04, 0.82, 0.03), s.color);
-      marker.position.set(s.x, 0.34, -0.02);
+      marker.position.set(s.x, 0.34, workZ - 0.02);
       marker.material.transparent = true;
       marker.material.opacity = 0.2;
-      makeStationLabel(s.text, new THREE.Vector3(s.x, 0.72, -1.15));
+      makeStationLabel(s.text, new THREE.Vector3(s.x, 0.72, workZ - 1.15));
     }
 
-    makeToyCar(0xe43d35, new THREE.Vector3(-2.55, 0.48, 0), 0.0, false, 0.9);
-    makeToyCar(0x2b78d4, new THREE.Vector3(0.05, 0.48, 0), 0.0, true, 0.9);
-    makeToyCar(0x38c978, new THREE.Vector3(2.55, 0.48, 0), 0.0, true, 0.9);
-    makeToyCar(0xf1c846, new THREE.Vector3(3.35, 0.48, -0.62), -0.22, true, 0.64);
+    makeToyCar(0xe43d35, new THREE.Vector3(-2.55, 0.48, workZ), 0.0, false, 0.9);
+    makeToyCar(0x2b78d4, new THREE.Vector3(0.05, 0.48, workZ), 0.0, true, 0.9);
+    makeToyCar(0x38c978, new THREE.Vector3(2.55, 0.48, workZ), 0.0, true, 0.9);
+    makeToyCar(0xf1c846, new THREE.Vector3(3.35, 0.48, workZ + 0.62), -0.22, true, 0.64);
 
     const bodyPart = mesh(roundedBox(0.42, 0.12, 0.28, 0.04), redMat);
-    bodyPart.position.set(-2.1, 0.86, -0.62);
+    bodyPart.position.set(-2.1, 0.86, workZ - 0.62);
     const windshieldPart = mesh(roundedBox(0.34, 0.045, 0.22, 0.018), glassMat);
-    windshieldPart.position.set(0.38, 0.92, -0.56);
+    windshieldPart.position.set(0.38, 0.92, workZ - 0.56);
     windshieldPart.rotation.z = -0.45;
 
-    makeArrow(new THREE.Vector3(-3.3, 0.56, 0.7), new THREE.Vector3(-1.5, 0.56, 0.7));
-    makeArrow(new THREE.Vector3(-0.9, 0.56, 0.7), new THREE.Vector3(1.0, 0.56, 0.7));
-    makeArrow(new THREE.Vector3(1.45, 0.56, 0.7), new THREE.Vector3(3.2, 0.56, 0.7), 0x38c978);
+    makeArrow(new THREE.Vector3(-3.3, 0.56, workZ + 0.7), new THREE.Vector3(-1.5, 0.56, workZ + 0.7));
+    makeArrow(new THREE.Vector3(-0.9, 0.56, workZ + 0.7), new THREE.Vector3(1.0, 0.56, workZ + 0.7));
+    makeArrow(new THREE.Vector3(1.45, 0.56, workZ + 0.7), new THREE.Vector3(3.2, 0.56, workZ + 0.7), 0x38c978);
 
     const robotA = makeRobot('Robot A', '차체 결합', new THREE.Vector3(-2.65, 0.28, 1.25), Math.PI * 0.92, {
       shoulderX: 0.22, shoulderZ: -0.28,

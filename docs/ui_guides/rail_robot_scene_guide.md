@@ -30,6 +30,8 @@ Robot A/B/C 간격: 1850mm
 Robot A 기준 rail 끝단 여유: 약 1000mm
 ```
 
+화면 배치는 로봇 베이스를 뒤쪽에 두고, 레일/차량 작업면을 로봇 앞쪽으로 배치합니다. 즉 작업자가 볼 때 로봇이 앞 레일 위의 차량을 향해 내려오는 구도입니다.
+
 ## 가이드 파일
 
 - HTML 가이드: [rail_robot_scene_guide.html](./rail_robot_scene_guide.html)
