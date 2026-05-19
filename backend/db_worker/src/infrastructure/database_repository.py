@@ -3,6 +3,12 @@ import os
 import pymysql
 import threading
 import time
+import datetime
+
+try:
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None
 
 
 class DatabaseRepository:
@@ -15,7 +21,7 @@ class DatabaseRepository:
     """
 
     DB_CONFIG = {
-        "host": os.getenv("DB_HOST", os.getenv("MYSQL_HOST", "192.168.3.141")),
+        "host": os.getenv("DB_HOST", os.getenv("MYSQL_HOST", "")),
         "port": int(os.getenv("DB_PORT", os.getenv("MYSQL_PORT", "3306"))),
         "user": os.getenv("DB_USER", os.getenv("MYSQL_USER", "guest")),
         "password": os.getenv("DB_PASS", os.getenv("MYSQL_PASSWORD", "guest1234")),
@@ -35,9 +41,17 @@ class DatabaseRepository:
         self._virtual_tables_ready = False
         self._plc_event_table_ready = False
         self._result_table_ready = False
+        self._process_angle_table_ready = False
+        self._dry_run_realtime_table_ready = False
+        self._missing_db_host_warned = False
 
     def _get_persistent_connection(self):
         """단일 persistent 커넥션을 유지하며, 끊기면 자동 재연결합니다."""
+        if not str(self.DB_CONFIG.get("host") or "").strip():
+            if not self._missing_db_host_warned:
+                print(">> [DB 경고] DB_HOST/MYSQL_HOST가 설정되지 않아 MySQL 저장을 건너뜁니다.")
+                self._missing_db_host_warned = True
+            return None
         with self._lock:
             if self._conn is None:
                 try:
@@ -68,6 +82,62 @@ class DatabaseRepository:
         while len(result) < 6:
             result.append(0.0)
         return [float(value or 0.0) for value in result]
+
+    @staticmethod
+    def _six_or_none(values):
+        if not isinstance(values, (list, tuple)) or len(values) < 6:
+            return None
+        try:
+            return [float(value or 0.0) for value in list(values)[:6]]
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _robot_kind(robot_id):
+        text = str(robot_id or "").strip().upper()
+        if "ROBOT A" in text or text.endswith(" A") or text == "A":
+            return "A"
+        if "ROBOT B" in text or text.endswith(" B") or text == "B":
+            return "B"
+        if "ROBOT C" in text or text.endswith(" C") or text == "C":
+            return "C"
+        for kind in ("A", "B", "C"):
+            if kind in text.split():
+                return kind
+        return text[-1:] if text[-1:] in ("A", "B", "C") else text
+
+    @staticmethod
+    def _now_kst():
+        if ZoneInfo:
+            return datetime.datetime.now(ZoneInfo("Asia/Seoul"))
+        return datetime.datetime.utcnow() + datetime.timedelta(hours=9)
+
+    def _date_time_fields(self):
+        now = self._now_kst()
+        return int(now.strftime("%Y%m%d")), now.strftime("%H:%M:%S")
+
+    def _payload_joints(self, payload):
+        payload = payload or {}
+        for key in ("q", "joint", "joints", "joint_pos", "j_pos", "angles", "robot_angles"):
+            joints = self._six_or_none(payload.get(key))
+            if joints is not None:
+                return joints
+        nested = payload.get("payload")
+        if isinstance(nested, dict):
+            return self._payload_joints(nested)
+        return None
+
+    @staticmethod
+    def _payload_speed(payload):
+        payload = payload or {}
+        for key in ("robot_speed", "speed", "speed_mm_s", "tcp_speed", "speed_ratio"):
+            try:
+                value = payload.get(key)
+                if value is not None:
+                    return float(value or 0.0)
+            except (TypeError, ValueError):
+                pass
+        return 0.0
 
     @staticmethod
     def _status_label(status_data):
@@ -251,6 +321,176 @@ class DatabaseRepository:
         except Exception as exc:
             print(f">> [DB 에러] PLC 이벤트 테이블 준비 실패: {exc}")
 
+    def _ensure_process_angle_table(self):
+        if self._process_angle_table_ready:
+            return
+        try:
+            self._ensure_table(
+                "robot_process_angle_log",
+                """
+                CREATE TABLE IF NOT EXISTS robot_process_angle_log (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    input_date INT NOT NULL,
+                    input_time CHAR(8) NOT NULL,
+                    robot_kind CHAR(1) NOT NULL,
+                    a_place_j1 DOUBLE NULL,
+                    a_place_j2 DOUBLE NULL,
+                    a_place_j3 DOUBLE NULL,
+                    a_place_j4 DOUBLE NULL,
+                    a_place_j5 DOUBLE NULL,
+                    a_place_j6 DOUBLE NULL,
+                    b_place_j1 DOUBLE NULL,
+                    b_place_j2 DOUBLE NULL,
+                    b_place_j3 DOUBLE NULL,
+                    b_place_j4 DOUBLE NULL,
+                    b_place_j5 DOUBLE NULL,
+                    b_place_j6 DOUBLE NULL,
+                    c_pick_j1 DOUBLE NULL,
+                    c_pick_j2 DOUBLE NULL,
+                    c_pick_j3 DOUBLE NULL,
+                    c_pick_j4 DOUBLE NULL,
+                    c_pick_j5 DOUBLE NULL,
+                    c_pick_j6 DOUBLE NULL,
+                    created_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+                    INDEX idx_process_angle_date (input_date, input_time),
+                    INDEX idx_process_angle_robot (robot_kind, created_at)
+                ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+                """,
+            )
+            self._process_angle_table_ready = True
+        except Exception as exc:
+            print(f">> [DB 에러] 공정 각도 테이블 준비 실패: {exc}")
+
+    def _ensure_dry_run_realtime_table(self):
+        if self._dry_run_realtime_table_ready:
+            return
+        try:
+            self._ensure_table(
+                "robot_dry_run_realtime_samples",
+                """
+                CREATE TABLE IF NOT EXISTS robot_dry_run_realtime_samples (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    session_id VARCHAR(96),
+                    sample_index INT DEFAULT 0,
+                    recorded_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+                    robot_kind CHAR(1) NOT NULL,
+                    repeat_count INT DEFAULT 1,
+                    q1 DOUBLE,
+                    q2 DOUBLE,
+                    q3 DOUBLE,
+                    q4 DOUBLE,
+                    q5 DOUBLE,
+                    q6 DOUBLE,
+                    tq1 DOUBLE,
+                    tq2 DOUBLE,
+                    tq3 DOUBLE,
+                    tq4 DOUBLE,
+                    tq5 DOUBLE,
+                    tq6 DOUBLE,
+                    x DOUBLE,
+                    y DOUBLE,
+                    z DOUBLE,
+                    robot_speed DOUBLE DEFAULT 0,
+                    INDEX idx_dry_run_session (session_id, sample_index),
+                    INDEX idx_dry_run_robot_time (robot_kind, recorded_at)
+                ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+                """,
+            )
+            self._dry_run_realtime_table_ready = True
+        except Exception as exc:
+            print(f">> [DB 에러] Dry Run 실시간 테이블 준비 실패: {exc}")
+
+    def _insert_process_angle_log(self, robot_id, action_type, payload):
+        kind = self._robot_kind(robot_id)
+        action = str(action_type or "").strip().lower()
+        column_prefix = None
+        if kind == "A" and action == "place":
+            column_prefix = "a_place"
+        elif kind == "B" and action == "place":
+            column_prefix = "b_place"
+        elif kind == "C" and action == "pick":
+            column_prefix = "c_pick"
+        if not column_prefix:
+            return
+
+        joints = self._payload_joints(payload)
+        if joints is None:
+            print(f">> [DB 경고] {robot_id} {action_type} 각도(q)가 없어 공정 각도 로그를 건너뜁니다.")
+            return
+
+        self._ensure_process_angle_table()
+        conn = self._get_persistent_connection()
+        if not conn:
+            return
+
+        input_date, input_time = self._date_time_fields()
+        columns = [
+            "input_date",
+            "input_time",
+            "robot_kind",
+            *(f"{column_prefix}_j{idx}" for idx in range(1, 7)),
+        ]
+        placeholders = ", ".join(["%s"] * len(columns))
+        col_sql = ", ".join(f"`{column}`" for column in columns)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"INSERT INTO robot_process_angle_log ({col_sql}) VALUES ({placeholders})",
+                    (input_date, input_time, kind, *joints),
+                )
+        except Exception as exc:
+            print(f">> [DB 에러] 공정 각도 로그 저장 실패: {exc}")
+
+    def _insert_dry_run_realtime_sample(self, payload):
+        self._ensure_dry_run_realtime_table()
+        conn = self._get_persistent_connection()
+        if not conn:
+            return
+
+        q = self._six(payload.get("q") or payload.get("joint_pos") or payload.get("j_pos"))
+        p = self._six(payload.get("p") or payload.get("task_pos") or payload.get("xyz"))
+        tq = self._six(payload.get("torque") or payload.get("tq"))
+        try:
+            repeat_count = int(payload.get("repeat_count") or payload.get("cycle_index") or 1)
+        except (TypeError, ValueError):
+            repeat_count = 1
+        repeat_count = max(1, repeat_count)
+        try:
+            sample_index = int(payload.get("sample_index") or 0)
+        except (TypeError, ValueError):
+            sample_index = 0
+
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO robot_dry_run_realtime_samples
+                      (session_id, sample_index, recorded_at, robot_kind, repeat_count,
+                       q1, q2, q3, q4, q5, q6,
+                       tq1, tq2, tq3, tq4, tq5, tq6,
+                       x, y, z, robot_speed)
+                    VALUES
+                      (%s, %s, NOW(3), %s, %s,
+                       %s, %s, %s, %s, %s, %s,
+                       %s, %s, %s, %s, %s, %s,
+                       %s, %s, %s, %s)
+                    """,
+                    (
+                        payload.get("session_id", ""),
+                        sample_index,
+                        self._robot_kind(payload.get("robot_id")),
+                        repeat_count,
+                        *q,
+                        *tq,
+                        p[0],
+                        p[1],
+                        p[2],
+                        self._payload_speed(payload),
+                    ),
+                )
+        except Exception as exc:
+            print(f">> [DB 에러] Dry Run 실시간 샘플 저장 실패: {exc}")
+
     def insert_realtime_data(self, robot_id: str, status_data: dict):
         """로봇 실시간 상태를 DB에 저장합니다."""
         self._ensure_operational_tables()
@@ -296,6 +536,8 @@ class DatabaseRepository:
 
     def insert_task_completion(self, robot_id: str, action_type: str, pos: list, payload: dict = None):
         """Pick/Place 등 작업 완료 이력을 DB에 남깁니다."""
+        payload = dict(payload or {})
+        self._insert_process_angle_log(robot_id, action_type, payload)
         self._ensure_operational_tables()
         cols = self._columns("robot_task_history")
         conn = self._get_persistent_connection()
@@ -309,7 +551,7 @@ class DatabaseRepository:
                         "robot_id": robot_id,
                         "action_type": action_type,
                         "pos": list(pos or []),
-                        "payload": dict(payload or {}),
+                        "payload": payload,
                     }
                     cursor.execute(
                         """
@@ -552,6 +794,7 @@ class DatabaseRepository:
             print(f">> [DB 에러] 로봇 점검 이벤트 저장 실패: {exc}")
 
     def insert_virtual_test_sample(self, payload: dict):
+        self._insert_dry_run_realtime_sample(payload or {})
         self._ensure_virtual_test_tables()
         cols = self._columns("robot_virtual_test_samples")
         conn = self._get_persistent_connection()

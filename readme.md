@@ -37,9 +37,7 @@ Windows 현장 작업자 기준 실행환경 재검토 결과는 [docs/user_exec
 
 ```text
 Robot Controller PC: Intel i5-8500 / RAM 16GB 이상
-MySQL: 192.168.3.141:3306 / faictory_mes
-Robot A/B/C: 192.168.3.7 / 192.168.3.6 / 192.168.3.5
-PLC process/monitor: 192.168.3.150 / 192.168.3.160
+MySQL/Robot/PLC 주소: backend/.env에 현장별로 입력
 ```
 
 ### 프로그램 구조
@@ -96,6 +94,16 @@ Indy7_HMI_Clean
 
 Page 1의 3D 화면은 문서용 시안이 아니라 실제 앱에 반영된 작업자 기본 화면입니다. 기존 Page 1의 로봇 선택, Home/Zero, 에러 리셋, 프로그램 실행, 실시간 동기화 기능은 그대로 유지하고, 중앙 3D 표시만 실제 레일/차량 공정이 먼저 보이도록 바꿨습니다.
 
+Page 1 화면은 현장 내부망에서 웹 모니터로도 볼 수 있습니다. Docker `digital_twin` 서비스가 실행 중이면 브라우저에서 아래 주소를 엽니다.
+
+```text
+로봇 컨트롤러 PC에서 보기: http://localhost:8080
+다른 PC/태블릿에서 보기: http://<Robot Controller PC IPv4>:8080
+상태 JSON 확인: http://<Robot Controller PC IPv4>:8080/health
+```
+
+웹 모니터는 읽기 전용입니다. 로봇 Home/Zero/Stop 같은 제어는 기존 HMI PC 프로그램에서만 수행합니다.
+
 ### 시스템 구조
 
 ```mermaid
@@ -105,7 +113,7 @@ flowchart LR
         MQTT["MQTT Broker\nMosquitto"]
         RC["Robot Controller\nIndyDCP socket owner"]
         DBW["DB Worker"]
-        DT["Digital Twin"]
+    DT["Digital Twin\nWeb Monitor :8080"]
         PLCB["PLC Bridge\nread/monitor"]
         MYSQL[("MySQL\nfaictory_mes")]
     end
@@ -149,6 +157,7 @@ flowchart LR
 - Docker는 MQTT, Robot Controller, DB Worker, Digital Twin, PLC Bridge 같은 백그라운드 서비스를 실행합니다.
 - 운영 모드에서는 Robot Controller가 Robot A/B/C 소켓 통신을 독점합니다.
 - DB Worker와 Digital Twin은 로봇을 직접 읽지 않고 `robot/realtime` JSON만 구독합니다.
+- Digital Twin은 Docker 안에서 `http://0.0.0.0:8080` 웹 모니터와 `/ws` 실시간 WebSocket을 함께 제공합니다.
 - PLC가 메인 공정 통제권을 가집니다. HMI/PLC Bridge는 감시와 기록 중심으로 동작합니다.
 
 ### 통신 구조
@@ -170,9 +179,9 @@ flowchart LR
 
 ```text
 쓰기 명령: UI -> robot/command -> Robot Controller -> Robot
-읽기 상태: Robot -> Robot Controller -> robot/realtime -> UI/DB/Digital Twin
+읽기 상태: Robot -> Robot Controller -> robot/realtime -> UI/DB/Digital Twin Web
 DB 저장: DB Worker가 MQTT JSON을 받아 MySQL에 저장
-Digital Twin: robot/realtime을 받아 3D 표시용으로 중계
+Digital Twin Web: robot/realtime을 받아 내부망 브라우저용 읽기 전용 3D 화면으로 표시
 ```
 
 반복 통신과 단방향 통신:
@@ -225,11 +234,11 @@ HMI_MQTT_CONNECT_WAIT_SEC=3
 MySQL 기본 DB:
 
 ```text
-host: 192.168.3.141
+host: backend/.env의 MYSQL_HOST
 port: 3306
-user: guest
-password: guest1234
-db: faictory_mes
+user: backend/.env의 MYSQL_USER
+password: backend/.env의 MYSQL_PASSWORD
+db: backend/.env의 MYSQL_DATABASE
 ```
 
 주요 테이블:
@@ -238,6 +247,8 @@ db: faictory_mes
 |---|---|
 | `robot_realtime_status` | 로봇별 최신 관절/좌표/토크/상태 |
 | `robot_task_history` | 실제 작업 완료 이력 |
+| `robot_process_angle_log` | 투입일자/시간 + Robot A Place, Robot B Place, Robot C Pick 각도 |
+| `robot_dry_run_realtime_samples` | Page3 반복횟수 + 각도/토크/XYZ/speed 핵심 샘플 |
 | `robot_virtual_test_sessions` | Page3 Dry Run Recording 세션 |
 | `robot_virtual_test_samples` | Page3 q/p/torque/busy 샘플 |
 | `robot_virtual_test_events` | Page3 cycle_start/cycle_done/session_done 이벤트 |
@@ -295,7 +306,7 @@ deployment\windows\start_robot_controller.bat
 
 ## ✅ 왕초보 실행 가이드: 이것만 그대로 따라 하세요
 
-아래 명령어는 **Mac 기준**입니다. Windows에서 실행할 때도 원리는 같고, `cd` 경로만 본인 PC 경로에 맞추면 됩니다.
+아래 명령어는 **Windows 11 PowerShell용**과 **Mac 터미널용**을 분리했습니다. 로봇/PLC/MySQL 주소는 코드나 문서에 박아두지 않고, 반드시 `backend/.env`에 현장 값으로 직접 입력합니다.
 
 가장 많이 나는 에러는 이겁니다.
 
@@ -307,18 +318,43 @@ no configuration file provided: not found
 
 ### 0. 처음 Git에서 받는 사람
 
-이미 `/Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean` 폴더가 있으면 이 단계는 건너뛰세요.
+이미 프로젝트 폴더가 있으면 이 단계는 건너뛰세요.
+
+Windows 11 PowerShell:
+
+```powershell
+$PROJECT_DIR="$HOME\Documents\Busan_Project\Indy7_HMI_Clean"
+New-Item -ItemType Directory -Force "$HOME\Documents\Busan_Project" | Out-Null
+cd "$HOME\Documents\Busan_Project"
+git clone https://github.com/HeungJAELEE/Busan_Robot.git Indy7_HMI_Clean
+cd "$PROJECT_DIR"
+```
+
+Mac 터미널:
 
 ```bash
-cd /Users/leejaeheung/Documents/Busan_Project
+PROJECT_DIR="$HOME/Documents/Busan_Project/Indy7_HMI_Clean"
+mkdir -p "$HOME/Documents/Busan_Project"
+cd "$HOME/Documents/Busan_Project"
 git clone https://github.com/HeungJAELEE/Busan_Robot.git Indy7_HMI_Clean
-cd Indy7_HMI_Clean
+cd "$PROJECT_DIR"
 ```
 
 이미 받은 프로젝트를 최신으로 업데이트할 때는:
 
+Windows 11 PowerShell:
+
+```powershell
+$PROJECT_DIR="$HOME\Documents\Busan_Project\Indy7_HMI_Clean"
+cd "$PROJECT_DIR"
+git pull origin main
+```
+
+Mac 터미널:
+
 ```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+PROJECT_DIR="$HOME/Documents/Busan_Project/Indy7_HMI_Clean"
+cd "$PROJECT_DIR"
 git pull origin main
 ```
 
@@ -326,8 +362,22 @@ git pull origin main
 
 처음 한 번만 하면 됩니다.
 
+Windows 11 PowerShell:
+
+```powershell
+$PROJECT_DIR="$HOME\Documents\Busan_Project\Indy7_HMI_Clean"
+cd "$PROJECT_DIR"
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Mac 터미널:
+
 ```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+PROJECT_DIR="$HOME/Documents/Busan_Project/Indy7_HMI_Clean"
+cd "$PROJECT_DIR"
 
 python3 -m venv .venv
 source .venv/bin/activate
@@ -338,14 +388,35 @@ pip install -r requirements.txt
 
 다음에 다시 실행할 때는 가상환경만 켜면 됩니다.
 
+Windows 11 PowerShell:
+
+```powershell
+$PROJECT_DIR="$HOME\Documents\Busan_Project\Indy7_HMI_Clean"
+cd "$PROJECT_DIR"
+.\.venv\Scripts\Activate.ps1
+```
+
+Mac 터미널:
+
 ```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+PROJECT_DIR="$HOME/Documents/Busan_Project/Indy7_HMI_Clean"
+cd "$PROJECT_DIR"
 source .venv/bin/activate
 ```
 
 ### 2. Docker Desktop 켜기
 
 Docker 명령어를 치기 전에 Docker Desktop 앱이 켜져 있어야 합니다.
+
+Windows 11 PowerShell:
+
+```powershell
+Start-Process "Docker Desktop"
+docker version
+docker compose version
+```
+
+Mac 터미널:
 
 ```bash
 open -a Docker
@@ -372,29 +443,83 @@ check if the daemon is running
 
 반드시 `backend` 폴더로 들어가서 실행합니다.
 
-```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+Windows 11 PowerShell:
 
-cp .env.example .env
+```powershell
+$PROJECT_DIR="$HOME\Documents\Busan_Project\Indy7_HMI_Clean"
+cd "$PROJECT_DIR\backend"
+
+copy .env.example .env
+notepad .env
 
 docker compose build
-docker compose up -d message_broker db_worker digital_twin robot_controller
+docker compose up -d message_broker db_worker digital_twin
 docker compose ps
 ```
 
-`docker compose ps` 결과에서 아래 서비스들이 `Up`이면 정상입니다.
+Mac 터미널:
+
+```bash
+PROJECT_DIR="$HOME/Documents/Busan_Project/Indy7_HMI_Clean"
+cd "$PROJECT_DIR/backend"
+
+cp .env.example .env
+open -e .env
+
+docker compose build
+docker compose up -d message_broker db_worker digital_twin
+docker compose ps
+```
+
+`.env`를 열면 아래 항목을 현장 값으로 채웁니다. `<...>` 표시는 그대로 쓰는 값이 아니라 작업자가 바꿔 넣는 자리입니다.
+
+```env
+ROBOT_A_IP=<Robot_A_IP>
+ROBOT_B_IP=<Robot_B_IP>
+ROBOT_C_IP=<Robot_C_IP>
+MYSQL_HOST=<MySQL_PC_IP>
+PLC_IP=<PLC_PROCESS_IP>
+PLC_PROCESS_IP=<PLC_PROCESS_IP>
+PLC_MONITOR_IP=<PLC_MONITOR_IP>
+```
+
+`docker compose ps` 결과에서 아래 서비스들이 `Up`이면 기본 백엔드는 정상입니다.
 
 ```text
 indy7_mqtt_broker
 indy7_db_worker
 indy7_digital_twin
-indy7_robot_controller
+```
+
+실제 로봇 명령을 Docker Robot Controller로 보낼 때만 `robot_controller`를 켭니다.
+
+Windows 11 PowerShell:
+
+```powershell
+cd "$PROJECT_DIR\backend"
+docker compose up -d robot_controller
+```
+
+Mac 터미널:
+
+```bash
+cd "$PROJECT_DIR/backend"
+docker compose up -d robot_controller
 ```
 
 PLC까지 연결할 때만 `plc_bridge`를 추가로 켭니다.
 
+Windows 11 PowerShell:
+
+```powershell
+cd "$PROJECT_DIR\backend"
+docker compose up -d plc_bridge
+```
+
+Mac 터미널:
+
 ```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+cd "$PROJECT_DIR/backend"
 docker compose up -d plc_bridge
 ```
 
@@ -404,8 +529,22 @@ docker compose up -d plc_bridge
 
 새 터미널을 하나 더 열고 실행합니다.
 
+Windows 11 PowerShell:
+
+```powershell
+$PROJECT_DIR="$HOME\Documents\Busan_Project\Indy7_HMI_Clean"
+cd "$PROJECT_DIR"
+.\.venv\Scripts\Activate.ps1
+
+$env:ROBOT_CONTROL_MODE="mqtt"
+python frontend\run_ui_only.py
+```
+
+Mac 터미널:
+
 ```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+PROJECT_DIR="$HOME/Documents/Busan_Project/Indy7_HMI_Clean"
+cd "$PROJECT_DIR"
 source .venv/bin/activate
 
 ROBOT_CONTROL_MODE=mqtt python frontend/run_ui_only.py
@@ -423,8 +562,22 @@ UI는 기본적으로 무연결 모드로 켜집니다. 창이 뜬다고 해서 
 
 랩에서 UI만 테스트하거나 Docker 없이 직접 연결할 때는:
 
+Windows 11 PowerShell:
+
+```powershell
+$PROJECT_DIR="$HOME\Documents\Busan_Project\Indy7_HMI_Clean"
+cd "$PROJECT_DIR"
+.\.venv\Scripts\Activate.ps1
+
+$env:ROBOT_CONTROL_MODE="direct"
+python frontend\run_ui_only.py
+```
+
+Mac 터미널:
+
 ```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+PROJECT_DIR="$HOME/Documents/Busan_Project/Indy7_HMI_Clean"
+cd "$PROJECT_DIR"
 source .venv/bin/activate
 
 ROBOT_CONTROL_MODE=direct python frontend/run_ui_only.py
@@ -434,29 +587,67 @@ ROBOT_CONTROL_MODE=direct python frontend/run_ui_only.py
 
 Docker 서비스 상태:
 
+Windows 11 PowerShell:
+
+```powershell
+$PROJECT_DIR="$HOME\Documents\Busan_Project\Indy7_HMI_Clean"
+cd "$PROJECT_DIR\backend"
+docker compose ps
+```
+
+Mac 터미널:
+
 ```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+PROJECT_DIR="$HOME/Documents/Busan_Project/Indy7_HMI_Clean"
+cd "$PROJECT_DIR/backend"
 docker compose ps
 ```
 
 Robot Controller 로그:
 
+Windows 11 PowerShell:
+
+```powershell
+cd "$PROJECT_DIR\backend"
+docker compose logs --tail=100 robot_controller
+```
+
+Mac 터미널:
+
 ```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+cd "$PROJECT_DIR/backend"
 docker compose logs --tail=100 robot_controller
 ```
 
 실시간 로그:
 
+Windows 11 PowerShell:
+
+```powershell
+cd "$PROJECT_DIR\backend"
+docker compose logs -f robot_controller
+```
+
+Mac 터미널:
+
 ```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+cd "$PROJECT_DIR/backend"
 docker compose logs -f robot_controller
 ```
 
 전체 백엔드 중지:
 
+Windows 11 PowerShell:
+
+```powershell
+cd "$PROJECT_DIR\backend"
+docker compose down
+```
+
+Mac 터미널:
+
 ```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+cd "$PROJECT_DIR/backend"
 docker compose down
 ```
 
@@ -472,8 +663,19 @@ docker-compose.yml이 없는 폴더에서 docker compose를 실행함
 
 해결:
 
+Windows 11 PowerShell:
+
+```powershell
+$PROJECT_DIR="$HOME\Documents\Busan_Project\Indy7_HMI_Clean"
+cd "$PROJECT_DIR\backend"
+docker compose ps
+```
+
+Mac 터미널:
+
 ```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+PROJECT_DIR="$HOME/Documents/Busan_Project/Indy7_HMI_Clean"
+cd "$PROJECT_DIR/backend"
 docker compose ps
 ```
 
@@ -486,6 +688,15 @@ Docker Desktop 앱이 꺼져 있거나 아직 Engine이 켜지는 중
 ```
 
 해결:
+
+Windows 11 PowerShell:
+
+```powershell
+Start-Process "Docker Desktop"
+docker version
+```
+
+Mac 터미널:
 
 ```bash
 open -a Docker
@@ -515,20 +726,37 @@ docker version
 
 확인:
 
+Windows 11 PowerShell:
+
+```powershell
+cd "$PROJECT_DIR\backend"
+notepad .env
+```
+
+Mac 터미널:
+
 ```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+cd "$PROJECT_DIR/backend"
 nano .env
 ```
 
-Robot IP 설정:
+Robot IP 설정은 현장 값을 직접 넣습니다.
 
 ```text
-ROBOT_A_IP=192.168.3.7
-ROBOT_B_IP=192.168.3.6
-ROBOT_C_IP=192.168.3.5
+ROBOT_A_IP=<Robot_A_IP>
+ROBOT_B_IP=<Robot_B_IP>
+ROBOT_C_IP=<Robot_C_IP>
 ```
 
 현장 IP에 맞게 바꾼 뒤:
+
+Windows 11 PowerShell:
+
+```powershell
+docker compose up -d robot_controller
+```
+
+Mac 터미널:
 
 ```bash
 docker compose up -d robot_controller
@@ -536,28 +764,84 @@ docker compose up -d robot_controller
 
 ### 7. 하루 작업 시작용 복붙 세트
 
-Docker 백엔드:
+Windows 11 PowerShell:
 
-```bash
-open -a Docker
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
-docker compose up -d message_broker db_worker digital_twin robot_controller
+```powershell
+$PROJECT_DIR="$HOME\Documents\Busan_Project\Indy7_HMI_Clean"
+Start-Process "Docker Desktop"
+cd "$PROJECT_DIR\backend"
+docker compose up -d message_broker db_worker digital_twin
+docker compose up -d robot_controller
 docker compose ps
+
+cd "$PROJECT_DIR"
+.\.venv\Scripts\Activate.ps1
+$env:ROBOT_CONTROL_MODE="mqtt"
+python frontend\run_ui_only.py
 ```
 
-UI:
+Mac 터미널:
 
 ```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+PROJECT_DIR="$HOME/Documents/Busan_Project/Indy7_HMI_Clean"
+open -a Docker
+cd "$PROJECT_DIR/backend"
+docker compose up -d message_broker db_worker digital_twin
+docker compose up -d robot_controller
+docker compose ps
+
+cd "$PROJECT_DIR"
 source .venv/bin/activate
 ROBOT_CONTROL_MODE=mqtt python frontend/run_ui_only.py
 ```
 
 ### 8. 하루 작업 종료용 복붙 세트
 
-```bash
-cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+Windows 11 PowerShell:
+
+```powershell
+$PROJECT_DIR="$HOME\Documents\Busan_Project\Indy7_HMI_Clean"
+cd "$PROJECT_DIR\backend"
 docker compose down
+```
+
+Mac 터미널:
+
+```bash
+PROJECT_DIR="$HOME/Documents/Busan_Project/Indy7_HMI_Clean"
+cd "$PROJECT_DIR/backend"
+docker compose down
+```
+
+### 9. 작업자가 당황하기 쉬운 포인트
+
+아래 항목은 실제 현장 PC에서 앱을 켰을 때 자주 생기는 문제와 확인 방법입니다.
+
+| 상황 | 원인 | 확인/조치 |
+|---|---|---|
+| Docker 빌드는 됐는데 UI가 안 뜸 | Docker는 백엔드만 실행함 | 별도 터미널에서 `python frontend/run_ui_only.py` 실행 |
+| `no configuration file provided` | `backend` 폴더가 아닌 곳에서 Docker 명령 실행 | `$PROJECT_DIR/backend`로 이동 후 실행 |
+| DB 저장이 안 됨 | `backend/.env`의 `MYSQL_HOST`가 비어 있거나 DB 권한 없음 | Page3 `DB 연결 확인`, `docker compose logs db_worker` 확인 |
+| 로봇 연결 timeout | `.env`의 Robot IP가 비어 있거나 PC가 로봇망에 없음 | `ROBOT_A_IP/B_IP/C_IP`와 PC 네트워크 확인 |
+| PLC 로그가 안 들어옴 | `PLC_IP`, `PLC_PROCESS_IP`, `PLC_MONITOR_IP` 미설정 | PLC를 쓸 때만 `.env`에 현장 주소 입력 |
+| Page1 웹 모니터가 다른 PC에서 안 열림 | 방화벽 또는 PC IP 착각 | 로봇 컨트롤러 PC에서 `docker compose ps`, 다른 PC에서는 `http://<로봇컨트롤러_PC_IP>:8080` |
+| Jog 한 번 후 다음 입력이 안 됨 | Jog 시작 중 예외 발생 시 내부 플래그가 남는 문제 | 현재 버전에서 `is_jogging` 복구 로직 추가됨. 실제 로봇 연결 후 press/release 테스트 필요 |
+| Page3 반복 카운트가 이상함 | 시간 기준이 아니라 cycle_done 완료 이벤트 기준이어야 함 | 현재 `cycle_index/repeat_count`를 완료 이벤트 기준으로 저장 |
+| JSON 이식 후 높이가 이상함 | APK JSON 거리 단위는 m, UI 표시는 mm | 현재 0.08은 UI 80mm로 표시/저장되며 JSON에는 0.08로 유지 |
+
+배포 후 첫 현장 검증 순서:
+
+```text
+1. backend/.env 주소 입력
+2. docker compose up -d message_broker db_worker digital_twin
+3. 웹 모니터 http://localhost:8080 확인
+4. UI 실행
+5. 로봇 통신 연결
+6. Home/Zero 단발 명령
+7. Jog press/release 1축씩 확인
+8. Page2 JSON Play(가상)
+9. Page3 Dry Run Recording 1회
+10. MySQL robot_process_angle_log / robot_dry_run_realtime_samples 확인
 ```
 
 ---
@@ -1186,9 +1470,31 @@ frontend/logs/robot_diagnostic_data/
 MySQL 테이블:
 
 ```text
+robot_process_angle_log         -- 투입일자/시간, Robot A/B/C, A Place/B Place/C Pick 1~6축 각도
+robot_dry_run_realtime_samples  -- Dry Run 반복횟수, 1~6축 각도/토크, XYZ, robot_speed
 robot_virtual_test_sessions  -- 세션 시작/종료, 목표 횟수, 프로그램 경로
 robot_virtual_test_samples   -- 100ms 단위 관절/좌표/토크 패턴
 robot_virtual_test_events    -- cycle_start, cycle_done, session_done 등 이벤트
+```
+
+현장 분석용 핵심 컬럼:
+
+```text
+robot_process_angle_log
+- input_date: 20260519 형식
+- input_time: 21:31:24 형식
+- robot_kind: A / B / C
+- a_place_j1~a_place_j6: Robot A Place 완료 시점 각도
+- b_place_j1~b_place_j6: Robot B Place 완료 시점 각도
+- c_pick_j1~c_pick_j6: Robot C Pick 완료 시점 각도
+
+robot_dry_run_realtime_samples
+- robot_kind: A / B / C
+- repeat_count: 현재 반복 횟수
+- q1~q6: Robot 각도
+- tq1~tq6: Robot 토크
+- x, y, z: Robot TCP 위치
+- robot_speed: 직전 샘플 대비 TCP 이동 속도(mm/s)
 ```
 
 MQTT 연동 토픽:

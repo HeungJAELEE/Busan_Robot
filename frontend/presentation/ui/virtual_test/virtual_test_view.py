@@ -97,6 +97,37 @@ class VirtualTestRecorder:
             ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
             """,
         )
+        self._ensure_table(
+            "robot_dry_run_realtime_samples",
+            """
+            CREATE TABLE IF NOT EXISTS robot_dry_run_realtime_samples (
+                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                session_id VARCHAR(96),
+                sample_index INT DEFAULT 0,
+                recorded_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+                robot_kind CHAR(1) NOT NULL,
+                repeat_count INT DEFAULT 1,
+                q1 DOUBLE,
+                q2 DOUBLE,
+                q3 DOUBLE,
+                q4 DOUBLE,
+                q5 DOUBLE,
+                q6 DOUBLE,
+                tq1 DOUBLE,
+                tq2 DOUBLE,
+                tq3 DOUBLE,
+                tq4 DOUBLE,
+                tq5 DOUBLE,
+                tq6 DOUBLE,
+                x DOUBLE,
+                y DOUBLE,
+                z DOUBLE,
+                robot_speed DOUBLE DEFAULT 0,
+                INDEX idx_dry_run_session (session_id, sample_index),
+                INDEX idx_dry_run_robot_time (robot_kind, recorded_at)
+            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+            """,
+        )
 
     def _table_exists(self, table_name):
         with self.conn.cursor() as cursor:
@@ -157,6 +188,29 @@ class VirtualTestRecorder:
         while len(result) < 6:
             result.append(0.0)
         return [float(v or 0.0) for v in result]
+
+    @staticmethod
+    def _robot_kind(robot_id):
+        text = str(robot_id or "").strip().upper()
+        if "ROBOT A" in text or text.endswith(" A") or text == "A":
+            return "A"
+        if "ROBOT B" in text or text.endswith(" B") or text == "B":
+            return "B"
+        if "ROBOT C" in text or text.endswith(" C") or text == "C":
+            return "C"
+        return text[-1:] if text[-1:] in ("A", "B", "C") else text
+
+    @staticmethod
+    def _payload_speed(payload):
+        payload = payload or {}
+        for key in ("robot_speed", "speed", "speed_mm_s", "tcp_speed", "speed_ratio"):
+            try:
+                value = payload.get(key)
+                if value is not None:
+                    return float(value or 0.0)
+            except (TypeError, ValueError):
+                pass
+        return 0.0
 
     def _worker_loop(self):
         while self.running:
@@ -300,6 +354,7 @@ class VirtualTestRecorder:
             cursor.execute(query, values)
 
     def _insert_sample(self, payload):
+        self._insert_dry_run_realtime_sample(payload)
         cols = self._columns("robot_virtual_test_samples")
         if "data" in cols:
             sample_id = payload.get("sample_id")
@@ -343,6 +398,45 @@ class VirtualTestRecorder:
             *q,
             *p,
             *tq,
+        )
+        with self.conn.cursor() as cursor:
+            cursor.execute(query, values)
+
+    def _insert_dry_run_realtime_sample(self, payload):
+        q = self._six(payload.get("q") or payload.get("joint_pos") or payload.get("j_pos"))
+        p = self._six(payload.get("p") or payload.get("task_pos") or payload.get("xyz"))
+        tq = self._six(payload.get("torque") or payload.get("tq"))
+        try:
+            repeat_count = int(payload.get("repeat_count") or payload.get("cycle_index") or 1)
+        except (TypeError, ValueError):
+            repeat_count = 1
+        try:
+            sample_index = int(payload.get("sample_index") or 0)
+        except (TypeError, ValueError):
+            sample_index = 0
+        query = """
+            INSERT INTO robot_dry_run_realtime_samples
+              (session_id, sample_index, recorded_at, robot_kind, repeat_count,
+               q1, q2, q3, q4, q5, q6,
+               tq1, tq2, tq3, tq4, tq5, tq6,
+               x, y, z, robot_speed)
+            VALUES
+              (%s, %s, NOW(3), %s, %s,
+               %s, %s, %s, %s, %s, %s,
+               %s, %s, %s, %s, %s, %s,
+               %s, %s, %s, %s)
+        """
+        values = (
+            payload.get("session_id", ""),
+            sample_index,
+            self._robot_kind(payload.get("robot_id")),
+            max(1, repeat_count),
+            *q,
+            *tq,
+            p[0],
+            p[1],
+            p[2],
+            self._payload_speed(payload),
         )
         with self.conn.cursor() as cursor:
             cursor.execute(query, values)
@@ -579,6 +673,8 @@ class VirtualTestView:
 
         table_info = (
             "저장 테이블(내부명)\n"
+            "robot_process_angle_log\n"
+            "robot_dry_run_realtime_samples\n"
             "robot_virtual_test_sessions\n"
             "robot_virtual_test_samples\n"
             "robot_virtual_test_events"

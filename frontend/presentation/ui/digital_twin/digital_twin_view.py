@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from matplotlib import colors as mcolors
+from matplotlib import font_manager
 from core.domains.robot.communication.client_manager import robot_manager
 import math
 from presentation.ui.theme import Theme
@@ -145,7 +146,9 @@ class DigitalTwinView:
         self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
         self.ax = self.fig.add_subplot(111, projection='3d')
         self.ax.set_facecolor(Theme.BG_CANVAS)
-        plt.rcParams["font.family"] = ["AppleGothic", "Malgun Gothic", "NanumGothic", "DejaVu Sans"]
+        available_fonts = {font.name for font in font_manager.fontManager.ttflist}
+        preferred_fonts = ["AppleGothic", "Malgun Gothic", "NanumGothic", "DejaVu Sans"]
+        plt.rcParams["font.family"] = [font for font in preferred_fonts if font in available_fonts] or ["DejaVu Sans"]
         plt.rcParams["axes.unicode_minus"] = False
         
         for pane in (self.ax.xaxis, self.ax.yaxis, self.ax.zaxis):

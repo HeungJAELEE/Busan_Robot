@@ -121,6 +121,7 @@ class JogController:
                 self._jog_robot_name = self._activate_selected_robot()
                 if not RobotControlUseCase.set_velocity_level(vel_level, is_joint, self._jog_robot_name):
                     self.is_jogging = False
+                    self._jog_robot_name = None
                     return
                 
                 # 2. 기존 방식: 긴 상대 이동을 한 번 보내고 버튼 release에서 stop_motion으로 끊는다.
@@ -136,6 +137,8 @@ class JogController:
                     self.parent.after_cancel(self.jog_sync_id)
                 _sync_robot_pos()
             except Exception as e:
+                self.is_jogging = False
+                self._jog_robot_name = None
                 print(f"조그 시작 에러: {e}")
                 
         def stop_jog(event, ax):

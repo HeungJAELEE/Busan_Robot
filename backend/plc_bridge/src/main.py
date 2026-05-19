@@ -54,8 +54,14 @@ class PlcConnection:
         self.reconnect_interval = reconnect_interval
         self.client = None
         self.last_attempt = 0.0
+        self.missing_ip_warned = False
 
     def ensure_connected(self) -> bool:
+        if not str(self.ip or "").strip():
+            if not self.missing_ip_warned:
+                print(f" -> PLC {self.name} IP 미설정: .env에 PLC 주소를 입력하면 감시를 시작합니다.")
+                self.missing_ip_warned = True
+            return False
         if self.client is not None:
             return True
         now = time.time()
@@ -104,9 +110,9 @@ def _parse_int(name: str, default: int) -> int:
 
 def _build_connections() -> Dict[str, PlcConnection]:
     default_port = _parse_int("PLC_PORT", 2000)
-    process_ip = os.getenv("PLC_PROCESS_IP", os.getenv("PLC_IP", "192.168.3.150"))
+    process_ip = os.getenv("PLC_PROCESS_IP", os.getenv("PLC_IP", ""))
     process_port = _parse_int("PLC_PROCESS_PORT", default_port)
-    monitor_ip = os.getenv("PLC_MONITOR_IP", "192.168.3.160")
+    monitor_ip = os.getenv("PLC_MONITOR_IP", "")
     monitor_port = _parse_int("PLC_MONITOR_PORT", default_port)
 
     connections = {

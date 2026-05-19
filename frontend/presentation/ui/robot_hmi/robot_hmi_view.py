@@ -2154,6 +2154,18 @@ class ProgramTreeEditor:
 
         def _publish_task_done(payload):
             payload = dict(payload)
+            if not payload.get("q") and not payload.get("joint_pos"):
+                try:
+                    active_inst = _exec_inst()
+                    if active_inst and hasattr(active_inst, "get_joint_pos"):
+                        joint_pos = active_inst.get_joint_pos()
+                        if isinstance(joint_pos, (list, tuple)) and len(joint_pos) >= 6:
+                            payload["q"] = [float(v or 0.0) for v in joint_pos[:6]]
+                            payload["joint_pos"] = payload["q"]
+                except Exception:
+                    pass
+            payload["pc_speed_scale"] = float(getattr(self, "pc_execution_speed_scale", 1.0) or 1.0)
+            payload["completed_at"] = datetime.datetime.now().isoformat(timespec="milliseconds")
             payload["dry_run"] = dry_run
             payload["virtual_session_id"] = virtual_session_id
             payload["virtual_cycle_index"] = int(getattr(self, "_virtual_cycle_index", 0) or 0)

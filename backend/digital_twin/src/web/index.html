@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>INDY7 Process Twin Monitor</title>
+  <style>
+    :root {
+      --bg: #eceee9;
+      --panel: rgba(255, 255, 252, 0.86);
+      --line: rgba(119, 130, 122, 0.20);
+      --text: #202724;
+      --muted: #69736e;
+      --rail: #252b2a;
+      --a: #89d5a5;
+      --b: #9bc8ef;
+      --c: #efa39c;
+      --warn: #f2b24b;
+      --danger: #f07f75;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(255,255,255,0.85), transparent 34%),
+        linear-gradient(135deg, #f5f6f1 0%, var(--bg) 48%, #d9ded7 100%);
+      color: var(--text);
+      font-family: Inter, "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+      overflow: hidden;
+    }
+    .topbar {
+      position: fixed;
+      left: 18px;
+      top: 14px;
+      right: 18px;
+      z-index: 4;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      pointer-events: none;
+    }
+    .title {
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 12px 36px rgba(44, 54, 48, 0.13);
+      backdrop-filter: blur(10px);
+    }
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+    .subtitle {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .chip {
+      min-width: 74px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 10px 30px rgba(44, 54, 48, 0.10);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      text-align: center;
+    }
+    .chip strong { color: var(--text); }
+    .stage {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: stretch;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .legend {
+      position: fixed;
+      right: 22px;
+      bottom: 20px;
+      width: 260px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 16px 44px rgba(44, 54, 48, 0.16);
+      backdrop-filter: blur(10px);
+      z-index: 4;
+    }
+    .legend h2 {
+      margin: 0 0 8px;
+      font-size: 13px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 74px 1fr;
+      gap: 8px;
+      align-items: baseline;
+      margin: 6px 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.3;
+    }
+    .row b { color: var(--text); }
+    .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 5px;
+      vertical-align: 1px;
+    }
+    .events {
+      position: fixed;
+      left: 22px;
+      bottom: 20px;
+      width: min(480px, calc(100vw - 320px));
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(255, 255, 252, 0.78);
+      border: 1px solid var(--line);
+      box-shadow: 0 16px 44px rgba(44, 54, 48, 0.12);
+      color: var(--muted);
+      font-size: 12px;
+      z-index: 4;
+    }
+    .events b { color: var(--text); }
+    .eventline {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 5px;
+    }
+    @media (max-width: 900px) {
+      .topbar { align-items: flex-start; }
+      h1 { font-size: 17px; }
+      .legend { width: calc(100vw - 36px); right: 18px; bottom: 16px; }
+      .events { display: none; }
+      .chips { max-width: 44vw; }
+      .chip { min-width: 62px; padding: 7px 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="title">
+      <h1>INDY7 Toy Car Process Twin</h1>
+      <div class="subtitle">Robot A 차체 결합 · Robot B 전면 유리 조립 · Robot C 양품 배출</div>
+    </div>
+    <div class="chips">
+      <div class="chip" id="wsChip"><strong>LIVE</strong> 연결중</div>
+      <div class="chip"><strong>Rail</strong> 100mm</div>
+      <div class="chip"><strong>Gap</strong> 1850mm</div>
+      <div class="chip"><strong>Mode</strong> Read Only</div>
+    </div>
+  </div>
+  <div class="stage">
+    <canvas id="scene"></canvas>
+  </div>
+  <div class="events">
+    <b>최근 이벤트</b>
+    <div id="events"></div>
+  </div>
+  <div class="legend">
+    <h2>상태</h2>
+    <div class="row"><b><span class="dot" style="background:var(--a)"></span>Robot A</b><span id="aState">대기</span></div>
+    <div class="row"><b><span class="dot" style="background:var(--b)"></span>Robot B</b><span id="bState">대기</span></div>
+    <div class="row"><b><span class="dot" style="background:var(--c)"></span>Robot C</b><span id="cState">대기</span></div>
+    <div class="row"><b>좌표계</b><span>X=레일 방향 앞/뒤, Y=로봇 라인, Z=높이</span></div>
+  </div>
+  <script>
+    const canvas = document.getElementById("scene");
+    const ctx = canvas.getContext("2d");
+    const wsChip = document.getElementById("wsChip");
+    const eventsBox = document.getElementById("events");
+
+    const robots = {
+      "Robot A": { y: -1.85, color: "#89d5a5", stateId: "aState", q: [7.7, -29.0, -87.2, 0.1, -64.3, 7.5], p: [], trail: [], connected: false },
+      "Robot B": { y: 0.00, color: "#9bc8ef", stateId: "bState", q: [-4.0, -33.7, -96.0, -28.6, -54.8, 13.0], p: [], trail: [], connected: false },
+      "Robot C": { y: 1.85, color: "#efa39c", stateId: "cState", q: [7.7, -29.0, -87.2, 0.1, -64.3, 7.5], p: [], trail: [], connected: false },
+    };
+    const labels = {
+      "Robot A": "차체 결합",
+      "Robot B": "전면 유리 조립",
+      "Robot C": "양품 배출",
+    };
+    const dh = [
+      {a: 0.0, alpha: 0.0, d: 0.3, theta: 0.0},
+      {a: 0.0, alpha: Math.PI / 2, d: 0.0, theta: Math.PI / 2},
+      {a: 0.45, alpha: 0.0, d: 0.0035, theta: Math.PI / 2},
+      {a: 0.0, alpha: Math.PI / 2, d: 0.35, theta: Math.PI},
+      {a: 0.0, alpha: Math.PI / 2, d: 0.1835, theta: 0.0},
+      {a: 0.0, alpha: -Math.PI / 2, d: 0.228, theta: 0.0},
+    ];
+    const recentEvents = [];
+    let scale = 175;
+    let center = { x: 0, y: 0 };
+    let dpr = 1;
+
+    function resize() {
+      dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+      canvas.width = Math.floor(innerWidth * dpr);
+      canvas.height = Math.floor(innerHeight * dpr);
+      canvas.style.width = `${innerWidth}px`;
+      canvas.style.height = `${innerHeight}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      scale = Math.max(120, Math.min(innerWidth / 6.0, innerHeight / 3.6));
+      center = { x: innerWidth * 0.52, y: innerHeight * 0.58 };
+    }
+
+    function matMul(a, b) {
+      const out = Array.from({ length: 4 }, () => [0, 0, 0, 0]);
+      for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+        out[r][c] = a[r][0] * b[0][c] + a[r][1] * b[1][c] + a[r][2] * b[2][c] + a[r][3] * b[3][c];
+      }
+      return out;
+    }
+
+    function transformPoint(m, p) {
+      return [
+        m[0][0] * p[0] + m[0][1] * p[1] + m[0][2] * p[2] + m[0][3],
+        m[1][0] * p[0] + m[1][1] * p[1] + m[1][2] * p[2] + m[1][3],
+        m[2][0] * p[0] + m[2][1] * p[1] + m[2][2] * p[2] + m[2][3],
+      ];
+    }
+
+    function fk(q, offsetY) {
+      let t = [[1,0,0,0], [0,1,0,0], [0,0,1,0], [0,0,0,1]];
+      const mats = [t];
+      for (let i = 0; i < 6; i++) {
+        const th = (Number(q[i] || 0) * Math.PI / 180) + dh[i].theta;
+        const a = dh[i].a, al = dh[i].alpha, d = dh[i].d;
+        const ct = Math.cos(th), st = Math.sin(th), ca = Math.cos(al), sa = Math.sin(al);
+        const ti = [
+          [ct, -st, 0, a],
+          [st * ca, ct * ca, -sa, -d * sa],
+          [st * sa, ct * sa, ca, d * ca],
+          [0, 0, 0, 1],
+        ];
+        t = matMul(t, ti);
+        mats.push(t);
+      }
+      const p = [];
+      p.push(transformPoint(mats[0], [0, 0, 0]));
+      p.push(transformPoint(mats[1], [0, 0, 0]));
+      p.push(transformPoint(mats[2], [0, 0, 0.1835]));
+      p.push(transformPoint(mats[3], [0, 0, 0.1835]));
+      p.push(transformPoint(mats[3], [0, 0, 0]));
+      p.push(transformPoint(mats[4], [0, 0, 0]));
+      p.push(transformPoint(mats[5], [0, 0, 0]));
+      p.push(transformPoint(mats[6], [0, 0, 0.21]));
+      return p.map(v => ({ x: v[0], y: v[1] + offsetY, z: Math.max(0, v[2]) }));
+    }
+
+    function iso(p) {
+      return {
+        x: center.x + (p.y * 0.92 + p.x * 0.68) * scale,
+        y: center.y + (p.y * 0.24 - p.x * 0.34) * scale - p.z * scale * 0.96,
+      };
+    }
+
+    function poly(points, fill, stroke = "rgba(75,82,78,.22)", lw = 1) {
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        const s = iso(p);
+        if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = lw;
+        ctx.stroke();
+      }
+    }
+
+    function line3(points, color, lw = 2, alpha = 1) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lw;
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        const s = iso(p);
+        if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+      });
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function box(center, size, fill, stroke) {
+      const x = center.x, y = center.y, z = center.z;
+      const sx = size.x / 2, sy = size.y / 2, sz = size.z / 2;
+      const top = [
+        {x:x-sx,y:y-sy,z:z+sz}, {x:x+sx,y:y-sy,z:z+sz},
+        {x:x+sx,y:y+sy,z:z+sz}, {x:x-sx,y:y+sy,z:z+sz},
+      ];
+      const side1 = [
+        {x:x+sx,y:y-sy,z:z+sz}, {x:x+sx,y:y+sy,z:z+sz},
+        {x:x+sx,y:y+sy,z:z-sz}, {x:x+sx,y:y-sy,z:z-sz},
+      ];
+      const side2 = [
+        {x:x-sx,y:y+sy,z:z+sz}, {x:x+sx,y:y+sy,z:z+sz},
+        {x:x+sx,y:y+sy,z:z-sz}, {x:x-sx,y:y+sy,z:z-sz},
+      ];
+      poly(side1, shade(fill, -12), stroke);
+      poly(side2, shade(fill, -7), stroke);
+      poly(top, fill, stroke);
+    }
+
+    function shade(hex, pct) {
+      const n = parseInt(hex.replace("#", ""), 16);
+      let r = (n >> 16) + pct, g = ((n >> 8) & 255) + pct, b = (n & 255) + pct;
+      r = Math.max(0, Math.min(255, r)); g = Math.max(0, Math.min(255, g)); b = Math.max(0, Math.min(255, b));
+      return `rgb(${r},${g},${b})`;
+    }
+
+    function drawText3(text, p, opts = {}) {
+      const s = iso(p);
+      ctx.save();
+      ctx.font = opts.font || "800 13px Inter, sans-serif";
+      ctx.textAlign = opts.align || "center";
+      ctx.fillStyle = opts.color || "#202724";
+      ctx.shadowColor = "rgba(255,255,255,.88)";
+      ctx.shadowBlur = 8;
+      ctx.fillText(text, s.x, s.y);
+      ctx.restore();
+    }
+
+    function drawCar(x, y, color, good = true) {
+      box({x, y, z: .17}, {x: .16, y: .30, z: .055}, color, "rgba(95,105,99,.18)");
+      box({x: x - .006, y: y + .025, z: .215}, {x: .12, y: .13, z: .045}, shade(color, 8), "rgba(95,105,99,.18)");
+      if (good) box({x: x + .002, y: y - .02, z: .245}, {x: .10, y: .045, z: .018}, "#cfefff", "rgba(112,160,185,.28)");
+      for (const wx of [-.075, .075]) for (const wy of [-.105, .105]) {
+        const s = iso({x: x + wx, y: y + wy, z: .13});
+        ctx.beginPath(); ctx.arc(s.x, s.y, 3.5, 0, Math.PI * 2); ctx.fillStyle = "#5d6662"; ctx.fill();
+      }
+    }
+
+    function drawSceneBase() {
+      const railX = .55, railW = .10, yMin = -2.95, yMax = 2.40, yCenter = (yMin + yMax) / 2;
+      box({x: .55, y: yCenter, z: .01}, {x: .92, y: 5.7, z: .02}, "#f9faf7", "rgba(121,132,124,.16)");
+      for (let i = 0; i < 16; i++) {
+        const y = yMin + .25 + i * ((yMax - yMin - .5) / 15);
+        box({x: railX, y, z: .075}, {x: .30, y: .025, z: .018}, "#d7ddd6", "rgba(160,170,162,.18)");
+      }
+      box({x: railX, y: yCenter, z: .105}, {x: railW, y: yMax - yMin, z: .045}, "#252b2a", "#252b2a");
+      box({x: railX - .095, y: yCenter, z: .14}, {x: .025, y: yMax - yMin + .08, z: .05}, "#8d9690", "rgba(80,88,83,.24)");
+      box({x: railX + .095, y: yCenter, z: .14}, {x: .025, y: yMax - yMin + .08, z: .05}, "#8d9690", "rgba(80,88,83,.24)");
+      for (const [name, r] of Object.entries(robots)) {
+        box({x: railX, y: r.y, z: .16}, {x: .30, y: .58, z: .010}, `${r.color}44`, `${r.color}88`);
+        box({x: 0, y: r.y, z: .045}, {x: .28, y: .28, z: .06}, "#fdfdf9", "rgba(100,110,103,.20)");
+        drawText3(`${name} · ${labels[name]}`, {x: .04, y: r.y - .37, z: .70}, {color: "#26302b"});
+      }
+      drawCar(railX, -1.85, "#f2b9b4", false);
+      drawCar(railX, 0, "#b9def7", true);
+      drawCar(railX, 1.85, "#b9ecd0", true);
+      drawCar(railX, 2.28, "#f3d96d", true);
+    }
+
+    function drawRobot(name, r) {
+      const pts = fk(r.q || [], r.y);
+      const trailPts = r.trail.map(v => ({ x: Number(v[0] || 0), y: Number(v[1] || 0) + r.y, z: Number(v[2] || 0) }));
+      if (trailPts.length > 1) line3(trailPts, r.color, 2, .38);
+      line3(pts, "rgba(155,165,158,.52)", 16, .75);
+      line3(pts, "#fdfdf9", 11, .98);
+      line3(pts, r.color, 2.1, .72);
+      for (const idx of [0, 2, 3, 4, 5, 6]) {
+        const s = iso(pts[idx]);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, idx === 0 ? 8 : 6, 0, Math.PI * 2);
+        ctx.fillStyle = "#fdfdf9";
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = r.color;
+        ctx.stroke();
+      }
+      const tcp = pts[pts.length - 1];
+      const st = iso(tcp);
+      ctx.beginPath();
+      ctx.arc(st.x, st.y, 6.5, 0, Math.PI * 2);
+      ctx.fillStyle = r.color;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#ffffff";
+      ctx.stroke();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, innerWidth, innerHeight);
+      ctx.fillStyle = "rgba(255,255,255,.22)";
+      for (let i = 0; i < 14; i++) {
+        const y = -3.2 + i * .46;
+        line3([{x:-.25,y,z:0}, {x:1.05,y,z:0}], "rgba(132,142,135,.18)", 1, 1);
+      }
+      drawSceneBase();
+      Object.entries(robots).forEach(([name, r]) => drawRobot(name, r));
+      requestAnimationFrame(draw);
+    }
+
+    function setState(name, text, connected) {
+      const r = robots[name];
+      if (!r) return;
+      r.connected = connected ?? r.connected;
+      const el = document.getElementById(r.stateId);
+      if (el) el.textContent = text;
+    }
+
+    function applyRealtime(payload) {
+      if (!payload || !payload.robot_id || !robots[payload.robot_id]) return;
+      const r = robots[payload.robot_id];
+      if (Array.isArray(payload.q) && payload.q.length >= 6) r.q = payload.q.map(Number);
+      if (Array.isArray(payload.p) && payload.p.length >= 3) {
+        r.p = payload.p.map(Number);
+        r.trail.push([r.p[0], r.p[1], r.p[2]]);
+        if (r.trail.length > 130) r.trail.splice(0, r.trail.length - 130);
+      }
+      const status = payload.status || {};
+      const flags = [];
+      if (status.busy || payload.busy) flags.push("동작중");
+      if (status.error) flags.push("에러");
+      if (status.collision) flags.push("충돌");
+      setState(payload.robot_id, flags.length ? flags.join(" · ") : "실시간 수신", true);
+    }
+
+    function addEvent(topic, payload) {
+      const time = new Date(((payload && payload.created_at) || Date.now() / 1000) * 1000).toLocaleTimeString();
+      const robot = payload && payload.robot_id ? payload.robot_id : "System";
+      const msg = payload && (payload.message || payload.type || payload.event || payload.status) || topic;
+      recentEvents.unshift(`${time} · ${robot} · ${msg}`);
+      recentEvents.splice(5);
+      eventsBox.innerHTML = recentEvents.map(v => `<div class="eventline">${escapeHtml(v)}</div>`).join("");
+    }
+
+    function escapeHtml(text) {
+      return String(text).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;" }[ch]));
+    }
+
+    function handleMessage(message) {
+      const topic = message.topic;
+      const payload = message.payload;
+      if (topic === "digital_twin/snapshot") {
+        for (const data of Object.values(payload.robots || {})) applyRealtime(data);
+        for (const [name, conn] of Object.entries(payload.connections || {})) {
+          if (robots[name]) setState(name, conn.connected ? "연결됨" : (conn.status || "대기"), !!conn.connected);
+        }
+        for (const ev of payload.events || []) addEvent(ev.topic, ev.payload);
+        return;
+      }
+      if (topic === "robot/realtime") applyRealtime(payload);
+      if (topic === "robot/connection") {
+        const name = payload.robot_id;
+        if (robots[name]) setState(name, payload.connected ? "연결됨" : (payload.status || "대기"), !!payload.connected);
+      }
+      if (topic !== "robot/realtime") addEvent(topic, payload);
+    }
+
+    function connectWs() {
+      const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${protocol}//${location.host}/ws`);
+      ws.onopen = () => { wsChip.innerHTML = "<strong>LIVE</strong> 연결됨"; };
+      ws.onclose = () => {
+        wsChip.innerHTML = "<strong>LIVE</strong> 재연결";
+        setTimeout(connectWs, 1500);
+      };
+      ws.onerror = () => { wsChip.innerHTML = "<strong>LIVE</strong> 오류"; };
+      ws.onmessage = (event) => {
+        try { handleMessage(JSON.parse(event.data)); } catch (e) {}
+      };
+    }
+
+    window.addEventListener("resize", resize);
+    resize();
+    connectWs();
+    draw();
+  </script>
+</body>
+</html>

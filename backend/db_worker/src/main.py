@@ -51,6 +51,7 @@ def main():
     mqtt_client = MqttManager(broker_ip=broker_ip, port=broker_port, client_id="db_worker")
     mqtt_client.subscribe("robot/realtime", on_realtime_data)
     mqtt_client.subscribe("robot/task_done", on_task_done)
+    mqtt_client.subscribe("robot/dry_run_task_done", on_task_done)
     mqtt_client.subscribe("robot/result", on_robot_result)
     mqtt_client.subscribe("robot/virtual_test_sample", on_virtual_test_sample)
     mqtt_client.subscribe("robot/virtual_test_event", on_virtual_test_event)

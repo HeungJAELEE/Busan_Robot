@@ -90,16 +90,16 @@ def env_first_int(names, default):
 def robot_defaults():
     return {
         "Robot A": {
-            "ip": env_first(("ROBOT_A_IP", "ROBOT_IP"), "192.168.3.7"),
-            "plc_ip": env_first(("ROBOT_A_PLC_IP", "PLC_PROCESS_IP", "PLC_IP"), "192.168.3.150"),
+            "ip": env_first(("ROBOT_A_IP", "ROBOT_IP"), ""),
+            "plc_ip": env_first(("ROBOT_A_PLC_IP", "PLC_PROCESS_IP", "PLC_IP"), ""),
         },
         "Robot B": {
-            "ip": env_str("ROBOT_B_IP", "192.168.3.6"),
-            "plc_ip": env_first(("ROBOT_B_PLC_IP", "PLC_B_IP"), "192.168.3.140"),
+            "ip": env_str("ROBOT_B_IP", ""),
+            "plc_ip": env_first(("ROBOT_B_PLC_IP", "PLC_B_IP"), ""),
         },
         "Robot C": {
-            "ip": env_str("ROBOT_C_IP", "192.168.3.5"),
-            "plc_ip": env_first(("ROBOT_C_PLC_IP", "PLC_C_IP"), "192.168.3.120"),
+            "ip": env_str("ROBOT_C_IP", ""),
+            "plc_ip": env_first(("ROBOT_C_PLC_IP", "PLC_C_IP"), ""),
         },
     }
 
@@ -122,9 +122,9 @@ def mqtt_config():
 
 def plc_config():
     return {
-        "process_ip": env_first(("PLC_PROCESS_IP", "PLC_IP"), "192.168.3.150"),
+        "process_ip": env_first(("PLC_PROCESS_IP", "PLC_IP"), ""),
         "process_port": env_first_int(("PLC_PROCESS_PORT", "PLC_PORT"), 2000),
-        "monitor_ip": env_str("PLC_MONITOR_IP", "192.168.3.160"),
+        "monitor_ip": env_str("PLC_MONITOR_IP", ""),
         "monitor_port": env_int("PLC_MONITOR_PORT", 2000),
         "start_device": env_str("PLC_PROCESS_START_DEVICE", "X11"),
         "stop_device": env_str("PLC_PROCESS_STOP_DEVICE", "X12"),
@@ -136,7 +136,7 @@ def plc_config():
 
 def mysql_config():
     return {
-        "host": env_first(("DB_HOST", "MYSQL_HOST"), "192.168.3.141"),
+        "host": env_first(("DB_HOST", "MYSQL_HOST"), ""),
         "port": env_first_int(("DB_PORT", "MYSQL_PORT"), 3306),
         "user": env_first(("DB_USER", "MYSQL_USER"), "guest"),
         "password": env_first(("DB_PASS", "MYSQL_PASSWORD"), "guest1234"),

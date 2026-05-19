@@ -28,6 +28,11 @@ cp .env.example .env
 docker compose build
 docker compose up -d message_broker db_worker digital_twin
 
+# Page 1 웹 모니터 확인
+# 로봇 컨트롤러 PC: http://localhost:8080
+# 내부망 다른 PC:  http://<Robot Controller PC IPv4>:8080
+# 상태 JSON:       http://<Robot Controller PC IPv4>:8080/health
+
 # 실제 로봇/PLC 연결이 필요할 때 추가 실행
 docker compose up -d robot_controller plc_bridge
 
@@ -79,10 +84,11 @@ backend/
 │   └── tests/
 │       └── test_robot_controller.py
 │
-├── digital_twin/                   # 🌍 서비스 2: 디지털 트윈
-│   ├── requirements.txt            # paho-mqtt, websockets
+├── digital_twin/                   # 🌍 서비스 2: 디지털 트윈 웹 모니터
+│   ├── requirements.txt            # paho-mqtt, aiohttp
 │   ├── src/
-│   │   ├── main.py                 # 웹소켓 서버 + MQTT 구독
+│   │   ├── main.py                 # HTTP/WebSocket 서버 + MQTT 구독
+│   │   ├── web/index.html          # 내부망 브라우저용 Page 1 읽기 전용 화면
 │   │   ├── domain/                 # 클라이언트 세션 관리
 │   │   └── infrastructure/
 │   │       └── mqtt_manager.py
@@ -134,10 +140,10 @@ sequenceDiagram
 
     Note over B: 가장 먼저 실행 (주소 허브)
     R->>B: connect() & subscribe("robot/command")
-    R->>Robot: IndyDCP 소켓 연결 (192.168.3.7)
+    R->>Robot: IndyDCP 소켓 연결 (.env ROBOT_A/B/C_IP)
     
     P->>B: connect()
-    P->>PLC: 소켓 연결 (192.168.3.39:5000)
+    P->>PLC: 소켓 연결 (.env PLC_PROCESS_IP / PLC_MONITOR_IP)
     
     V->>B: connect() & subscribe("robot/realtime")
     
@@ -145,7 +151,7 @@ sequenceDiagram
     D->>MySQL: DB 연결
     
     T->>B: connect() & subscribe("robot/realtime")
-    Note over T: WebSocket 서버 오픈 (8080)
+    Note over T: Web Monitor + WebSocket 서버 오픈 (8080)
     
     Note over R,T: 모든 서비스 준비 완료 — 무한 폴링 루프 진입
 ```
@@ -159,7 +165,7 @@ sequenceDiagram
     participant B as 📡 중앙 통신 허브
     participant DW as DB Worker
     participant DT as Digital Twin
-    participant Web as Browser 3D
+    participant Web as Browser Page 1 Web Monitor
 
     loop 매 100ms (10Hz)
         RC->>Robot: get_joint_pos()
@@ -173,7 +179,7 @@ sequenceDiagram
         DW->>MySQL DB: INSERT ON DUPLICATE KEY UPDATE
         
         B->>DT: on_realtime_data()
-        DT->>Web: ws.send(JSON)
+        DT->>Web: ws.send(JSON) + Canvas 3D 렌더링
     end
 ```
 
@@ -248,9 +254,11 @@ sequenceDiagram
 ### 🌍 digital_twin (`src/main.py`)
 | 함수 | 역할 |
 |---|---|
-| `ws_handler(websocket, path)` | 웹 브라우저 클라이언트 접속 시 `connected_clients` Set에 등록/해제 (비동기) |
-| `on_realtime_data(payload)` | MQTT `robot/realtime` 수신 → 모든 웹소켓 클라이언트에게 JSON 브로드캐스트 |
-| `start_mqtt()` | MQTT 구독을 별도 백그라운드 스레드에서 구동 (웹소켓 이벤트루프 안 막히게) |
+| `index(request)` | `http://host:8080` 접속 시 Page 1 웹 모니터 HTML 제공 |
+| `websocket_handler(request)` | `/ws` 접속 브라우저를 등록하고 snapshot/realtime JSON 전송 |
+| `_on_realtime_data(payload)` | MQTT `robot/realtime` 수신 → 모든 웹소켓 클라이언트에게 JSON 브로드캐스트 |
+| `_mqtt_thread()` | MQTT 구독을 별도 백그라운드 스레드에서 구동 |
+| `health(request)` | `http://host:8080/health`로 최신 로봇 상태 JSON 확인 |
 
 ### 👁 vision_yolo (`src/main.py`)
 | 함수 | 역할 |
@@ -266,7 +274,7 @@ sequenceDiagram
 | 함수 | 역할 |
 |---|---|
 | `on_realtime_data(payload)` | MQTT `robot/realtime` 수신 → `INSERT ... ON DUPLICATE KEY UPDATE` (UPSERT) |
-| `on_task_done(payload)` | MQTT `robot/task_done` 수신 → `INSERT INTO robot_task_history` |
+| `on_task_done(payload)` | MQTT `robot/task_done`, `robot/dry_run_task_done` 수신 → 작업 이력과 공정 각도 로그 저장 |
 | `on_plc_event(payload)` | MQTT `plc/process/start`, `plc/process/stop`, `plc/robot/complete`, `plc/process/done` 수신 → `INSERT INTO plc_process_events` |
 
 ### `database_repository.py` (db_worker 내부)
@@ -274,7 +282,8 @@ sequenceDiagram
 |---|---|
 | `_get_persistent_connection()` | PyMySQL 커넥션 1개를 재사용 (100ms 간격 부하 최소화) |
 | `insert_realtime_data(robot_id, data)` | `robot_realtime_status` 테이블에 UPSERT |
-| `insert_task_completion(robot_id, action, pos)` | `robot_task_history` 테이블에 INSERT |
+| `insert_task_completion(robot_id, action, pos)` | `robot_task_history`와 `robot_process_angle_log`에 INSERT |
+| `insert_virtual_test_sample(payload)` | `robot_virtual_test_samples`와 `robot_dry_run_realtime_samples`에 INSERT |
 
 ---
 

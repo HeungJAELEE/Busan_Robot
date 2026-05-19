@@ -36,16 +36,16 @@ copy .env.example .env
 notepad .env
 ```
 
-`.env`에서 현장 IP를 확인합니다.
+`.env`에서 현장 IP를 직접 입력합니다. `<...>` 표시는 그대로 쓰지 말고 현장 값으로 바꾸는 자리입니다.
 
 ```env
-ROBOT_A_IP=192.168.3.7
-ROBOT_B_IP=192.168.3.6
-ROBOT_C_IP=192.168.3.5
-MYSQL_HOST=192.168.3.141
-PLC_IP=192.168.3.150
+ROBOT_A_IP=<Robot_A_IP>
+ROBOT_B_IP=<Robot_B_IP>
+ROBOT_C_IP=<Robot_C_IP>
+MYSQL_HOST=<MySQL_PC_IP>
+PLC_IP=<PLC_PROCESS_IP>
 PLC_PORT=2000
-PLC_MONITOR_IP=192.168.3.160
+PLC_MONITOR_IP=<PLC_MONITOR_IP>
 PLC_PROCESS_START_DEVICE=X11
 PLC_PROCESS_STOP_DEVICE=X12
 PLC_ROBOT_START_OUTPUT=Y160
@@ -61,6 +61,20 @@ GitHub Container Registry에 업로드된 `linux/amd64` 이미지를 받아 실�
 ```powershell
 docker compose -f docker-compose.registry.yml pull
 docker compose -f docker-compose.registry.yml up -d message_broker db_worker digital_twin
+```
+
+Page 1 웹 모니터 확인:
+
+```powershell
+# 로봇 컨트롤러 PC 자체에서
+start http://localhost:8080
+
+# 다른 PC/태블릿에서 볼 때
+# 1) 로봇 컨트롤러 PC의 IPv4 확인
+ipconfig
+
+# 2) 브라우저 주소창에 입력
+# http://<로봇컨트롤러_PC_IP>:8080
 ```
 
 실제 로봇/PLC까지 붙일 때:
@@ -120,7 +134,8 @@ $env:ROBOT_CONTROL_MODE="mqtt"
 
 ## 6. 주의사항
 
-- Windows PC가 로봇/PLC/MySQL 대역인 `192.168.3.x`에 실제로 접근 가능해야 합니다.
+- Windows PC가 `.env`에 입력한 로봇/PLC/MySQL 네트워크에 실제로 접근 가능해야 합니다.
 - 방화벽에서 Docker Desktop, Python/HMI, MQTT `1883`, Digital Twin `8080` 포트가 막히지 않아야 합니다.
+- 내부망 다른 PC에서 Page 1 웹 모니터가 안 열리면 Windows Defender 방화벽에서 TCP `8080` 인바운드를 허용합니다.
 - `vision_yolo`의 USB 카메라는 Linux `/dev/video0` 기준이라 Windows에서는 별도 카메라 연동 방식이 필요합니다.
 - 로봇 실장 전에는 먼저 `message_broker`, `db_worker`, `digital_twin`만 실행해서 Docker와 DB/MQTT 흐름을 확인합니다.

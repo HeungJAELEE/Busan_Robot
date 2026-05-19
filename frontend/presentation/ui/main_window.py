@@ -131,6 +131,7 @@ class ModernContyApp(ctk.CTk):
         self._virtual_test_sessions = {}
         self._virtual_last_sample_ts = {}
         self._virtual_snapshot_last_ts = {}
+        self._virtual_speed_state = {}
         
         # 기본 페이지 설정
         self.active_page = 2
@@ -247,6 +248,7 @@ class ModernContyApp(ctk.CTk):
             "status": "running",
         }
         self._virtual_last_sample_ts[robot_name] = 0.0
+        self._virtual_speed_state.pop(robot_name, None)
 
     def update_virtual_test_progress(self, robot_name, session_id, event, cycle_index, target_cycles, status):
         state = self._virtual_test_sessions.get(robot_name)
@@ -296,9 +298,27 @@ class ModernContyApp(ctk.CTk):
             return None
         self._virtual_last_sample_ts[robot_name] = now
         state["sample_index"] = int(state.get("sample_index", 0) or 0) + 1
+        speed_mm_s = 0.0
+        current_xyz = list(t_pos or [])[:3]
+        previous = self._virtual_speed_state.get(robot_name)
+        if previous and len(current_xyz) >= 3:
+            prev_ts, prev_xyz = previous
+            dt = max(now - float(prev_ts or now), 1e-6)
+            try:
+                dist_m = sum((float(current_xyz[i]) - float(prev_xyz[i])) ** 2 for i in range(3)) ** 0.5
+                speed_mm_s = dist_m * 1000.0 / dt
+            except (TypeError, ValueError, IndexError):
+                speed_mm_s = 0.0
+        if len(current_xyz) >= 3:
+            self._virtual_speed_state[robot_name] = (now, current_xyz)
+        repeat_count = int(state.get("cycle_index", 0) or 0)
+        if repeat_count <= 0:
+            repeat_count = 1
         return {
             "session_id": state.get("session_id", ""),
             "robot_id": robot_name,
+            "robot_kind": robot_name.replace("Robot ", "").strip(),
+            "repeat_count": repeat_count,
             "cycle_index": int(state.get("cycle_index", 0) or 0),
             "target_cycles": int(state.get("target_cycles", 0) or 0),
             "sample_index": state["sample_index"],
@@ -306,6 +326,8 @@ class ModernContyApp(ctk.CTk):
             "q": list(j_pos or [])[:6],
             "p": list(t_pos or [])[:6],
             "torque": list(torque or [])[:6],
+            "robot_speed": speed_mm_s,
+            "speed_unit": "mm/s",
             "busy": robot_status.get("busy", 0) if isinstance(robot_status, dict) else 0,
             "captured_at": time.time(),
         }
@@ -404,6 +426,7 @@ class ModernContyApp(ctk.CTk):
                                 "q": j_pos,
                                 "p": t_pos,
                                 "torque": torque,
+                                "robot_speed": 0.0,
                                 "busy": robot_status.get('busy', 0) if robot_status else 0
                             }
                             # DB Repository 직접 호출 대신 MQTT로 브로드캐스트

@@ -33,7 +33,7 @@
 
 ### 6. 🗄 DB 연동 (MES Worker)
 - **역할**: HMI나 UI에서 DB 로직을 완전히 분리. 
-- **설계**: "실시간 데이터" 토픽과 "작업 완료" 토픽을 상시 구독(Subscribe)하고 있다가, 데이터가 들어오는 즉시 PyMySQL을 통해 `192.168.3.141` 로 UPSERT 및 INSERT를 수행합니다.
+- **설계**: "실시간 데이터" 토픽과 "작업 완료" 토픽을 상시 구독(Subscribe)하고 있다가, 데이터가 들어오는 즉시 PyMySQL을 통해 `.env`의 `MYSQL_HOST`로 UPSERT 및 INSERT를 수행합니다.
 
 ---
 

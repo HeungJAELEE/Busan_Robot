@@ -16,20 +16,20 @@ cp .env.example .env
 `.env`에서 현장 네트워크 값만 수정합니다.
 
 ```env
-ROBOT_A_IP=192.168.3.7
-ROBOT_B_IP=192.168.3.6
-ROBOT_C_IP=192.168.3.5
+ROBOT_A_IP=<Robot_A_IP>
+ROBOT_B_IP=<Robot_B_IP>
+ROBOT_C_IP=<Robot_C_IP>
 ROBOT_NAME=NRMK-Indy7
 
-MYSQL_HOST=192.168.3.141
+MYSQL_HOST=<MySQL_PC_IP>
 MYSQL_PORT=3306
 MYSQL_USER=guest
 MYSQL_PASSWORD=guest1234
 MYSQL_DATABASE=faictory_mes
 
-PLC_IP=192.168.3.150
+PLC_IP=<PLC_PROCESS_IP>
 PLC_PORT=2000
-PLC_MONITOR_IP=192.168.3.160
+PLC_MONITOR_IP=<PLC_MONITOR_IP>
 PLC_PROCESS_START_DEVICE=X11
 PLC_PROCESS_STOP_DEVICE=X12
 PLC_ROBOT_START_OUTPUT=Y160
@@ -43,6 +43,19 @@ PLC_DONE_SIGNAL_MAP=PLC150:M1150,PLC130:M1130,PLC120:M1120
 ```bash
 docker compose build
 docker compose up -d message_broker db_worker digital_twin
+```
+
+Page 1 웹 모니터는 `digital_twin` 서비스가 제공합니다.
+
+```bash
+# 로봇 컨트롤러 PC 자체
+open http://localhost:8080
+
+# 내부망 다른 PC/태블릿
+http://<Robot Controller PC IPv4>:8080
+
+# 상태 JSON
+http://<Robot Controller PC IPv4>:8080/health
 ```
 
 로봇 또는 PLC까지 실제 장비에 붙일 때만 아래 서비스를 추가로 켭니다.
@@ -129,7 +142,7 @@ REGISTRY=ghcr.io/heungjaelee TAG=latest PLATFORM=linux/amd64 ./scripts/docker-bu
 
 ```yaml
 environment:
-  ROBOT_IP: ${ROBOT_B_IP:-192.168.3.6}
+  ROBOT_IP: ${ROBOT_B_IP:-}
   ROBOT_NAME: Indy7
 ```
 
@@ -137,7 +150,7 @@ HMI에서 선택한 로봇으로 명령을 라우팅하는 기능은 프론트�
 
 ## 7. 현장 주의사항
 
-- Docker Desktop이 실행되는 PC가 `192.168.3.x` 로봇/PLC 대역에 실제로 접근 가능해야 합니다.
+- Docker Desktop이 실행되는 PC가 `.env`에 입력한 로봇/PLC 대역에 실제로 접근 가능해야 합니다.
 - 로봇 제어는 실시간성과 안전 정지가 중요하므로, 실제 생산 장비 연결 전에는 `message_broker`, `db_worker`, `digital_twin`만 먼저 띄워서 상태 수집 경로를 확인합니다.
 - `vision_yolo`는 빌드 시간이 오래 걸릴 수 있습니다. 카메라가 없는 Mac/Windows 환경에서는 profile을 켜지 않는 것이 좋습니다.
 - MySQL이 연결되지 않아도 `db_worker`는 죽지 않고 재시도/로그를 남기며, MQTT와 로봇 상태 수집은 독립적으로 유지됩니다.
