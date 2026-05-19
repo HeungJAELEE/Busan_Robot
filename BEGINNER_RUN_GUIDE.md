@@ -17,6 +17,7 @@
 - UI는 기본적으로 **무연결 모드**로 켜집니다. 로봇/PLC/MySQL은 사용자가 `연결` 버튼을 눌렀을 때만 붙습니다.
 - Page 1/2의 3D 화면에는 초록/주황/빨강 위험 가이드와 rail/place 투명 존이 표시됩니다. 이 표시는 실제 JSON을 바꾸지 않는 확인용 안내입니다.
 - Robot A의 2026-05-18 테스트 분석과 다음날 테스트 순서는 [docs/robot_a_dry_run_analysis_20260518.md](/Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/docs/robot_a_dry_run_analysis_20260518.md)를 보세요.
+- Windows 작업자 기준 실행환경 점검 결과는 [docs/user_execution_environment_audit_20260519.md](/Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/docs/user_execution_environment_audit_20260519.md)를 보세요.
 
 ## 1. 전체 실행 순서
 
@@ -161,7 +162,9 @@ ROBOT_B_PLC_IP=192.168.3.140
 ROBOT_C_PLC_IP=192.168.3.120
 ROBOT_AUTOCONNECT=0
 ROBOT_CONTROL_MODE=auto
-HMI_MQTT_AUTOCONNECT=1
+HMI_MQTT_AUTOCONNECT=0
+HMI_MQTT_CONNECT_WAIT_SEC=3
+ROBOT_GATEWAY_CONNECT_TIMEOUT_SEC=8
 FACTORY_ORCHESTRATOR_AUTOSTART=0
 MYSQL_HOST=192.168.3.141
 PLC_IP=192.168.3.150
@@ -175,7 +178,7 @@ PLC_ROBOT_COMPLETE_DEVICE=X145
 PLC_DONE_SIGNAL_MAP=PLC150:M1150,PLC130:M1130,PLC120:M1120
 ```
 
-여기서 제일 중요한 값은 `ROBOT_AUTOCONNECT=0`과 `FACTORY_ORCHESTRATOR_AUTOSTART=0`입니다. 이 값이면 프로그램을 켜도 실제 장비에 바로 붙지 않고, 화면에서 연결 버튼을 눌렀을 때만 접속합니다.
+여기서 제일 중요한 값은 `ROBOT_AUTOCONNECT=0`, `HMI_MQTT_AUTOCONNECT=0`, `FACTORY_ORCHESTRATOR_AUTOSTART=0`입니다. 이 값이면 프로그램을 켜도 실제 장비나 MQTT에 바로 붙지 않고, 화면에서 연결 버튼을 눌렀을 때만 접속합니다.
 
 ### 4-3. Docker 서비스 실행
 

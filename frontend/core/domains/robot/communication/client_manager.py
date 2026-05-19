@@ -4,8 +4,14 @@ import os
 import uuid
 
 try:
-    from core.runtime_config import env_str
+    from core.runtime_config import env_float, env_str
 except Exception:
+    def env_float(name, default):
+        try:
+            return float(os.getenv(name, default))
+        except (TypeError, ValueError):
+            return float(default)
+
     def env_str(name, default=""):
         return os.getenv(name, default)
 
@@ -28,7 +34,8 @@ class GatewayRobotProxy:
             from infrastructure.mqtt.mqtt_manager import mqtt_broker
             if not getattr(mqtt_broker, "connected", False):
                 mqtt_broker.connect_and_loop()
-                deadline = time.time() + 1.0
+                wait_sec = max(env_float("HMI_MQTT_CONNECT_WAIT_SEC", 3.0), 1.0)
+                deadline = time.time() + wait_sec
                 while time.time() < deadline and not getattr(mqtt_broker, "connected", False):
                     time.sleep(0.05)
             if not getattr(mqtt_broker, "connected", False):
@@ -294,6 +301,13 @@ class RobotClientManager:
             if not proxy.connect():
                 self._robots[name]["instance"] = None
                 print(f">> [Gateway] {name} MQTT Robot Controller 연결 요청 실패")
+                return False
+            timeout = env_float("ROBOT_GATEWAY_CONNECT_TIMEOUT_SEC", 8.0)
+            result = proxy.wait_for_last_result(timeout)
+            if not result or not result.get("ok"):
+                self._robots[name]["instance"] = None
+                message = (result or {}).get("message", "응답 없음")
+                print(f">> [Gateway] {name} 연결 확인 실패: {message}")
                 return False
             self._robots[name]["instance"] = proxy
             print(f">> [Gateway] {name} 로봇 통신은 Docker Robot Controller로 위임합니다.")

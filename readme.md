@@ -16,6 +16,8 @@ Neuromeka(뉴로메카) **Indy7 협동 로봇**을 위한 PC 기반 HMI 소프�
 
 Robot A의 2026-05-18 Dry Run Recording 결과와 다음 테스트 레시피는 [docs/robot_a_dry_run_analysis_20260518.md](./docs/robot_a_dry_run_analysis_20260518.md)에 정리되어 있습니다.
 
+Windows 현장 작업자 기준 실행환경 재검토 결과는 [docs/user_execution_environment_audit_20260519.md](./docs/user_execution_environment_audit_20260519.md)에 정리되어 있습니다.
+
 ---
 
 ## ✅ 왕초보 실행 가이드: 이것만 그대로 따라 하세요
@@ -142,6 +144,7 @@ ROBOT_CONTROL_MODE=mqtt python frontend/run_ui_only.py
 UI는 기본적으로 무연결 모드로 켜집니다. 창이 뜬다고 해서 Robot/PLC/MySQL에 바로 접속하지 않습니다.
 
 - 로봇: 상단 `로봇 통신 연결` 또는 2Page의 `로봇 연결` 버튼을 누를 때만 연결합니다.
+- 로봇 연결은 Docker Robot Controller의 응답까지 확인합니다. `robot_controller`가 꺼져 있거나 실제 로봇 연결 실패이면 UI가 연결 성공으로 표시하지 않습니다.
 - PLC/DB/MQTT: `서비스 관리` 또는 2Page 통신체크 화면에서 `연결`을 누를 때만 확인/연결합니다.
 - `backend/.env` 값은 UI도 같이 읽습니다. IP가 바뀌면 코드가 아니라 `.env`를 수정하세요.
 - 오래된 PLC/MES 오케스트레이터를 강제로 실행해야 할 때만 `FACTORY_ORCHESTRATOR_AUTOSTART=1`을 사용합니다.
