@@ -1,50 +1,54 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
-  <title id="title">Indy7 Rail Digital Twin Showroom Guide</title>
-  <desc id="desc">A cinematic digital twin guide showing three Indy7 robots, a rail conveyor, factory floor, windows, and minimal HMI overlay.</desc>
+  <title id="title">Indy7 Minimal Studio Render Guide</title>
+  <desc id="desc">A clean studio-style digital twin guide with a white Indy7 robot, grey rail table, and simple colored workpieces.</desc>
   <defs>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#26394a"/>
-      <stop offset="0.56" stop-color="#121a26"/>
-      <stop offset="1" stop-color="#090b11"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d7d7d4"/>
+      <stop offset="0.52" stop-color="#bfc0bc"/>
+      <stop offset="1" stop-color="#8f928e"/>
     </linearGradient>
-    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#273039"/>
-      <stop offset="0.45" stop-color="#151a20"/>
-      <stop offset="1" stop-color="#07080c"/>
+    <radialGradient id="spot" cx="46%" cy="20%" r="72%">
+      <stop offset="0" stop-color="#f5f5f2" stop-opacity="0.95"/>
+      <stop offset="0.48" stop-color="#d5d5d1" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#80837f" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9b9d99"/>
+      <stop offset="0.5" stop-color="#777a76"/>
+      <stop offset="1" stop-color="#5f625e"/>
     </linearGradient>
-    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#73808a"/>
-      <stop offset="0.22" stop-color="#eef2f2"/>
-      <stop offset="0.5" stop-color="#9aa4aa"/>
-      <stop offset="0.78" stop-color="#f6f8f7"/>
-      <stop offset="1" stop-color="#5b666e"/>
+    <linearGradient id="floorEdge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c9cbc8"/>
+      <stop offset="1" stop-color="#6b6e6a"/>
     </linearGradient>
-    <linearGradient id="belt" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3c4248"/>
-      <stop offset="0.5" stop-color="#101214"/>
-      <stop offset="1" stop-color="#343a40"/>
-    </linearGradient>
-    <linearGradient id="whiteRobot" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="robotWhite" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="0.45" stop-color="#e9eef2"/>
-      <stop offset="1" stop-color="#b9c3cc"/>
+      <stop offset="0.28" stop-color="#f1f3f2"/>
+      <stop offset="0.58" stop-color="#d5d9d9"/>
+      <stop offset="1" stop-color="#a7adad"/>
     </linearGradient>
-    <linearGradient id="orangeRobot" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ffb36a"/>
-      <stop offset="0.45" stop-color="#f07922"/>
-      <stop offset="1" stop-color="#9b3717"/>
+    <linearGradient id="robotSoft" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fdfefe"/>
+      <stop offset="0.46" stop-color="#e5e9e8"/>
+      <stop offset="1" stop-color="#b8bdbc"/>
     </linearGradient>
-    <linearGradient id="yellowRobot" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ffe877"/>
-      <stop offset="0.48" stop-color="#f5bd26"/>
-      <stop offset="1" stop-color="#ad7b08"/>
+    <linearGradient id="jointDark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#626866"/>
+      <stop offset="0.55" stop-color="#222827"/>
+      <stop offset="1" stop-color="#0d1111"/>
     </linearGradient>
-    <linearGradient id="hud" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#101724" stop-opacity="0.88"/>
-      <stop offset="1" stop-color="#080b12" stop-opacity="0.78"/>
+    <linearGradient id="railMetal" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6a6f6d"/>
+      <stop offset="0.24" stop-color="#d7dad7"/>
+      <stop offset="0.52" stop-color="#8e9491"/>
+      <stop offset="0.78" stop-color="#eef0ee"/>
+      <stop offset="1" stop-color="#5c615f"/>
     </linearGradient>
-    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
-      <feDropShadow dx="0" dy="18" stdDeviation="16" flood-color="#000000" flood-opacity="0.45"/>
+    <filter id="shadow" x="-35%" y="-35%" width="170%" height="170%">
+      <feDropShadow dx="0" dy="24" stdDeviation="20" flood-color="#20201e" flood-opacity="0.42"/>
+    </filter>
+    <filter id="softShadow" x="-45%" y="-45%" width="190%" height="190%">
+      <feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#222220" flood-opacity="0.32"/>
     </filter>
     <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
       <feGaussianBlur stdDeviation="5" result="blur"/>
@@ -54,209 +58,148 @@
       </feMerge>
     </filter>
     <style>
-      .title { font: 800 30px Inter, Pretendard, Arial, sans-serif; fill: #f7fafc; letter-spacing: 0; }
-      .sub { font: 650 13px Inter, Pretendard, Arial, sans-serif; fill: #aeb8c6; letter-spacing: 0; }
-      .label { font: 800 15px Inter, Pretendard, Arial, sans-serif; fill: #eef5ff; letter-spacing: 0; }
-      .tiny { font: 700 11px Inter, Pretendard, Arial, sans-serif; fill: #9dabbd; letter-spacing: 0; }
-      .metric { font: 800 12px Inter, Pretendard, Arial, sans-serif; fill: #ffe2a3; letter-spacing: 0; }
-      .grid-line { stroke: #6f7f8d; stroke-width: 1; opacity: 0.16; }
-      .window-line { stroke: #9eb7c9; stroke-width: 2; opacity: 0.34; }
-      .guard { stroke: #f5c453; stroke-width: 5; stroke-linecap: round; }
-      .guard-post { fill: #f7d25f; stroke: #543a0f; stroke-width: 2; }
-      .robot-link { fill: none; stroke-linecap: round; stroke-linejoin: round; filter: url(#shadow); }
-      .joint { stroke: #1b2027; stroke-width: 4; filter: url(#shadow); }
-      .cable { fill: none; stroke: #101319; stroke-width: 9; stroke-linecap: round; opacity: 0.92; }
-      .rail-edge { stroke: #e7ecec; stroke-width: 2; opacity: 0.9; }
-      .slot { stroke: #5d6770; stroke-width: 2; opacity: 0.56; }
-      .hud-panel { fill: url(#hud); stroke: #2c3948; stroke-width: 1.5; }
-      .pill { fill: #172235; stroke: #33445a; stroke-width: 1; }
-      .pill-on { fill: #17372d; stroke: #4cad77; stroke-width: 1; }
+      .title { font: 800 33px Inter, Pretendard, Arial, sans-serif; fill: #1f2424; letter-spacing: 0; }
+      .sub { font: 650 14px Inter, Pretendard, Arial, sans-serif; fill: #4f5756; letter-spacing: 0; }
+      .tiny { font: 750 12px Inter, Pretendard, Arial, sans-serif; fill: #5b6261; letter-spacing: 0; }
+      .label { font: 800 14px Inter, Pretendard, Arial, sans-serif; fill: #242928; letter-spacing: 0; }
+      .robot-link { fill: none; stroke: url(#robotWhite); stroke-linecap: round; stroke-linejoin: round; filter: url(#shadow); }
+      .robot-link-hi { fill: none; stroke: #ffffff; stroke-linecap: round; stroke-linejoin: round; opacity: 0.55; }
+      .joint { fill: url(#robotWhite); stroke: #6f7776; stroke-width: 3; filter: url(#softShadow); }
+      .joint-cap { fill: url(#jointDark); stroke: #d8dcda; stroke-width: 5; filter: url(#softShadow); }
+      .rail-line { stroke: #f2f3f1; stroke-width: 3; opacity: 0.72; }
+      .slot { stroke: #4f5553; stroke-width: 3; opacity: 0.36; }
+      .measure { stroke: #ffd445; stroke-width: 3; stroke-dasharray: 10 10; fill: none; opacity: 0.72; }
+      .pill { fill: rgba(255,255,255,0.44); stroke: rgba(60,68,66,0.16); stroke-width: 1; }
     </style>
   </defs>
 
-  <rect width="1600" height="900" fill="#06080d"/>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <rect width="1600" height="900" fill="url(#spot)"/>
 
-  <!-- Factory background -->
-  <rect x="0" y="0" width="1600" height="430" fill="url(#sky)"/>
-  <g opacity="0.82">
-    <rect x="76" y="34" width="1450" height="334" rx="8" fill="#101923" stroke="#34495c" stroke-width="2"/>
-    <g>
-      <path class="window-line" d="M122 34 V368 M236 34 V368 M350 34 V368 M464 34 V368 M578 34 V368 M692 34 V368 M806 34 V368 M920 34 V368 M1034 34 V368 M1148 34 V368 M1262 34 V368 M1376 34 V368 M1490 34 V368"/>
-      <path class="window-line" d="M76 96 H1526 M76 158 H1526 M76 220 H1526 M76 282 H1526 M76 344 H1526"/>
-    </g>
-    <g opacity="0.28">
-      <path d="M1130 368 L1204 132 L1282 368 Z" fill="#6b8eaa"/>
-      <path d="M1210 368 L1318 82 L1452 368 Z" fill="#7898b1"/>
-      <path d="M1334 368 L1438 170 L1520 368 Z" fill="#5c7892"/>
-    </g>
+  <!-- minimal top UI -->
+  <g transform="translate(46 42)">
+    <text x="0" y="0" class="title">INDY7 Studio View</text>
+    <text x="2" y="31" class="sub">Simple rail + robot preview, debug layers hidden</text>
+  </g>
+  <g transform="translate(1138 40)">
+    <rect x="0" y="0" width="376" height="52" rx="26" class="pill"/>
+    <circle cx="34" cy="26" r="8" fill="#39c978"/>
+    <text x="54" y="31" class="tiny">Rail</text>
+    <circle cx="122" cy="26" r="8" fill="#39c978"/>
+    <text x="142" y="31" class="tiny">Robot</text>
+    <circle cx="226" cy="26" r="8" fill="#b9bdbc"/>
+    <text x="246" y="31" class="tiny">Trace off</text>
   </g>
 
-  <!-- Overhead gantry crane -->
+  <!-- tabletop / rail plane -->
   <g filter="url(#shadow)">
-    <rect x="82" y="64" width="1438" height="28" rx="4" fill="#171b20" stroke="#56606a" stroke-width="2"/>
-    <rect x="114" y="94" width="1368" height="13" rx="3" fill="#323a42"/>
-    <path d="M116 79 H1486" stroke="#f2b94b" stroke-width="4" opacity="0.85"/>
-    <g transform="translate(876 70)">
-      <rect x="0" y="0" width="122" height="48" rx="5" fill="#343b43" stroke="#a8b0b7"/>
-      <rect x="14" y="9" width="94" height="11" rx="2" fill="#f4c14d"/>
-      <path d="M61 48 V164" stroke="#101318" stroke-width="7"/>
-      <circle cx="61" cy="173" r="14" fill="#e7eaed" stroke="#20252b" stroke-width="3"/>
+    <path d="M112 568 L1188 418 L1520 602 L420 812 Z" fill="url(#floor)" stroke="#cbceca" stroke-width="4"/>
+    <path d="M112 568 L1188 418 L1520 602" fill="none" stroke="#d9dcda" stroke-width="4" opacity="0.65"/>
+    <path d="M420 812 L1520 602" fill="none" stroke="#3f4543" stroke-width="4" opacity="0.4"/>
+    <path d="M206 594 L1162 465 L1385 589 L415 766 Z" fill="#464b49" opacity="0.34"/>
+    <path d="M278 610 L1194 482" class="rail-line"/>
+    <path d="M396 767 L1398 588" class="rail-line"/>
+    <path d="M340 615 L1288 495 M420 642 L1368 524 M500 668 L1448 553 M580 694 L1528 582" class="slot"/>
+  </g>
+
+  <!-- simple rail sled and target zone -->
+  <g filter="url(#softShadow)">
+    <path d="M526 604 L818 562 L922 620 L626 674 Z" fill="#2c3130" stroke="#c9ceca" stroke-width="3"/>
+    <path d="M580 606 L786 578 M624 630 L830 602 M668 654 L874 626" stroke="#8d9692" stroke-width="3" opacity="0.62"/>
+    <path d="M916 625 L1116 588 L1226 649 L1018 694 Z" fill="#353a38" stroke="#c9ceca" stroke-width="3"/>
+  </g>
+
+  <!-- colored parts, close to reference mood -->
+  <g filter="url(#softShadow)">
+    <g transform="translate(880 496)">
+      <path d="M0 0 C0 -15 74 -15 74 0 L74 150 C74 165 0 165 0 150 Z" fill="#e6322e"/>
+      <ellipse cx="37" cy="0" rx="37" ry="14" fill="#ff6259"/>
+      <path d="M0 48 C0 33 74 33 74 48 L74 100 C74 115 0 115 0 100 Z" fill="#22c95d"/>
+      <ellipse cx="37" cy="48" rx="37" ry="14" fill="#54ee82"/>
+      <path d="M0 99 C0 84 74 84 74 99 L74 150 C74 165 0 165 0 150 Z" fill="#f7d21f"/>
+      <ellipse cx="37" cy="99" rx="37" ry="14" fill="#ffe765"/>
+      <ellipse cx="37" cy="150" rx="37" ry="14" fill="#b12d21" opacity="0.62"/>
+    </g>
+    <g transform="translate(1050 592)">
+      <path d="M0 0 L70 -12 L70 82 L0 98 Z" fill="#ffdf27"/>
+      <path d="M70 -12 L102 7 L102 98 L70 82 Z" fill="#c5a717"/>
+      <path d="M0 0 L70 -12 L102 7 L32 23 Z" fill="#fff269"/>
+    </g>
+    <g transform="translate(1192 642)">
+      <path d="M0 0 L72 -14 L72 66 L0 82 Z" fill="#14d7de"/>
+      <path d="M72 -14 L110 8 L110 86 L72 66 Z" fill="#0a8fb5"/>
+      <path d="M0 0 L72 -14 L110 8 L38 24 Z" fill="#6ef7ff"/>
+    </g>
+    <g transform="translate(1322 601)">
+      <path d="M0 0 L72 -12 L72 72 L0 88 Z" fill="#1934e8"/>
+      <path d="M72 -12 L106 8 L106 92 L72 72 Z" fill="#111a89"/>
+      <path d="M0 0 L72 -12 L106 8 L34 23 Z" fill="#5164ff"/>
     </g>
   </g>
 
-  <!-- Floor -->
-  <path d="M0 390 H1600 V900 H0 Z" fill="url(#floor)"/>
-  <g opacity="0.32">
-    <path class="grid-line" d="M-40 790 H1640 M-30 720 H1630 M-20 650 H1620 M-10 580 H1610 M0 510 H1600 M0 440 H1600"/>
-    <path class="grid-line" d="M78 900 L350 392 M275 900 L482 392 M472 900 L615 392 M669 900 L748 392 M866 900 L882 392 M1063 900 L1015 392 M1260 900 L1148 392 M1457 900 L1282 392"/>
-  </g>
-  <ellipse cx="785" cy="760" rx="650" ry="106" fill="#000000" opacity="0.35"/>
+  <!-- main white Indy7 robot, clean studio style -->
+  <g transform="translate(426 548)" filter="url(#shadow)">
+    <!-- base -->
+    <ellipse cx="0" cy="172" rx="144" ry="32" fill="#2b2f2e" opacity="0.22"/>
+    <path d="M-92 112 C-82 82 82 82 92 112 L70 184 C60 210 -60 210 -70 184 Z" fill="url(#robotSoft)" stroke="#777f7d" stroke-width="4"/>
+    <ellipse cx="0" cy="110" rx="94" ry="38" fill="url(#robotWhite)" stroke="#777f7d" stroke-width="4"/>
+    <ellipse cx="0" cy="106" rx="58" ry="22" fill="#e9eceb" opacity="0.82"/>
 
-  <!-- Safety fence -->
-  <g opacity="0.9">
-    <path class="guard" d="M848 552 H1480"/>
-    <path class="guard" d="M116 590 H650"/>
-    <g>
-      <rect class="guard-post" x="844" y="515" width="16" height="94" rx="5"/>
-      <rect class="guard-post" x="1004" y="515" width="16" height="94" rx="5"/>
-      <rect class="guard-post" x="1164" y="515" width="16" height="94" rx="5"/>
-      <rect class="guard-post" x="1324" y="515" width="16" height="94" rx="5"/>
-      <rect class="guard-post" x="1472" y="515" width="16" height="94" rx="5"/>
-      <rect class="guard-post" x="112" y="553" width="16" height="90" rx="5"/>
-      <rect class="guard-post" x="282" y="553" width="16" height="90" rx="5"/>
-      <rect class="guard-post" x="452" y="553" width="16" height="90" rx="5"/>
-      <rect class="guard-post" x="642" y="553" width="16" height="90" rx="5"/>
+    <!-- vertical shoulder and elbow -->
+    <path class="robot-link" d="M-18 86 C-70 -4 -48 -132 36 -202" stroke-width="70"/>
+    <path class="robot-link-hi" d="M-35 58 C-68 -26 -38 -126 42 -192" stroke-width="13"/>
+    <circle class="joint" cx="-18" cy="86" r="44"/>
+    <circle class="joint" cx="36" cy="-202" r="50"/>
+
+    <!-- upper arm -->
+    <path class="robot-link" d="M36 -202 C160 -286 310 -198 362 -48" stroke-width="64"/>
+    <path class="robot-link-hi" d="M61 -218 C176 -264 288 -192 338 -62" stroke-width="12"/>
+    <circle class="joint" cx="362" cy="-48" r="46"/>
+    <circle class="joint-cap" cx="362" cy="-48" r="31"/>
+    <circle cx="362" cy="-48" r="12" fill="#bfc5c3"/>
+
+    <!-- forearm and wrist -->
+    <path class="robot-link" d="M362 -48 C318 58 360 148 486 178" stroke-width="54"/>
+    <path class="robot-link-hi" d="M356 -22 C334 68 372 133 476 164" stroke-width="10"/>
+    <circle class="joint" cx="486" cy="178" r="38"/>
+    <circle class="joint-cap" cx="486" cy="178" r="23"/>
+    <path class="robot-link" d="M486 178 C546 188 585 222 596 278" stroke-width="38"/>
+    <circle class="joint" cx="596" cy="278" r="29"/>
+
+    <!-- tool / gripper -->
+    <g transform="translate(596 278) rotate(12)">
+      <rect x="-17" y="16" width="34" height="52" rx="12" fill="url(#robotWhite)" stroke="#6f7776" stroke-width="3"/>
+      <rect x="-34" y="62" width="68" height="24" rx="8" fill="#d7dcda" stroke="#626a68" stroke-width="3"/>
+      <path d="M-24 84 L-54 122" stroke="#434a48" stroke-width="10" stroke-linecap="round"/>
+      <path d="M24 84 L52 122" stroke="#434a48" stroke-width="10" stroke-linecap="round"/>
+      <path d="M-55 122 L-73 112 M53 122 L72 112" stroke="#1f2524" stroke-width="8" stroke-linecap="round"/>
     </g>
+
+    <!-- cable -->
+    <path d="M-40 68 C-124 -4 -114 -152 20 -248 C70 -285 118 -296 170 -276" fill="none" stroke="#202524" stroke-width="15" stroke-linecap="round" opacity="0.86"/>
   </g>
 
-  <!-- Main rail and work tables in perspective -->
-  <g filter="url(#shadow)">
-    <path d="M175 590 L1165 482 L1394 620 L335 770 Z" fill="#252c31" stroke="#59636b" stroke-width="4"/>
-    <path d="M206 608 L1144 512 L1330 623 L356 742 Z" fill="url(#belt)"/>
-    <path d="M245 588 L1200 487" class="rail-edge"/>
-    <path d="M334 772 L1394 620" class="rail-edge"/>
-    <path d="M290 610 L1224 511 M354 640 L1288 540 M418 670 L1352 570 M482 700 L1416 600" class="slot"/>
-    <path d="M512 552 L952 506 L1070 574 L612 640 Z" fill="url(#metal)" stroke="#dbe0e0" stroke-width="3"/>
-    <path d="M588 560 L950 524 M634 587 L996 551 M680 613 L1042 577" stroke="#6d7780" stroke-width="3" opacity="0.55"/>
-    <path d="M914 609 L1288 558 L1390 628 L996 696 Z" fill="url(#metal)" stroke="#dbe0e0" stroke-width="3"/>
-    <path d="M978 618 L1284 578 M1026 646 L1332 606 M1074 674 L1380 634" stroke="#6d7780" stroke-width="3" opacity="0.55"/>
+  <!-- TCP guide glow -->
+  <g opacity="0.95">
+    <path d="M1016 690 C1004 632 978 584 916 548" class="measure"/>
+    <circle cx="916" cy="548" r="9" fill="#48ec7d" filter="url(#glow)"/>
+    <circle cx="1016" cy="690" r="9" fill="#48ec7d" filter="url(#glow)"/>
+    <text x="938" y="534" class="label">TCP target</text>
   </g>
 
-  <!-- Small carriers / workpieces -->
-  <g filter="url(#shadow)">
-    <path d="M574 570 L732 552 L788 586 L624 612 Z" fill="#20242a" stroke="#93a1aa" stroke-width="2"/>
-    <g>
-      <rect x="610" y="566" width="26" height="18" rx="3" fill="#2e8cff"/>
-      <rect x="646" y="562" width="26" height="18" rx="3" fill="#f6c84c"/>
-      <rect x="682" y="558" width="26" height="18" rx="3" fill="#5bd888"/>
-      <rect x="718" y="554" width="26" height="18" rx="3" fill="#e96255"/>
-    </g>
-    <path d="M1010 627 L1194 598 L1264 639 L1074 674 Z" fill="#20242a" stroke="#93a1aa" stroke-width="2"/>
-    <rect x="1078" y="620" width="72" height="24" rx="6" fill="#f67b34" stroke="#331508" stroke-width="2"/>
+  <!-- quiet dimension callouts -->
+  <g opacity="0.78">
+    <path d="M196 786 L414 744" class="measure"/>
+    <text x="216" y="816" class="tiny">Robot A rail end 1000mm</text>
+    <path d="M1160 708 L1338 672" class="measure"/>
+    <text x="1186" y="744" class="tiny">front rail 500mm</text>
   </g>
 
-  <!-- Robot drawing symbol: base, arm links, joints, wrist/tool -->
-  <g id="robotA" transform="translate(324 620) scale(1.08)">
-    <ellipse cx="0" cy="105" rx="116" ry="26" fill="#000" opacity="0.35"/>
-    <path d="M-70 86 L70 86 L48 136 L-48 136 Z" fill="url(#whiteRobot)" stroke="#2f3740" stroke-width="4" filter="url(#shadow)"/>
-    <ellipse cx="0" cy="82" rx="74" ry="28" fill="url(#whiteRobot)" stroke="#2f3740" stroke-width="4"/>
-    <path class="cable" d="M-20 56 C-78 4 -72 -70 -12 -108"/>
-    <path class="robot-link" d="M-4 58 C-68 4 -62 -74 0 -122" stroke="url(#whiteRobot)" stroke-width="46"/>
-    <circle class="joint" cx="-4" cy="58" r="29" fill="url(#whiteRobot)"/>
-    <circle class="joint" cx="0" cy="-122" r="31" fill="url(#whiteRobot)"/>
-    <path class="robot-link" d="M0 -122 C82 -188 160 -138 182 -50" stroke="url(#whiteRobot)" stroke-width="42"/>
-    <circle class="joint" cx="182" cy="-50" r="27" fill="url(#whiteRobot)"/>
-    <path class="robot-link" d="M182 -50 C152 -2 146 36 182 74" stroke="url(#whiteRobot)" stroke-width="35"/>
-    <circle class="joint" cx="182" cy="74" r="22" fill="url(#whiteRobot)"/>
-    <path d="M184 88 L250 104" stroke="#1a2028" stroke-width="12" stroke-linecap="round"/>
-    <path d="M245 98 L286 108" stroke="#d8dde1" stroke-width="9" stroke-linecap="round"/>
-    <circle cx="296" cy="111" r="8" fill="#70dfff" filter="url(#glow)"/>
-    <text x="-72" y="178" class="label">Robot A</text>
+  <!-- small bottom status bar -->
+  <g transform="translate(50 808)">
+    <rect x="0" y="0" width="520" height="54" rx="27" fill="#ffffff" opacity="0.42" stroke="#ffffff" stroke-opacity="0.26"/>
+    <text x="24" y="34" class="tiny">Simple View: rail, robot, workpiece only</text>
+    <circle cx="326" cy="27" r="7" fill="#38c876"/>
+    <text x="344" y="34" class="tiny">Robot A selected</text>
   </g>
-
-  <g id="robotB" transform="translate(805 585) scale(0.94)">
-    <ellipse cx="0" cy="105" rx="108" ry="25" fill="#000" opacity="0.35"/>
-    <path d="M-66 86 L66 86 L46 136 L-46 136 Z" fill="url(#yellowRobot)" stroke="#3c2b08" stroke-width="4" filter="url(#shadow)"/>
-    <ellipse cx="0" cy="82" rx="70" ry="27" fill="url(#yellowRobot)" stroke="#3c2b08" stroke-width="4"/>
-    <path class="cable" d="M20 56 C70 8 64 -66 10 -116"/>
-    <path class="robot-link" d="M4 58 C64 2 54 -82 -10 -132" stroke="url(#yellowRobot)" stroke-width="44"/>
-    <circle class="joint" cx="4" cy="58" r="28" fill="url(#yellowRobot)"/>
-    <circle class="joint" cx="-10" cy="-132" r="31" fill="url(#yellowRobot)"/>
-    <path class="robot-link" d="M-10 -132 C-94 -188 -172 -126 -190 -36" stroke="url(#yellowRobot)" stroke-width="40"/>
-    <circle class="joint" cx="-190" cy="-36" r="27" fill="url(#yellowRobot)"/>
-    <path class="robot-link" d="M-190 -36 C-154 12 -140 50 -178 82" stroke="url(#yellowRobot)" stroke-width="34"/>
-    <circle class="joint" cx="-178" cy="82" r="22" fill="url(#yellowRobot)"/>
-    <path d="M-180 95 L-246 117" stroke="#1a2028" stroke-width="12" stroke-linecap="round"/>
-    <path d="M-242 112 L-282 126" stroke="#e6e0c5" stroke-width="9" stroke-linecap="round"/>
-    <circle cx="-292" cy="130" r="8" fill="#ffdf72" filter="url(#glow)"/>
-    <text x="-70" y="178" class="label">Robot B</text>
-  </g>
-
-  <g id="robotC" transform="translate(1230 604) scale(1.02)">
-    <ellipse cx="0" cy="105" rx="116" ry="26" fill="#000" opacity="0.35"/>
-    <path d="M-72 86 L72 86 L50 138 L-50 138 Z" fill="url(#orangeRobot)" stroke="#40180b" stroke-width="4" filter="url(#shadow)"/>
-    <ellipse cx="0" cy="82" rx="74" ry="28" fill="url(#orangeRobot)" stroke="#40180b" stroke-width="4"/>
-    <path class="cable" d="M16 56 C68 10 58 -66 -4 -112"/>
-    <path class="robot-link" d="M4 58 C62 4 48 -76 -18 -124" stroke="url(#orangeRobot)" stroke-width="46"/>
-    <circle class="joint" cx="4" cy="58" r="29" fill="url(#orangeRobot)"/>
-    <circle class="joint" cx="-18" cy="-124" r="31" fill="url(#orangeRobot)"/>
-    <path class="robot-link" d="M-18 -124 C-100 -174 -174 -112 -196 -22" stroke="url(#orangeRobot)" stroke-width="42"/>
-    <circle class="joint" cx="-196" cy="-22" r="27" fill="url(#orangeRobot)"/>
-    <path class="robot-link" d="M-196 -22 C-160 30 -148 68 -186 102" stroke="url(#orangeRobot)" stroke-width="35"/>
-    <circle class="joint" cx="-186" cy="102" r="22" fill="url(#orangeRobot)"/>
-    <path d="M-188 115 L-256 132" stroke="#1a2028" stroke-width="12" stroke-linecap="round"/>
-    <path d="M-252 127 L-294 139" stroke="#e9d6c8" stroke-width="9" stroke-linecap="round"/>
-    <circle cx="-304" cy="142" r="8" fill="#ff8f6c" filter="url(#glow)"/>
-    <text x="-70" y="178" class="label">Robot C</text>
-  </g>
-
-  <!-- Measurement guide, quiet and thin -->
-  <g opacity="0.8">
-    <path d="M336 540 C490 500 645 490 800 510" stroke="#ffd36b" stroke-width="2.4" fill="none" stroke-dasharray="9 9"/>
-    <text x="526" y="493" class="metric">1850 mm</text>
-    <path d="M810 510 C965 530 1118 520 1262 502" stroke="#ffd36b" stroke-width="2.4" fill="none" stroke-dasharray="9 9"/>
-    <text x="1002" y="512" class="metric">1850 mm</text>
-    <path d="M1260 670 C1330 654 1395 635 1460 606" stroke="#ffd36b" stroke-width="2.4" fill="none" stroke-dasharray="9 9"/>
-    <text x="1346" y="664" class="metric">rail clearance 500 mm</text>
-  </g>
-
-  <!-- Minimal HMI overlay -->
-  <g transform="translate(34 32)">
-    <rect width="424" height="104" rx="20" class="hud-panel"/>
-    <text x="24" y="42" class="title">INDY7 Digital Twin</text>
-    <text x="25" y="72" class="sub">Rail + robot focused operator view</text>
-    <g transform="translate(260 22)">
-      <rect width="124" height="28" rx="14" class="pill-on"/>
-      <circle cx="20" cy="14" r="6" fill="#63d58a"/>
-      <text x="36" y="19" class="tiny" fill="#dcffe9">3 Robots Live</text>
-    </g>
-  </g>
-
-  <g transform="translate(1165 34)">
-    <rect width="394" height="136" rx="22" class="hud-panel"/>
-    <text x="24" y="38" class="label">View Layers</text>
-    <g transform="translate(24 58)">
-      <rect width="88" height="28" rx="14" class="pill-on"/>
-      <text x="23" y="19" class="tiny" fill="#dcffe9">Rail</text>
-      <rect x="100" width="92" height="28" rx="14" class="pill-on"/>
-      <text x="123" y="19" class="tiny" fill="#dcffe9">Robot</text>
-      <rect x="204" width="94" height="28" rx="14" class="pill"/>
-      <text x="224" y="19" class="tiny">Trace</text>
-      <rect x="310" width="60" height="28" rx="14" class="pill"/>
-      <text x="326" y="19" class="tiny">Zone</text>
-    </g>
-    <text x="24" y="112" class="sub">Simple View first, Debug View on demand</text>
-  </g>
-
-  <!-- Side monitor -->
-  <g transform="translate(1300 282)" filter="url(#shadow)" opacity="0.9">
-    <rect x="0" y="0" width="202" height="124" rx="8" fill="#090d12" stroke="#465466" stroke-width="3"/>
-    <rect x="12" y="13" width="178" height="98" rx="4" fill="#101c27"/>
-    <text x="26" y="39" class="tiny" fill="#8ef7ad">SYSTEM ONLINE</text>
-    <path d="M28 62 H78 M28 82 H105 M28 102 H70" stroke="#8ef7ad" stroke-width="3"/>
-    <path d="M126 54 h38 v38 h-38z" fill="none" stroke="#76b7ff" stroke-width="3"/>
-  </g>
-
-  <!-- subtle top/bottom vignette -->
-  <rect width="1600" height="900" fill="none" stroke="#000" stroke-width="36" opacity="0.34"/>
 </svg>

@@ -8,7 +8,7 @@
 
 새 화면 방향은 다음처럼 단순화합니다.
 
-- 기본 표시: 레일, Robot A/B/C, 현재 TCP 위치, 핵심 치수
+- 기본 표시: 회색 테이블/레일, 흰색 Indy7 로봇, 현재 TCP 위치, 단순 작업물
 - 기본 숨김: 전체 궤적, 위험 존 박스, 상세 그리드, 긴 텍스트 라벨
 - 필요 시 표시: 안전 가이드 존, TCP trail, place watch zone, 싱귤러리티 점
 
@@ -27,7 +27,7 @@ Robot A 기준 rail 끝단 여유: 약 1000mm
 
 ## 실제 앱 적용 방향
 
-1. `Simple View`: 레일과 로봇만 보여주는 작업자 기본 화면
+1. `Simple View`: 회색 스튜디오 배경에서 레일, 로봇, 작업물만 보여주는 작업자 기본 화면
 2. `Debug View`: 현재처럼 안전 박스, 궤적, 위험 점, 그리드를 모두 켜는 엔지니어 화면
 3. `Mesh Layer`: Google Drive의 Indy7 모델 파일을 로컬에 받은 뒤 단순 링크 형상을 실제 mesh로 교체
 4. `Layer Toggle`: Page 1과 Page 2에서 `Rail`, `Robot`, `TCP`, `Zone`, `Grid` 토글 제공

@@ -3,18 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Indy7 Digital Twin Scene Guide</title>
+  <title>Indy7 Studio View Guide</title>
   <style>
     :root {
-      color-scheme: dark;
-      --bg: #07080d;
-      --panel: rgba(14, 18, 28, 0.82);
-      --line: rgba(132, 154, 179, 0.24);
-      --text: #f5f7fb;
-      --muted: #aeb7c5;
-      --green: #67d990;
-      --amber: #f3be56;
-      --blue: #71baff;
+      color-scheme: light;
+      --bg: #b9bbb8;
+      --panel: rgba(255, 255, 255, 0.42);
+      --line: rgba(68, 74, 72, 0.18);
+      --text: #202524;
+      --muted: #59615f;
+      --green: #20a963;
     }
 
     * {
@@ -25,58 +23,70 @@
       margin: 0;
       min-height: 100vh;
       background:
-        radial-gradient(circle at 20% 10%, rgba(70, 125, 180, 0.28), transparent 32%),
-        radial-gradient(circle at 84% 18%, rgba(239, 160, 72, 0.18), transparent 30%),
-        var(--bg);
+        radial-gradient(circle at 38% 18%, rgba(255,255,255,0.65), transparent 42%),
+        linear-gradient(180deg, #d8d8d5, #9ea19d);
       color: var(--text);
       font-family: Inter, Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
     }
 
     .shell {
-      min-height: 100vh;
-      padding: 22px;
-      display: grid;
-      grid-template-rows: auto 1fr auto;
-      gap: 16px;
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      min-height: 620px;
+      overflow: hidden;
     }
 
-    .topbar,
-    .specs {
+    .scene {
+      width: 100%;
+      height: 100%;
+    }
+
+    .scene img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .bar {
+      position: absolute;
+      left: 30px;
+      right: 30px;
+      top: 26px;
+      min-height: 64px;
       border: 1px solid var(--line);
-      border-radius: 18px;
+      border-radius: 24px;
       background: var(--panel);
       backdrop-filter: blur(18px);
-      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.32);
-    }
-
-    .topbar {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 18px;
-      padding: 18px 22px;
+      padding: 14px 20px;
+      box-shadow: 0 22px 70px rgba(30, 32, 30, 0.18);
     }
 
     .brand {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 3px;
     }
 
     .brand strong {
-      font-size: clamp(24px, 3vw, 36px);
+      font-size: clamp(22px, 2.4vw, 34px);
       line-height: 1.05;
       letter-spacing: 0;
     }
 
-    .brand span,
-    .spec p {
+    .brand span {
       color: var(--muted);
-      font-weight: 650;
-      line-height: 1.5;
+      font-size: 14px;
+      font-weight: 700;
     }
 
-    .layer-pills {
+    .pills {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
@@ -84,134 +94,88 @@
     }
 
     .pill {
-      min-width: 88px;
+      border: 1px solid rgba(57, 65, 63, 0.16);
+      background: rgba(255,255,255,0.42);
+      color: #4f5755;
       border-radius: 999px;
-      border: 1px solid rgba(116, 139, 165, 0.32);
-      background: rgba(24, 32, 46, 0.86);
-      color: #dce4ef;
-      font-size: 13px;
-      font-weight: 800;
-      text-align: center;
       padding: 9px 14px;
+      font-size: 13px;
+      font-weight: 850;
     }
 
     .pill.on {
-      border-color: rgba(103, 217, 144, 0.65);
-      background: rgba(24, 63, 49, 0.85);
-      color: #e5fff0;
+      color: #123d28;
+      border-color: rgba(32, 169, 99, 0.35);
+      background: rgba(124, 226, 168, 0.38);
     }
 
-    .viewer {
-      min-height: 0;
-      border-radius: 24px;
-      overflow: hidden;
-      border: 1px solid rgba(137, 159, 182, 0.25);
-      background: #05070b;
-      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
-    }
-
-    .viewer img {
-      display: block;
-      width: 100%;
-      height: 100%;
-      min-height: 620px;
-      object-fit: cover;
-    }
-
-    .specs {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(160px, 1fr));
-      gap: 1px;
-      overflow: hidden;
-    }
-
-    .spec {
-      min-height: 94px;
-      padding: 18px 20px;
-      background: rgba(10, 13, 20, 0.46);
-    }
-
-    .spec strong {
-      display: block;
-      font-size: 15px;
-      margin-bottom: 8px;
-    }
-
-    .spec p {
-      margin: 0;
+    .caption {
+      position: absolute;
+      left: 30px;
+      bottom: 24px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      padding: 14px 18px;
+      color: var(--muted);
       font-size: 13px;
+      font-weight: 750;
+      box-shadow: 0 20px 54px rgba(30, 32, 30, 0.16);
     }
 
-    .green {
-      color: var(--green);
-    }
+    @media (max-width: 860px) {
+      body {
+        overflow: auto;
+      }
 
-    .amber {
-      color: var(--amber);
-    }
+      .shell {
+        height: auto;
+        min-height: 100vh;
+      }
 
-    .blue {
-      color: var(--blue);
-    }
+      .scene {
+        height: 72vh;
+        min-height: 480px;
+      }
 
-    @media (max-width: 980px) {
-      .topbar {
+      .bar {
+        position: static;
+        margin: 16px;
         align-items: flex-start;
         flex-direction: column;
       }
 
-      .layer-pills {
-        justify-content: flex-start;
-      }
-
-      .specs {
-        grid-template-columns: 1fr 1fr;
-      }
-
-      .viewer img {
-        min-height: 420px;
+      .caption {
+        position: static;
+        margin: 16px;
       }
     }
   </style>
 </head>
 <body>
   <main class="shell">
-    <header class="topbar">
+    <section class="scene" aria-label="studio render scene">
+      <img src="./rail_robot_scene_guide.svg" alt="Minimal studio style Indy7 robot and rail scene">
+    </section>
+
+    <header class="bar">
       <div class="brand">
-        <strong>INDY7 Digital Twin Scene</strong>
-        <span>레일과 로봇이 먼저 보이는 작업자용 Simple View 시안</span>
+        <strong>INDY7 Studio View</strong>
+        <span>회색 테이블, 흰색 로봇, 작업물 중심의 깨끗한 Simple View</span>
       </div>
-      <nav class="layer-pills" aria-label="view layers">
-        <span class="pill on">Rail</span>
+      <nav class="pills" aria-label="view layers">
         <span class="pill on">Robot</span>
+        <span class="pill on">Rail</span>
+        <span class="pill on">Workpiece</span>
         <span class="pill">Trace</span>
         <span class="pill">Zone</span>
-        <span class="pill">Grid</span>
       </nav>
     </header>
 
-    <section class="viewer" aria-label="scene preview">
-      <img src="./rail_robot_scene_guide.svg" alt="Indy7 rail digital twin scene guide">
-    </section>
-
-    <section class="specs" aria-label="scene rules">
-      <div class="spec">
-        <strong class="green">Simple View</strong>
-        <p>기본은 레일, 로봇, 작업물, 현재 TCP만 표시합니다.</p>
-      </div>
-      <div class="spec">
-        <strong class="amber">Debug View</strong>
-        <p>위험 존, 싱귤러리티, 전체 궤적은 필요할 때만 켭니다.</p>
-      </div>
-      <div class="spec">
-        <strong class="blue">현장 치수</strong>
-        <p>Robot 간격 1850mm, 전면 rail 거리 500mm를 기준으로 둡니다.</p>
-      </div>
-      <div class="spec">
-        <strong>Mesh Layer</strong>
-        <p>Drive의 Indy7 모델 파일을 받으면 실제 mesh로 교체합니다.</p>
-      </div>
-    </section>
+    <aside class="caption">
+      Debug layer는 기본 숨김. 실제 적용 시 Robot A/B/C 선택에 따라 같은 구도로 로봇과 TCP만 갱신.
+    </aside>
   </main>
 </body>
 </html>
