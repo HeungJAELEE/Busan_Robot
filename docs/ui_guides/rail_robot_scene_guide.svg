@@ -64,8 +64,12 @@
       .label { font: 800 14px Inter, Pretendard, Arial, sans-serif; fill: #242928; letter-spacing: 0; }
       .robot-link { fill: none; stroke: url(#robotWhite); stroke-linecap: round; stroke-linejoin: round; filter: url(#shadow); }
       .robot-link-hi { fill: none; stroke: #ffffff; stroke-linecap: round; stroke-linejoin: round; opacity: 0.55; }
+      .link-body { fill: url(#robotWhite); stroke: #747c7a; stroke-width: 4; filter: url(#softShadow); }
+      .link-side { fill: #b6bdbc; opacity: 0.5; }
+      .link-highlight { fill: #ffffff; opacity: 0.52; }
       .joint { fill: url(#robotWhite); stroke: #6f7776; stroke-width: 3; filter: url(#softShadow); }
       .joint-cap { fill: url(#jointDark); stroke: #d8dcda; stroke-width: 5; filter: url(#softShadow); }
+      .bolt { fill: #2f3634; opacity: 0.75; }
       .rail-line { stroke: #f2f3f1; stroke-width: 3; opacity: 0.72; }
       .slot { stroke: #4f5553; stroke-width: 3; opacity: 0.36; }
       .measure { stroke: #ffd445; stroke-width: 3; stroke-dasharray: 10 10; fill: none; opacity: 0.72; }
@@ -137,46 +141,80 @@
     </g>
   </g>
 
-  <!-- main white Indy7 robot, clean studio style -->
-  <g transform="translate(426 548)" filter="url(#shadow)">
-    <!-- base -->
-    <ellipse cx="0" cy="172" rx="144" ry="32" fill="#2b2f2e" opacity="0.22"/>
-    <path d="M-92 112 C-82 82 82 82 92 112 L70 184 C60 210 -60 210 -70 184 Z" fill="url(#robotSoft)" stroke="#777f7d" stroke-width="4"/>
-    <ellipse cx="0" cy="110" rx="94" ry="38" fill="url(#robotWhite)" stroke="#777f7d" stroke-width="4"/>
-    <ellipse cx="0" cy="106" rx="58" ry="22" fill="#e9eceb" opacity="0.82"/>
+  <!-- main white Indy7 robot, straight-link studio style -->
+  <g transform="translate(420 548)" filter="url(#shadow)">
+    <!-- floor shadow and base -->
+    <ellipse cx="0" cy="174" rx="145" ry="34" fill="#2b2f2e" opacity="0.2"/>
+    <path d="M-96 112 C-86 82 86 82 96 112 L72 184 C61 213 -61 213 -72 184 Z" fill="url(#robotSoft)" stroke="#707876" stroke-width="4"/>
+    <ellipse cx="0" cy="110" rx="98" ry="39" fill="url(#robotWhite)" stroke="#707876" stroke-width="4"/>
+    <ellipse cx="0" cy="106" rx="58" ry="22" fill="#eef1f0" opacity="0.9"/>
+    <circle class="bolt" cx="-42" cy="115" r="5"/>
+    <circle class="bolt" cx="42" cy="115" r="5"/>
 
-    <!-- vertical shoulder and elbow -->
-    <path class="robot-link" d="M-18 86 C-70 -4 -48 -132 36 -202" stroke-width="70"/>
-    <path class="robot-link-hi" d="M-35 58 C-68 -26 -38 -126 42 -192" stroke-width="13"/>
-    <circle class="joint" cx="-18" cy="86" r="44"/>
-    <circle class="joint" cx="36" cy="-202" r="50"/>
+    <!-- J1 vertical column -->
+    <g transform="translate(0 70) rotate(-90)">
+      <rect class="link-body" x="0" y="-38" width="170" height="76" rx="38"/>
+      <rect class="link-highlight" x="22" y="-28" width="118" height="14" rx="7"/>
+      <rect class="link-side" x="44" y="22" width="90" height="10" rx="5"/>
+    </g>
+    <circle class="joint" cx="0" cy="70" r="44"/>
+    <ellipse cx="0" cy="70" rx="30" ry="22" fill="#f8faf9" opacity="0.75"/>
 
-    <!-- upper arm -->
-    <path class="robot-link" d="M36 -202 C160 -286 310 -198 362 -48" stroke-width="64"/>
-    <path class="robot-link-hi" d="M61 -218 C176 -264 288 -192 338 -62" stroke-width="12"/>
-    <circle class="joint" cx="362" cy="-48" r="46"/>
-    <circle class="joint-cap" cx="362" cy="-48" r="31"/>
-    <circle cx="362" cy="-48" r="12" fill="#bfc5c3"/>
+    <!-- J2 shoulder -->
+    <circle class="joint" cx="0" cy="-100" r="54"/>
+    <circle class="joint-cap" cx="0" cy="-100" r="31"/>
+    <circle cx="0" cy="-100" r="11" fill="#cdd3d1"/>
+    <circle class="bolt" cx="-25" cy="-118" r="4"/>
+    <circle class="bolt" cx="25" cy="-82" r="4"/>
 
-    <!-- forearm and wrist -->
-    <path class="robot-link" d="M362 -48 C318 58 360 148 486 178" stroke-width="54"/>
-    <path class="robot-link-hi" d="M356 -22 C334 68 372 133 476 164" stroke-width="10"/>
-    <circle class="joint" cx="486" cy="178" r="38"/>
-    <circle class="joint-cap" cx="486" cy="178" r="23"/>
-    <path class="robot-link" d="M486 178 C546 188 585 222 596 278" stroke-width="38"/>
-    <circle class="joint" cx="596" cy="278" r="29"/>
-
-    <!-- tool / gripper -->
-    <g transform="translate(596 278) rotate(12)">
-      <rect x="-17" y="16" width="34" height="52" rx="12" fill="url(#robotWhite)" stroke="#6f7776" stroke-width="3"/>
-      <rect x="-34" y="62" width="68" height="24" rx="8" fill="#d7dcda" stroke="#626a68" stroke-width="3"/>
-      <path d="M-24 84 L-54 122" stroke="#434a48" stroke-width="10" stroke-linecap="round"/>
-      <path d="M24 84 L52 122" stroke="#434a48" stroke-width="10" stroke-linecap="round"/>
-      <path d="M-55 122 L-73 112 M53 122 L72 112" stroke="#1f2524" stroke-width="8" stroke-linecap="round"/>
+    <!-- upper arm: straight cast link -->
+    <g transform="translate(0 -100) rotate(-35)">
+      <rect class="link-body" x="10" y="-35" width="270" height="70" rx="35"/>
+      <rect class="link-highlight" x="42" y="-25" width="174" height="13" rx="7"/>
+      <rect class="link-side" x="84" y="22" width="130" height="11" rx="6"/>
     </g>
 
-    <!-- cable -->
-    <path d="M-40 68 C-124 -4 -114 -152 20 -248 C70 -285 118 -296 170 -276" fill="none" stroke="#202524" stroke-width="15" stroke-linecap="round" opacity="0.86"/>
+    <!-- J3 elbow -->
+    <circle class="joint" cx="222" cy="-255" r="50"/>
+    <circle class="joint-cap" cx="222" cy="-255" r="29"/>
+    <circle cx="222" cy="-255" r="11" fill="#cdd3d1"/>
+    <circle class="bolt" cx="197" cy="-272" r="4"/>
+    <circle class="bolt" cx="247" cy="-238" r="4"/>
+
+    <!-- forearm: straight link -->
+    <g transform="translate(222 -255) rotate(31)">
+      <rect class="link-body" x="8" y="-31" width="245" height="62" rx="31"/>
+      <rect class="link-highlight" x="40" y="-22" width="154" height="11" rx="6"/>
+      <rect class="link-side" x="78" y="18" width="122" height="10" rx="5"/>
+    </g>
+
+    <!-- wrist axes -->
+    <circle class="joint" cx="430" cy="-127" r="42"/>
+    <circle class="joint-cap" cx="430" cy="-127" r="25"/>
+    <circle cx="430" cy="-127" r="9" fill="#cdd3d1"/>
+    <g transform="translate(430 -127) rotate(33)">
+      <rect class="link-body" x="0" y="-22" width="114" height="44" rx="22"/>
+      <rect class="link-highlight" x="22" y="-15" width="58" height="8" rx="4"/>
+    </g>
+    <circle class="joint" cx="526" cy="-67" r="32"/>
+    <circle class="joint-cap" cx="526" cy="-67" r="19"/>
+    <g transform="translate(526 -67) rotate(58)">
+      <rect class="link-body" x="-6" y="-18" width="86" height="36" rx="18"/>
+    </g>
+    <circle class="joint" cx="570" cy="7" r="27"/>
+
+    <!-- compact gripper -->
+    <g transform="translate(570 7) rotate(16)">
+      <rect x="-19" y="17" width="38" height="58" rx="13" fill="url(#robotWhite)" stroke="#68706e" stroke-width="3"/>
+      <rect x="-38" y="69" width="76" height="25" rx="8" fill="#d7dcda" stroke="#626a68" stroke-width="3"/>
+      <path d="M-25 91 L-58 130" stroke="#3d4442" stroke-width="10" stroke-linecap="round"/>
+      <path d="M25 91 L56 130" stroke="#3d4442" stroke-width="10" stroke-linecap="round"/>
+      <path d="M-59 130 L-78 120 M57 130 L77 120" stroke="#1f2524" stroke-width="8" stroke-linecap="round"/>
+    </g>
+
+    <!-- subtle cable, visually secondary to the rigid links -->
+    <path d="M-44 64 C-92 -28 -68 -132 4 -176 C72 -218 148 -232 220 -255" fill="none" stroke="#202524" stroke-width="7" stroke-linecap="round" opacity="0.36"/>
+    <path d="M220 -255 C296 -270 378 -210 430 -127" fill="none" stroke="#202524" stroke-width="6" stroke-linecap="round" opacity="0.32"/>
   </g>
 
   <!-- TCP guide glow -->
