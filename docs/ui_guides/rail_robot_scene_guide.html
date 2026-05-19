@@ -3,16 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Indy7 Studio View Guide</title>
+  <title>Indy7 Toy Car Process Twin</title>
   <style>
     :root {
       color-scheme: light;
-      --bg: #b9bbb8;
-      --panel: rgba(255, 255, 255, 0.42);
+      --panel: rgba(255, 255, 255, 0.58);
       --line: rgba(68, 74, 72, 0.18);
       --text: #202524;
       --muted: #59615f;
       --green: #20a963;
+      --amber: #d79927;
+      --blue: #2b78d4;
     }
 
     * {
@@ -23,7 +24,7 @@
       margin: 0;
       min-height: 100vh;
       background:
-        radial-gradient(circle at 38% 18%, rgba(255,255,255,0.65), transparent 42%),
+        radial-gradient(circle at 44% 18%, rgba(255,255,255,0.82), transparent 44%),
         linear-gradient(180deg, #d8d8d5, #9ea19d);
       color: var(--text);
       font-family: Inter, Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -38,34 +39,35 @@
       overflow: hidden;
     }
 
-    .scene {
+    #scene {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
     }
 
-    .scene img {
-      display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
+    .bar,
+    .caption,
+    .legend {
+      position: absolute;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 22px 70px rgba(30, 32, 30, 0.18);
     }
 
     .bar {
-      position: absolute;
       left: 30px;
       right: 30px;
       top: 26px;
       min-height: 64px;
-      border: 1px solid var(--line);
       border-radius: 24px;
-      background: var(--panel);
-      backdrop-filter: blur(18px);
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 18px;
       padding: 14px 20px;
-      box-shadow: 0 22px 70px rgba(30, 32, 30, 0.18);
+      pointer-events: none;
     }
 
     .brand {
@@ -80,10 +82,12 @@
       letter-spacing: 0;
     }
 
-    .brand span {
+    .brand span,
+    .caption,
+    .legend {
       color: var(--muted);
-      font-size: 14px;
-      font-weight: 700;
+      font-size: 13px;
+      font-weight: 750;
     }
 
     .pills {
@@ -95,7 +99,7 @@
 
     .pill {
       border: 1px solid rgba(57, 65, 63, 0.16);
-      background: rgba(255,255,255,0.42);
+      background: rgba(255,255,255,0.48);
       color: #4f5755;
       border-radius: 999px;
       padding: 9px 14px;
@@ -110,18 +114,48 @@
     }
 
     .caption {
-      position: absolute;
       left: 30px;
       bottom: 24px;
-      border: 1px solid var(--line);
       border-radius: 20px;
-      background: var(--panel);
-      backdrop-filter: blur(18px);
       padding: 14px 18px;
-      color: var(--muted);
-      font-size: 13px;
-      font-weight: 750;
-      box-shadow: 0 20px 54px rgba(30, 32, 30, 0.16);
+      pointer-events: none;
+    }
+
+    .legend {
+      right: 30px;
+      bottom: 24px;
+      border-radius: 20px;
+      padding: 14px 16px;
+      display: grid;
+      gap: 9px;
+      min-width: 268px;
+      pointer-events: none;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      display: inline-block;
+      margin-right: 8px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .loading {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: #59615f;
+      font-weight: 800;
+      letter-spacing: 0;
     }
 
     @media (max-width: 860px) {
@@ -130,52 +164,410 @@
       }
 
       .shell {
-        height: auto;
-        min-height: 100vh;
-      }
-
-      .scene {
-        height: 72vh;
-        min-height: 480px;
+        height: 100vh;
       }
 
       .bar {
-        position: static;
-        margin: 16px;
+        left: 16px;
+        right: 16px;
+        top: 16px;
         align-items: flex-start;
         flex-direction: column;
       }
 
-      .caption {
-        position: static;
-        margin: 16px;
+      .legend {
+        display: none;
       }
     }
   </style>
 </head>
 <body>
   <main class="shell">
-    <section class="scene" aria-label="studio render scene">
-      <img src="./rail_robot_scene_guide.svg" alt="Minimal studio style Indy7 robot and rail scene">
-    </section>
+    <div id="scene" aria-label="Indy7 toy car process 3D guide">
+      <div class="loading">3D 공정 씬 로딩 중...</div>
+    </div>
 
     <header class="bar">
       <div class="brand">
-        <strong>INDY7 Studio View</strong>
-        <span>회색 테이블, 흰색 로봇, 작업물 중심의 깨끗한 Simple View</span>
+        <strong>INDY7 Toy Car Process Twin</strong>
+        <span>Robot A 차체 결합 · Robot B 전면 유리창 조립 · Robot C 양품 배출</span>
       </div>
       <nav class="pills" aria-label="view layers">
-        <span class="pill on">Robot A/B/C</span>
+        <span class="pill on">6-axis Robot A/B/C</span>
         <span class="pill on">Rail</span>
-        <span class="pill on">Workpiece</span>
+        <span class="pill on">Toy car</span>
         <span class="pill">Trace</span>
         <span class="pill">Zone</span>
       </nav>
     </header>
 
     <aside class="caption">
-      Debug layer는 기본 숨김. 실제 적용 시 Robot A/B/C 선택에 따라 같은 구도로 로봇과 TCP만 갱신.
+      마우스로 회전/확대 가능. 실제 모델 파일을 받으면 이 파라메트릭 6축 로봇을 Indy7 mesh로 교체.
+    </aside>
+
+    <aside class="legend">
+      <div class="legend-row"><span><span class="dot"></span>Robot A</span><strong>차체 결합</strong></div>
+      <div class="legend-row"><span><span class="dot"></span>Robot B</span><strong>전면 유리창 조립</strong></div>
+      <div class="legend-row"><span><span class="dot"></span>Robot C</span><strong>양품 배출</strong></div>
     </aside>
   </main>
+
+  <script src="./vendor/three/three.min.js"></script>
+  <script src="./vendor/three/OrbitControls.js"></script>
+  <script src="./vendor/three/RoundedBoxGeometry.js"></script>
+  <script>
+    try {
+    const container = document.getElementById('scene');
+    const loading = container.querySelector('.loading');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xd0d0cb);
+    scene.fog = new THREE.Fog(0xd0d0cb, 8, 18);
+
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 80);
+    camera.position.set(4.8, 3.6, 7.2);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+    container.appendChild(renderer.domElement);
+    loading.remove();
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.target.set(0.4, 0.82, 0.0);
+    controls.enableDamping = true;
+    controls.minDistance = 4.2;
+    controls.maxDistance = 13.5;
+    controls.maxPolarAngle = Math.PI * 0.48;
+
+    const white = new THREE.MeshPhysicalMaterial({
+      color: 0xf6f8f7,
+      roughness: 0.38,
+      metalness: 0.02,
+      clearcoat: 0.42,
+      clearcoatRoughness: 0.32,
+    });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x252b2a, roughness: 0.56, metalness: 0.16 });
+    const rubber = new THREE.MeshStandardMaterial({ color: 0x111514, roughness: 0.74 });
+    const railMat = new THREE.MeshStandardMaterial({ color: 0x8b918d, roughness: 0.34, metalness: 0.35 });
+    const tableMat = new THREE.MeshStandardMaterial({ color: 0x777c78, roughness: 0.58, metalness: 0.08 });
+    const beltMat = new THREE.MeshStandardMaterial({ color: 0x222827, roughness: 0.7 });
+    const glassMat = new THREE.MeshPhysicalMaterial({
+      color: 0x6ecbff,
+      transparent: true,
+      opacity: 0.52,
+      roughness: 0.04,
+      metalness: 0.0,
+      transmission: 0.3,
+    });
+    const greenMat = new THREE.MeshStandardMaterial({ color: 0x38c978, roughness: 0.42 });
+    const amberMat = new THREE.MeshStandardMaterial({ color: 0xf4c74e, roughness: 0.45 });
+    const redMat = new THREE.MeshStandardMaterial({ color: 0xe84a42, roughness: 0.5 });
+    const blueMat = new THREE.MeshStandardMaterial({ color: 0x2b78d4, roughness: 0.5 });
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x6f756f, 2.3));
+    const key = new THREE.DirectionalLight(0xffffff, 3.1);
+    key.position.set(-3.5, 7, 5);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.camera.left = -7;
+    key.shadow.camera.right = 7;
+    key.shadow.camera.top = 7;
+    key.shadow.camera.bottom = -7;
+    scene.add(key);
+
+    const rim = new THREE.DirectionalLight(0xdcecff, 1.1);
+    rim.position.set(6, 4, -4);
+    scene.add(rim);
+
+    function mesh(geometry, material, parent = scene) {
+      const m = new THREE.Mesh(geometry, material);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      parent.add(m);
+      return m;
+    }
+
+    function roundedBox(w, h, d, r = 0.08, s = 5) {
+      return new THREE.RoundedBoxGeometry(w, h, d, s, r);
+    }
+
+    function cylinderBetween(group, start, end, radius, material, radial = 28) {
+      const dir = new THREE.Vector3().subVectors(end, start);
+      const len = dir.length();
+      const geo = new THREE.CylinderGeometry(radius, radius, len, radial, 1, false);
+      const obj = mesh(geo, material, group);
+      obj.position.copy(start).add(end).multiplyScalar(0.5);
+      obj.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+      return obj;
+    }
+
+    function addJoint(group, position, radius, capAxis = 'z') {
+      const shell = mesh(new THREE.SphereGeometry(radius, 40, 24), white, group);
+      shell.position.copy(position);
+      const cap = mesh(new THREE.CylinderGeometry(radius * 0.54, radius * 0.54, radius * 0.28, 40), dark, group);
+      cap.position.copy(position);
+      if (capAxis === 'x') cap.rotation.z = Math.PI / 2;
+      if (capAxis === 'z') cap.rotation.x = Math.PI / 2;
+
+      for (let i = 0; i < 4; i += 1) {
+        const bolt = mesh(new THREE.SphereGeometry(radius * 0.07, 12, 8), dark, group);
+        const a = i * Math.PI * 0.5 + Math.PI * 0.25;
+        bolt.position.set(
+          position.x + Math.cos(a) * radius * 0.62,
+          position.y + Math.sin(a) * radius * 0.62,
+          position.z + radius * 0.13
+        );
+      }
+    }
+
+    function addLabel(text, position, color = '#202524') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'rgba(255,255,255,0.86)';
+      roundRect(ctx, 18, 20, 476, 76, 38);
+      ctx.fill();
+      ctx.fillStyle = '#38c978';
+      ctx.beginPath();
+      ctx.arc(64, 58, 14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = color;
+      ctx.font = '800 36px Inter, Arial, sans-serif';
+      ctx.fillText(text, 92, 72);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.encoding = THREE.sRGBEncoding;
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+      sprite.position.copy(position);
+      sprite.scale.set(1.55, 0.39, 1);
+      scene.add(sprite);
+      return sprite;
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function makeRobot(name, role, rootPos, yaw, pose, scale = 1) {
+      const g = new THREE.Group();
+      g.position.copy(rootPos);
+      g.rotation.y = yaw;
+      g.scale.setScalar(scale);
+      scene.add(g);
+
+      const base = mesh(new THREE.CylinderGeometry(0.42, 0.52, 0.28, 56), white, g);
+      base.position.y = 0.14;
+      const baseCap = mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.08, 56), dark, g);
+      baseCap.position.y = 0.32;
+
+      const p0 = new THREE.Vector3(0, 0.34, 0);
+      const p1 = new THREE.Vector3(0, 1.12, 0);
+      const p2 = new THREE.Vector3(pose.shoulderX, 1.76, pose.shoulderZ);
+      const p3 = new THREE.Vector3(pose.elbowX, 1.34, pose.elbowZ);
+      const p4 = new THREE.Vector3(pose.wristX, 1.02, pose.wristZ);
+      const p5 = new THREE.Vector3(pose.toolX, 0.72, pose.toolZ);
+
+      cylinderBetween(g, p0, p1, 0.18, white);
+      cylinderBetween(g, p1, p2, 0.17, white);
+      cylinderBetween(g, p2, p3, 0.145, white);
+      cylinderBetween(g, p3, p4, 0.115, white);
+      cylinderBetween(g, p4, p5, 0.08, white);
+
+      addJoint(g, p0, 0.25, 'z');
+      addJoint(g, p1, 0.27, 'x');
+      addJoint(g, p2, 0.24, 'x');
+      addJoint(g, p3, 0.19, 'z');
+      addJoint(g, p4, 0.15, 'x');
+      addJoint(g, p5, 0.12, 'z');
+
+      const cable = new THREE.CatmullRomCurve3([
+        p0.clone().add(new THREE.Vector3(-0.16, 0.05, -0.08)),
+        p1.clone().add(new THREE.Vector3(-0.24, 0.1, -0.14)),
+        p2.clone().add(new THREE.Vector3(-0.13, 0.1, -0.12)),
+        p3.clone().add(new THREE.Vector3(-0.08, 0.08, -0.1)),
+      ]);
+      const cableMesh = mesh(new THREE.TubeGeometry(cable, 42, 0.025, 10), rubber, g);
+      cableMesh.castShadow = false;
+
+      const grip = new THREE.Group();
+      grip.position.copy(p5).add(new THREE.Vector3(0, -0.12, 0));
+      g.add(grip);
+      const wrist = mesh(roundedBox(0.22, 0.18, 0.18, 0.04), white, grip);
+      wrist.position.y = -0.08;
+      const fingerL = mesh(roundedBox(0.04, 0.24, 0.05, 0.015), dark, grip);
+      fingerL.position.set(-0.08, -0.24, 0.05);
+      fingerL.rotation.z = -0.35;
+      const fingerR = mesh(roundedBox(0.04, 0.24, 0.05, 0.015), dark, grip);
+      fingerR.position.set(0.08, -0.24, 0.05);
+      fingerR.rotation.z = 0.35;
+
+      addLabel(`${name} · ${role}`, rootPos.clone().add(new THREE.Vector3(0, 2.25 * scale, 0)));
+      return g;
+    }
+
+    function makeToyCar(color, position, rotationY = 0, withGlass = true, scale = 1) {
+      const g = new THREE.Group();
+      g.position.copy(position);
+      g.rotation.y = rotationY;
+      g.scale.setScalar(scale);
+      scene.add(g);
+      const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.38, metalness: 0.06 });
+      const lower = mesh(roundedBox(0.68, 0.18, 0.36, 0.05), bodyMat, g);
+      lower.position.y = 0.18;
+      const cabin = mesh(roundedBox(0.34, 0.17, 0.28, 0.05), bodyMat, g);
+      cabin.position.set(0.02, 0.32, -0.02);
+      if (withGlass) {
+        const glass = mesh(roundedBox(0.2, 0.055, 0.31, 0.018), glassMat, g);
+        glass.position.set(-0.08, 0.42, -0.02);
+        glass.rotation.z = -0.38;
+      }
+      for (const x of [-0.23, 0.23]) {
+        for (const z of [-0.21, 0.21]) {
+          const wheel = mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.045, 24), rubber, g);
+          wheel.position.set(x, 0.1, z);
+          wheel.rotation.x = Math.PI / 2;
+        }
+      }
+      return g;
+    }
+
+    function makeStationLabel(text, position) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 720;
+      canvas.height = 96;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = 'rgba(32,37,36,0.78)';
+      roundRect(ctx, 10, 14, 700, 62, 28);
+      ctx.fill();
+      ctx.fillStyle = '#f7faf8';
+      ctx.font = '800 28px Inter, Arial, sans-serif';
+      ctx.fillText(text, 34, 55);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.encoding = THREE.sRGBEncoding;
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+      sprite.position.copy(position);
+      sprite.scale.set(1.9, 0.26, 1);
+      scene.add(sprite);
+      return sprite;
+    }
+
+    function makeArrow(start, end, color = 0xd79927) {
+      const dir = new THREE.Vector3().subVectors(end, start);
+      const arrow = new THREE.ArrowHelper(dir.clone().normalize(), start, dir.length(), color, 0.22, 0.1);
+      scene.add(arrow);
+      return arrow;
+    }
+
+    const floor = mesh(new THREE.PlaneGeometry(20, 14), new THREE.ShadowMaterial({ opacity: 0.18 }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.02;
+    floor.receiveShadow = true;
+
+    const table = mesh(roundedBox(7.6, 0.16, 2.1, 0.04), tableMat);
+    table.position.set(0.15, 0.08, 0);
+    const belt = mesh(roundedBox(7.1, 0.06, 0.64, 0.03), beltMat);
+    belt.position.set(0.15, 0.2, 0);
+    for (const z of [-0.55, 0.55]) {
+      const rail = mesh(roundedBox(7.8, 0.09, 0.08, 0.02), railMat);
+      rail.position.set(0.15, 0.27, z);
+    }
+    for (let i = 0; i < 13; i += 1) {
+      const rib = mesh(roundedBox(0.03, 0.04, 1.25, 0.008), railMat);
+      rib.position.set(-3.5 + i * 0.58, 0.31, 0);
+    }
+
+    const stations = [
+      { x: -2.55, text: 'A 차체 결합', color: redMat },
+      { x: 0.05, text: 'B 전면 유리창 조립', color: blueMat },
+      { x: 2.55, text: 'C 양품 배출', color: greenMat },
+    ];
+    for (const s of stations) {
+      const marker = mesh(roundedBox(1.1, 0.04, 0.82, 0.03), s.color);
+      marker.position.set(s.x, 0.34, -0.02);
+      marker.material.transparent = true;
+      marker.material.opacity = 0.2;
+      makeStationLabel(s.text, new THREE.Vector3(s.x, 0.72, -1.15));
+    }
+
+    makeToyCar(0xe43d35, new THREE.Vector3(-2.55, 0.48, 0), 0.0, false, 0.9);
+    makeToyCar(0x2b78d4, new THREE.Vector3(0.05, 0.48, 0), 0.0, true, 0.9);
+    makeToyCar(0x38c978, new THREE.Vector3(2.55, 0.48, 0), 0.0, true, 0.9);
+    makeToyCar(0xf1c846, new THREE.Vector3(3.35, 0.48, -0.62), -0.22, true, 0.64);
+
+    const bodyPart = mesh(roundedBox(0.42, 0.12, 0.28, 0.04), redMat);
+    bodyPart.position.set(-2.1, 0.86, -0.62);
+    const windshieldPart = mesh(roundedBox(0.34, 0.045, 0.22, 0.018), glassMat);
+    windshieldPart.position.set(0.38, 0.92, -0.56);
+    windshieldPart.rotation.z = -0.45;
+
+    makeArrow(new THREE.Vector3(-3.3, 0.56, 0.7), new THREE.Vector3(-1.5, 0.56, 0.7));
+    makeArrow(new THREE.Vector3(-0.9, 0.56, 0.7), new THREE.Vector3(1.0, 0.56, 0.7));
+    makeArrow(new THREE.Vector3(1.45, 0.56, 0.7), new THREE.Vector3(3.2, 0.56, 0.7), 0x38c978);
+
+    const robotA = makeRobot('Robot A', '차체 결합', new THREE.Vector3(-2.65, 0.28, 1.25), Math.PI * 0.92, {
+      shoulderX: 0.22, shoulderZ: -0.28,
+      elbowX: 0.86, elbowZ: -0.56,
+      wristX: 0.62, wristZ: -1.0,
+      toolX: 0.24, toolZ: -1.18,
+    }, 0.86);
+    const robotB = makeRobot('Robot B', '전면 유리창 조립', new THREE.Vector3(0.05, 0.28, 1.28), Math.PI * 0.92, {
+      shoulderX: -0.05, shoulderZ: -0.34,
+      elbowX: 0.56, elbowZ: -0.76,
+      wristX: 0.42, wristZ: -1.09,
+      toolX: 0.1, toolZ: -1.27,
+    }, 0.83);
+    const robotC = makeRobot('Robot C', '양품 배출', new THREE.Vector3(2.65, 0.28, 1.22), Math.PI * 0.98, {
+      shoulderX: -0.28, shoulderZ: -0.28,
+      elbowX: -0.72, elbowZ: -0.62,
+      wristX: -0.42, wristZ: -1.04,
+      toolX: 0.03, toolZ: -1.22,
+    }, 0.82);
+
+    const robots = [robotA, robotB, robotC];
+
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    window.addEventListener('resize', onResize);
+
+    function animate(time) {
+      const t = time * 0.001;
+      robotA.rotation.z = Math.sin(t * 0.9) * 0.012;
+      robotB.rotation.z = Math.sin(t * 1.1 + 1.8) * 0.012;
+      robotC.rotation.z = Math.sin(t * 0.8 + 3.2) * 0.012;
+      for (const robot of robots) {
+        robot.traverse((obj) => {
+          if (obj.isSprite) obj.quaternion.copy(camera.quaternion);
+        });
+      }
+      controls.update();
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+    requestAnimationFrame(animate);
+    } catch (error) {
+      const sceneContainer = document.getElementById('scene');
+      const loadingEl = sceneContainer ? sceneContainer.querySelector('.loading') : null;
+      if (loadingEl) {
+        loadingEl.textContent = `3D 렌더링 실패: ${error.message}`;
+      }
+      console.error(error);
+    }
+  </script>
 </body>
 </html>
