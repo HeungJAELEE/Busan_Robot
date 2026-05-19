@@ -32,6 +32,21 @@ Robot A 기준 rail 끝단 여유: 약 1000mm
 
 화면 배치는 로봇 베이스를 뒤쪽에 두고, 레일/차량 작업면을 로봇 앞쪽으로 배치합니다. 즉 작업자가 볼 때 로봇이 앞 레일 위의 차량을 향해 내려오는 구도입니다.
 
+## 레일 기준 티칭 좌표
+
+다음 파일에서 레일 쪽 작업 위치를 확인했습니다.
+
+```text
+260519robotc.7.json
+- Robot C 첫 Pick target: X 549mm, Y -113mm, Z 100mm
+
+20260519robotB1.7.json
+- Robot B 전면 유리창 조립/레일 target: X 544mm, Y -374mm, Z 115mm
+- 마지막 FrameMove 직전 press 경로: X 544mm, Y -374mm, Z 149mm
+```
+
+두 파일 모두 로봇 로컬 좌표에서 레일/제품 작업점이 X축 전방 약 540~550mm 근처에 있으므로, 3D 가이드에서는 로봇 전면 레일 오프셋을 약 0.55m로 두었습니다.
+
 ## 가이드 파일
 
 - HTML 가이드: [rail_robot_scene_guide.html](./rail_robot_scene_guide.html)
