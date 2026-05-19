@@ -1,5 +1,6 @@
 import customtkinter as ctk
 import math
+from core.domains.robot.use_cases.motion_math import MotionMath
 from .base_editor import BaseNodeEditor
 from presentation.ui.theme import Theme
 
@@ -635,25 +636,13 @@ class PickPlaceEditor:
                 print(">> [경고] 정위치(Target) 좌표가 설정되지 않았습니다.")
                 return
 
-            dir_map_rev = {"Z": 0, "-Z": 1, "X": 2, "-X": 3, "Y": 4, "-Y": 5}
-            
-            def get_offset_pos(base_p, direction_str, dist):
-                pos = list(base_p)
-                dir_idx = dir_map_rev.get(direction_str, 0)
-                if dir_idx == 0: pos[2] += dist
-                elif dir_idx == 1: pos[2] -= dist
-                elif dir_idx == 2: pos[0] += dist
-                elif dir_idx == 3: pos[0] -= dist
-                elif dir_idx == 4: pos[1] += dist
-                elif dir_idx == 5: pos[1] -= dist
-                return pos
+            from core.domains.robot.use_cases.motion_math import MotionMath
 
-            # UI 입력은 mm 단위이므로, 미터(m) 단위로 변환
-            app_dist = float(self.app_dist.get() or 0) / 1000.0
-            ret_dist = float(self.ret_dist.get() or 0) / 1000.0
-            
-            app_p = get_offset_pos(target_p, self.app_dir_cb.get(), app_dist)
-            ret_p = get_offset_pos(target_p, self.ret_dir_cb.get(), ret_dist)
+            app_dist = MotionMath.ui_mm_to_distance_m(self.app_dist.get())
+            ret_dist = MotionMath.ui_mm_to_distance_m(self.ret_dist.get())
+
+            app_p = MotionMath.compute_conty_offset_position(target_p, app_dist, self.app_dir_cb.get(), role="approach")
+            ret_p = MotionMath.compute_conty_offset_position(target_p, ret_dist, self.ret_dir_cb.get(), role="retract")
 
             if step == "approach":
                 print(f">> [이동] 투입위치(Approach)로 이동: {app_p}")
@@ -667,8 +656,6 @@ class PickPlaceEditor:
             elif step == "sequence":
                 # 백그라운드 스레드에서 MoveDoneCheck 포함 시퀀스 실행
                 import threading
-                from core.domains.robot.use_cases.motion_math import MotionMath
-                
                 # 팔레타이징 모드: P1~P4 + M×N×L 전체 그리드 순회
                 is_pallet = (ttype == "팔레타이징 사용")
                 
@@ -724,8 +711,8 @@ class PickPlaceEditor:
                                     else:
                                         cur_target = list(target_p)
                                     
-                                    cur_app = get_offset_pos(cur_target, self.app_dir_cb.get(), app_dist)
-                                    cur_ret = get_offset_pos(cur_target, self.ret_dir_cb.get(), ret_dist)
+                                    cur_app = MotionMath.compute_conty_offset_position(cur_target, app_dist, self.app_dir_cb.get(), role="approach")
+                                    cur_ret = MotionMath.compute_conty_offset_position(cur_target, ret_dist, self.ret_dir_cb.get(), role="retract")
                                     
                                     print(f"\n>> ═══════════════════════════════════════")
                                     print(f">> 📦 [{count}/{total}] Layer={layer+1}/{l_val}, Row={row+1}/{m}, Col={col+1}/{n}")
@@ -806,7 +793,8 @@ class PickPlaceEditor:
         app = node_data.get("approach", {})
         dir_map = {0: "Z", 1: "-Z", 2: "X", 3: "-X", 4: "Y", 5: "-Y"}
         self.app_dir_cb.set(dir_map.get(app.get("direction", 0), "Z"))
-        self.app_dist.delete(0, "end"); self.app_dist.insert(0, str(app.get("distance", 0.0)))
+        from core.domains.robot.use_cases.motion_math import MotionMath
+        self.app_dist.delete(0, "end"); self.app_dist.insert(0, f"{MotionMath.distance_m_to_ui_mm(app.get('distance', 0.0)):g}")
         self.app_spd.set(app.get("boundary", {}).get("velLevel", 3))
         self.app_wait_time.delete(0, "end"); self.app_wait_time.insert(0, str(app.get("waitTime", 0.0)))
         wf = app.get("waitFor", {"type": 0, "time": 0})
@@ -816,7 +804,7 @@ class PickPlaceEditor:
         # Retract
         ret = node_data.get("retract", {})
         self.ret_dir_cb.set(dir_map.get(ret.get("direction", 1), "-Z"))
-        self.ret_dist.delete(0, "end"); self.ret_dist.insert(0, str(ret.get("distance", 0.0)))
+        self.ret_dist.delete(0, "end"); self.ret_dist.insert(0, f"{MotionMath.distance_m_to_ui_mm(ret.get('distance', 0.0)):g}")
         self.ret_spd.set(ret.get("boundary", {}).get("velLevel", 3))
         self.ret_wait_time.delete(0, "end"); self.ret_wait_time.insert(0, str(ret.get("waitTime", 0.0)))
         wf_r = ret.get("waitFor", {"type": 0, "time": 0})
@@ -900,7 +888,7 @@ class PickPlaceEditor:
         # Approach
         node_data["approach"] = {
             "direction": dir_map_rev.get(self.app_dir_cb.get(), 0),
-            "distance": float(self.app_dist.get() or 0),
+            "distance": MotionMath.ui_mm_to_distance_m(self.app_dist.get()),
             "boundary": {"velLevel": int(self.app_spd.get()), "accLevel": int(self.app_spd.get())},
             "waitTime": float(self.app_wait_time.get() or 0),
             "waitFor": {"type": 1 if self.app_wf_cb.get() == "사용" else 0, "time": float(self.app_wait_period.get() or 0)}
@@ -909,7 +897,7 @@ class PickPlaceEditor:
         # Retract
         node_data["retract"] = {
             "direction": dir_map_rev.get(self.ret_dir_cb.get(), 1),
-            "distance": float(self.ret_dist.get() or 0),
+            "distance": MotionMath.ui_mm_to_distance_m(self.ret_dist.get()),
             "boundary": {"velLevel": int(self.ret_spd.get()), "accLevel": int(self.ret_spd.get())},
             "waitTime": float(self.ret_wait_time.get() or 0),
             "waitFor": {"type": 1 if self.ret_wf_cb.get() == "사용" else 0, "time": float(self.ret_wait_period.get() or 0)}

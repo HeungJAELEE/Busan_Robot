@@ -7,6 +7,7 @@ import customtkinter as ctk
 import math
 from core.domains.robot.communication.client_manager import robot_manager
 from core.domains.robot.use_cases.factory_safety_zones import FactorySafetyZones
+from core.domains.robot.use_cases.motion_math import MotionMath
 from core.domains.robot.use_cases.singularity_analyzer import SingularityAnalyzer
 
 
@@ -330,8 +331,20 @@ class Motion3DViewer:
             pd = d.get("p_data")
             app = d.get("app_data", d.get("approach", {}))
             ret = d.get("ret_data", d.get("retract", {}))
-            app_dist = app.get("distance", 50) if app else 50
-            ret_dist = ret.get("distance", 50) if ret else 50
+            app_dist = MotionMath.normalize_distance_m(app.get("distance", 0.05) if app else 0.05)
+            ret_dist = MotionMath.normalize_distance_m(ret.get("distance", 0.05) if ret else 0.05)
+
+            def offset_mm(target_mm, distance_m, direction, role):
+                base_m = [
+                    float(target_mm[0]) / 1000.0,
+                    float(target_mm[1]) / 1000.0,
+                    float(target_mm[2]) / 1000.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                ]
+                shifted = MotionMath.compute_conty_offset_position(base_m, distance_m, direction, role=role)
+                return [shifted[0] * 1000.0, shifted[1] * 1000.0, shifted[2] * 1000.0]
 
             grid_pts, total = _grid_of(pd)
             if grid_pts:
@@ -345,17 +358,24 @@ class Motion3DViewer:
                     idxs = [slot_idx % total]
                 for idx in idxs:
                     gpt = grid_pts[idx]
-                    app_pt = [gpt[0], gpt[1], gpt[2] + app_dist]
-                    ret_pt = [gpt[0], gpt[1], gpt[2] + ret_dist]
+                    app_pt = offset_mm(gpt, app_dist, app.get("direction", 0) if app else 0, "approach")
+                    ret_pt = offset_mm(gpt, ret_dist, ret.get("direction", 1) if ret else 1, "retract")
                     q_meta = d.get("q") if d.get("q") and any(v != 0 for v in d.get("q", [])) else None
                     emit_step(f"{icon} {label} [{idx+1}/{total}] 접근", app_pt, color, {"type": "approach", "q": q_meta})
                     emit_step(f"{icon} {label} [{idx+1}/{total}] 동작", gpt[:], color, {"type": "action", "q": q_meta})
                     emit_step(f"{icon} {label} [{idx+1}/{total}] 후퇴", ret_pt, color, {"type": "retract", "q": q_meta})
             else:
                 if any(v != 0 for v in p):
-                    xyz = [p[0]*1000, p[1]*1000, p[2]*1000]
+                    target_m = list(p[:6])
+                    app_m = MotionMath.compute_conty_offset_position(target_m, app_dist, app.get("direction", 0) if app else 0, role="approach")
+                    ret_m = MotionMath.compute_conty_offset_position(target_m, ret_dist, ret.get("direction", 1) if ret else 1, role="retract")
+                    app_xyz = [app_m[0]*1000, app_m[1]*1000, app_m[2]*1000]
+                    xyz = [target_m[0]*1000, target_m[1]*1000, target_m[2]*1000]
+                    ret_xyz = [ret_m[0]*1000, ret_m[1]*1000, ret_m[2]*1000]
                     q_meta = d.get("q") if d.get("q") and any(v != 0 for v in d.get("q", [])) else None
-                    emit_step(f"{icon} {label}", xyz, color, {"q": q_meta})
+                    emit_step(f"{icon} {label} 접근", app_xyz, color, {"type": "approach", "q": q_meta})
+                    emit_step(f"{icon} {label} 동작", xyz, color, {"type": "action", "q": q_meta})
+                    emit_step(f"{icon} {label} 후퇴", ret_xyz, color, {"type": "retract", "q": q_meta})
                 else:
                     emit_io_step(f"{label} 좌표 없음", "#FFB74D")
 

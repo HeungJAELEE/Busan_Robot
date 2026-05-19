@@ -8,24 +8,97 @@ class MotionMath:
     @staticmethod
     def compute_offset_position(base_p: list, dist_mm: float, direction) -> list:
         """
-        base_p에서 지정된 축(Z, X, Y)으로 dist_mm 만큼 오프셋된 좌표를 반환합니다.
-        Approach/Retract 모두 정위치에서 멀어지는 방향(+ 방향)으로 오프셋합니다.
-        direction 코드: 0=Z, 1=-Z → 둘 다 Z축이며, 항상 +Z(위쪽)으로 이동
-        direction 코드: 2=X, 3=-X → 둘 다 X축이며, 항상 +X 방향
-        direction 코드: 4=Y, 5=-Y → 둘 다 Y축이며, 항상 +Y 방향
+        UI의 mm 입력값을 APK/Conty 접근/후퇴 규칙으로 변환합니다.
+        direction 0/1은 둘 다 타겟 위(+Z)의 안전 위치이고,
+        lateral direction 2/3/4/5는 부호 있는 X/Y 오프셋입니다.
         """
-        if not base_p or len(base_p) < 6: return base_p
-        
-        p = copy.deepcopy(base_p)
-        val = dist_mm / 1000.0  # mm to m
-        
+        try:
+            distance_m = float(dist_mm or 0.0) / 1000.0
+        except (TypeError, ValueError):
+            distance_m = 0.0
+        return MotionMath.compute_conty_offset_position(base_p, distance_m, direction)
+
+    @staticmethod
+    def normalize_distance_m(value) -> float:
+        """Return Conty approach/retract distance in meters.
+
+        APK/Conty JSON stores small distances as meters, for example 0.08
+        means 80mm. Older HMI-edited values may already be in mm, such as 80.
+        """
+        try:
+            dist = float(value or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+        if abs(dist) > 1.0:
+            return dist / 1000.0
+        return dist
+
+    @staticmethod
+    def distance_m_to_ui_mm(value) -> float:
+        """Convert Conty JSON distance to the editor's mm display value."""
+        dist = MotionMath.normalize_distance_m(value)
+        return dist * 1000.0
+
+    @staticmethod
+    def ui_mm_to_distance_m(value) -> float:
+        """Convert the editor's mm entry back to APK-compatible meters."""
+        try:
+            return float(value or 0.0) / 1000.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    @staticmethod
+    def compute_conty_offset_position(base_p: list, distance_m: float, direction, role: str = "approach") -> list:
+        """Compute APK-compatible Pick/Place approach/retract waypoint.
+
+        In the teaching files, the common pair direction 0/1 is used for
+        vertical approach/retract. Both waypoints must stay above the target:
+        approach goes down to target, then retract goes back up. Lateral
+        directions 2/3 and 4/5 keep their signed axis meaning.
+        """
+        if not base_p or len(base_p) < 6:
+            return base_p
+
+        pos = copy.deepcopy(base_p)
+        dist = abs(MotionMath.normalize_distance_m(distance_m))
+        if dist == 0.0:
+            return pos
+
         dir_str = str(direction)
-        # Approach/Retract 모두 타겟에서 멀어지는 방향 (+) 으로 오프셋
-        if dir_str in ["Z", "0", "-Z", "1"]: p[2] += val
-        elif dir_str in ["X", "2", "-X", "3"]: p[0] += val
-        elif dir_str in ["Y", "4", "-Y", "5"]: p[1] += val
-        
-        return p
+        dir_alias = {
+            "Z": "0",
+            "Z+": "0",
+            "+Z": "0",
+            "-Z": "1",
+            "Z-": "1",
+            "X": "2",
+            "X+": "2",
+            "+X": "2",
+            "-X": "3",
+            "X-": "3",
+            "Y": "4",
+            "Y+": "4",
+            "+Y": "4",
+            "-Y": "5",
+            "Y-": "5",
+        }
+        code = dir_alias.get(dir_str, dir_str)
+
+        if code in ("0", "1"):
+            # Standard APK pattern: app=0, ret=1 means above target in both
+            # stages. Do not interpret retract=1 as "go below target".
+            pos[2] += dist
+        elif code == "2":
+            pos[0] += dist
+        elif code == "3":
+            pos[0] -= dist
+        elif code == "4":
+            pos[1] += dist
+        elif code == "5":
+            pos[1] -= dist
+        else:
+            pos[2] += dist
+        return pos
 
     @staticmethod
     def compute_pallet_point(p1: list, p2: list, p3: list, size_m: int, size_n: int, current_m: int, current_n: int, p4: list = None, size_l: int = 1, current_l: int = 0) -> list:
@@ -65,4 +138,3 @@ class MotionMath:
             result[i] = p1[i] + (dm * current_m) + (dn * current_n) + (dl * current_l)
             
         return result
-

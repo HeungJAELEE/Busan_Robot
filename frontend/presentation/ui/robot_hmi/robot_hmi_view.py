@@ -2,6 +2,7 @@ import customtkinter as ctk
 from core.domains.robot.communication.client_manager import robot_manager
 from infrastructure.mqtt.mqtt_manager import mqtt_broker
 from core.runtime_config import default_new_robot_ip, plc_config, robot_defaults
+from core.domains.robot.use_cases.motion_math import MotionMath
 from .editors.motion_editors import JogController, MoveEditor, MoveByEditor, MoveCEditor, MoveHomeEditor, ForceEditor
 from .editors.logic_editors import (SmartDOEditor, LoopEditor, MathEditor, CallEditor, IfEditor, WaitEditor, WaitDIEditor, WaitAIEditor,
                                     CommentEditor, StopEditor, SwitchEditor, FolderEditor,
@@ -2802,27 +2803,16 @@ class ProgramTreeEditor:
                     is_pick = (node_type == 201)   # 201=Pick(Hold), 202=Place(Release)
                     app_data = data.get("approach", raw.get("approach", {}))
                     ret_data = data.get("retract", raw.get("retract", {}))
-                    app_dist = app_data.get("distance", 0.05)
-                    ret_dist = ret_data.get("distance", 0.05)
-                    # ⚠️ 단위 휴리스틱: 우리 UI(거리 mm)는 50.0처럼 1보다 큰 값으로 저장하고,
-                    # 표준 Conty(거리 m)는 0.05처럼 1 이하로 저장한다. 따라서 1.0을 경계로 단위 추정한다.
-                    # ⚠️ 위험: 사용자가 1mm 미만(예: 0.5mm)을 입력하면 m로 오해될 수 있다. UI가 mm 단위로
-                    # 직접 입력받는 한 5~500mm 범위라 안전하지만, 정밀 보정용 모션을 추가할 땐 명시적 단위 필요.
-                    if app_dist > 1.0: app_dist /= 1000.0
-                    if ret_dist > 1.0: ret_dist /= 1000.0
+                    app_dist = MotionMath.normalize_distance_m(app_data.get("distance", 0.05))
+                    ret_dist = MotionMath.normalize_distance_m(ret_data.get("distance", 0.05))
                     target_cfg = data.get("target") if isinstance(data.get("target"), dict) else raw.get("target", {})
                     target_boundary = (target_cfg or {}).get("boundary", {"velLevel": 5, "accLevel": 5})
 
                     # ─── 접근/후퇴 오프셋 함수 ───
-                    # Conty 규약: approach/retract 모두 타겟 위(+Z)에서 진입/탈출
-                    # direction=0: Z축 접근 (위에서 내려감)
-                    # direction=1: Z축 후퇴 (아래에서 올라감)
-                    # → 둘 다 타겟보다 높은 위치를 가리킴 (Z + distance)
-                    def _safe_offset(base, dist):
-                        """타겟 위치에서 Z축 위로 dist만큼 오프셋된 위치 반환"""
-                        pos = list(base)
-                        pos[2] += abs(dist)  # 항상 위로 (안전)
-                        return pos
+                    # Conty JSON은 distance를 m 단위로 저장한다. direction 0/1은 APK
+                    # 패턴상 접근/후퇴 모두 타겟 위의 안전 위치를 뜻한다.
+                    def _conty_offset(base, dist, direction, role):
+                        return MotionMath.compute_conty_offset_position(base, dist, direction, role=role)
 
                     # toolId로 doMap 결정
                     # raw(원본 JSON)에서 toolId를 우선 사용 (UI 편집에 의한 변조 방지)
@@ -2980,10 +2970,8 @@ class ProgramTreeEditor:
                             partner_p = partner_data.get("p", [0.0]*6)
                             partner_app = partner_data.get("approach", partner_raw.get("approach", {}))
                             partner_ret = partner_data.get("retract", partner_raw.get("retract", {}))
-                            partner_app_dist = partner_app.get("distance", 0.05)
-                            partner_ret_dist = partner_ret.get("distance", 0.05)
-                            if partner_app_dist > 1.0: partner_app_dist /= 1000.0
-                            if partner_ret_dist > 1.0: partner_ret_dist /= 1000.0
+                            partner_app_dist = MotionMath.normalize_distance_m(partner_app.get("distance", 0.05))
+                            partner_ret_dist = MotionMath.normalize_distance_m(partner_ret.get("distance", 0.05))
 
                             partner_target_type = partner_data.get("target_type", 0)
                             partner_p_data = partner_data.get("p_data", None)
@@ -3026,16 +3014,16 @@ class ProgramTreeEditor:
                             if True:  # 들여쓰기 유지 (아래 블록 그대로 사용)
                                 if True:
                                     cur_t = MotionMath.compute_pallet_point(p1, p2, p3, m, n, row, col, p4=p4, size_l=l_val, current_l=layer)
-                                    cur_app = _safe_offset(cur_t, app_dist)
-                                    cur_ret = _safe_offset(cur_t, ret_dist)
+                                    cur_app = _conty_offset(cur_t, app_dist, app_data.get("direction", 0), "approach")
+                                    cur_ret = _conty_offset(cur_t, ret_dist, ret_data.get("direction", 1), "retract")
 
                                     # 1) 팔레트 Pick/Place
                                     print(f">>   {action_label} [{pallet_count}/{total}] L{layer+1} R{row+1} C{col+1}")
-                                    print(f">>     1) 접근 위치(Z+{app_dist:.3f}m)")
+                                    print(f">>     1) 접근 위치: {[round(v,4) for v in cur_app[:3]]}")
                                     _apply_motion_speed(app_data.get("boundary", target_boundary), is_joint=False, label=f"{action_label} 접근")
                                     inst.task_move_to(cur_app)
                                     _wait_for_move_or_ng(stage=text, item_id=item_id)
-                                    print(f">>     2) 타겟 위치로 하강")
+                                    print(f">>     2) 타겟 위치: {[round(v,4) for v in cur_t[:3]]}")
                                     _apply_motion_speed(target_boundary, is_joint=False, label=f"{action_label} 타겟")
                                     inst.task_move_to(cur_t)
                                     _wait_for_move_or_ng(stage=text, item_id=item_id)
@@ -3049,7 +3037,7 @@ class ProgramTreeEditor:
                                         time.sleep(ret_wait)
                                     payload = {"robot_id": exec_robot, "action_type": 'Pick' if is_pick else 'Place', "pos": cur_t}
                                     _publish_task_done(payload)
-                                    print(f">>     4) 후퇴 위치(Z+{ret_dist:.3f}m)")
+                                    print(f">>     4) 후퇴 위치: {[round(v,4) for v in cur_ret[:3]]}")
                                     _apply_motion_speed(ret_data.get("boundary", target_boundary), is_joint=False, label=f"{action_label} 후퇴")
                                     inst.task_move_to(cur_ret)
                                     _wait_for_move_or_ng(stage=text, item_id=item_id)
@@ -3102,17 +3090,17 @@ class ProgramTreeEditor:
                                             print(f">>     [팔레트 매핑] {partner_label} → L{layer+1} R{row+1} C{col+1}")
                                         else:
                                             p_target = partner_p if partner_p else [0.0]*6
-                                        p_app = _safe_offset(p_target, partner_app_dist)
-                                        p_ret = _safe_offset(p_target, partner_ret_dist)
+                                        p_app = _conty_offset(p_target, partner_app_dist, partner_app.get("direction", 0), "approach")
+                                        p_ret = _conty_offset(p_target, partner_ret_dist, partner_ret.get("direction", 1), "retract")
 
                                         print(f">>   {partner_label} [{pallet_count}/{total}]")
-                                        print(f">>     1) 접근 위치(Z+{partner_app_dist:.3f}m)")
+                                        print(f">>     1) 접근 위치: {[round(v,4) for v in p_app[:3]]}")
                                         partner_target_cfg = partner_data.get("target") if isinstance(partner_data.get("target"), dict) else partner_raw.get("target", {})
                                         partner_boundary = (partner_target_cfg or {}).get("boundary", {"velLevel": 5, "accLevel": 5})
                                         _apply_motion_speed(partner_app.get("boundary", partner_boundary), is_joint=False, label=f"{partner_label} 접근")
                                         inst.task_move_to(p_app)
                                         _wait_for_move_or_ng(stage=text, item_id=item_id)
-                                        print(f">>     2) 타겟 위치로 하강")
+                                        print(f">>     2) 타겟 위치: {[round(v,4) for v in p_target[:3]]}")
                                         _apply_motion_speed(partner_boundary, is_joint=False, label=f"{partner_label} 타겟")
                                         inst.task_move_to(p_target)
                                         _wait_for_move_or_ng(stage=text, item_id=item_id)
@@ -3121,22 +3109,22 @@ class ProgramTreeEditor:
                                         _do_tool_action(partner_is_pick)
                                         payload = {"robot_id": exec_robot, "action_type": 'Pick' if partner_is_pick else 'Place', "pos": p_target}
                                         _publish_task_done(payload)
-                                        print(f">>     4) 후퇴 위치(Z+{partner_ret_dist:.3f}m)")
+                                        print(f">>     4) 후퇴 위치: {[round(v,4) for v in p_ret[:3]]}")
                                         _apply_motion_speed(partner_ret.get("boundary", partner_boundary), is_joint=False, label=f"{partner_label} 후퇴")
                                         inst.task_move_to(p_ret)
                                         _wait_for_move_or_ng(stage=text, item_id=item_id)
                     else:
                         # ═══ 싱글 포인트 대상 ═══
                         target_p = p if p else [0.0]*6
-                        app_p = _safe_offset(target_p, app_dist)
-                        ret_p = _safe_offset(target_p, ret_dist)
+                        app_p = _conty_offset(target_p, app_dist, app_data.get("direction", 0), "approach")
+                        ret_p = _conty_offset(target_p, ret_dist, ret_data.get("direction", 1), "retract")
                         print(f">>   {action_label}")
-                        print(f">>     target: z={target_p[2]:.4f}")
-                        print(f">>     1) 접근 위치(Z={app_p[2]:.4f}, +{app_dist:.3f}m 위)")
+                        print(f">>     target: {[round(v,4) for v in target_p[:3]]}")
+                        print(f">>     1) 접근 위치: {[round(v,4) for v in app_p[:3]]}")
                         _apply_motion_speed(app_data.get("boundary", target_boundary), is_joint=False, label=f"{action_label} 접근")
                         inst.task_move_to(app_p)
                         _wait_for_move_or_ng(stage=text, item_id=item_id)
-                        print(f">>     2) 타겟 위치로 하강(Z={target_p[2]:.4f})")
+                        print(f">>     2) 타겟 위치: {[round(v,4) for v in target_p[:3]]}")
                         _apply_motion_speed(target_boundary, is_joint=False, label=f"{action_label} 타겟")
                         inst.task_move_to(target_p)
                         _wait_for_move_or_ng(stage=text, item_id=item_id)
@@ -3150,7 +3138,7 @@ class ProgramTreeEditor:
                             time.sleep(ret_wait)
                         payload = {"robot_id": exec_robot, "action_type": 'Pick' if is_pick else 'Place', "pos": target_p}
                         _publish_task_done(payload)
-                        print(f">>     4) 후퇴 위치(Z={ret_p[2]:.4f}, +{ret_dist:.3f}m 위)")
+                        print(f">>     4) 후퇴 위치: {[round(v,4) for v in ret_p[:3]]}")
                         _apply_motion_speed(ret_data.get("boundary", target_boundary), is_joint=False, label=f"{action_label} 후퇴")
                         inst.task_move_to(ret_p)
                         _wait_for_move_or_ng(stage=text, item_id=item_id)
