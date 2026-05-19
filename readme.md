@@ -1232,6 +1232,8 @@ Robot A 공통 Place 감시 좌표: X552 / Y-99 / Z220~420mm 주변
 
 주의: `indy-ros`는 URDF/SRDF/MoveIt 기반 충돌 모델 자료입니다. 현재 HMI는 ROS/MoveIt 런타임을 직접 띄우지 않으므로, 충돌 존은 **정밀 충돌판정**이 아니라 **현장 작업자가 보기 위한 경량 권장 가이드**입니다.
 
+레일과 로봇만 먼저 잘 보이도록 단순화한 결정용 화면안은 [docs/ui_guides/rail_robot_scene_guide.md](./docs/ui_guides/rail_robot_scene_guide.md)에 정리했습니다. 이 가이드는 실제 HMI 로직을 변경하지 않는 시안이며, 향후 Page 1/Page 2에 `Simple View`와 `Debug View`를 나눌 때 기준으로 사용합니다.
+
 ### 16. Python / pip 설치 가이드
 
 권장 Python 버전:

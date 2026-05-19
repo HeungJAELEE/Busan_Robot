@@ -77,6 +77,12 @@ class GatewayRobotProxy:
     def task_move_by(self, p):
         return self._publish("task_move_by", {"p": list(p or [])[:6]})
 
+    def jog_joint_move_by(self, q):
+        return self._publish("jog_joint_move_by", {"q": list(q or [])[:6]})
+
+    def jog_task_move_by(self, p):
+        return self._publish("jog_task_move_by", {"p": list(p or [])[:6]})
+
     def go_home(self):
         return self._publish("go_home")
 

@@ -331,12 +331,16 @@ class RobotControlUseCase:
                 q = [0.0] * 6
                 idx = ["J1", "J2", "J3", "J4", "J5", "J6"].index(axis)
                 q[idx] = step_amount
+                if getattr(inst, "is_gateway_proxy", False) and hasattr(inst, "jog_joint_move_by"):
+                    return inst.jog_joint_move_by(q)
                 threading.Thread(target=_run, args=(inst.joint_move_by, q), daemon=True).start()
                 return True
             elif axis in ["X", "Y", "Z", "Rx", "Ry", "Rz"]:
                 p = [0.0] * 6
                 idx = ["X", "Y", "Z", "Rx", "Ry", "Rz"].index(axis)
                 p[idx] = step_amount * 0.001 if idx < 3 else step_amount
+                if getattr(inst, "is_gateway_proxy", False) and hasattr(inst, "jog_task_move_by"):
+                    return inst.jog_task_move_by(p)
                 threading.Thread(target=_run, args=(inst.task_move_by, p), daemon=True).start()
                 return True
         except Exception as e:

@@ -20,6 +20,10 @@ MOTION_COMMANDS = {
     "go_home",
     "go_zero",
 }
+JOG_COMMANDS = {
+    "jog_joint_move_by",
+    "jog_task_move_by",
+}
 TARGET_STATUS_KEY = {
     "go_home": "home",
     "go_zero": "zero",
@@ -415,6 +419,10 @@ class RobotHandle:
                 self.publish_result(command_id, command_type, False, f"command error: {command_error}")
                 return
 
+            if command_type in JOG_COMMANDS:
+                self.publish_result(command_id, command_type, True, "jog command sent")
+                return
+
             if command_type in MOTION_COMMANDS:
                 ok, completion = self._wait_for_motion_complete(command_type, before or {})
                 message = completion.get("motion_state", "completed" if ok else "motion failed")
@@ -437,6 +445,10 @@ class RobotHandle:
         elif command_type == "joint_move_by":
             return inst.joint_move_by(args.get("q", []))
         elif command_type == "task_move_by":
+            return inst.task_move_by(args.get("p", []))
+        elif command_type == "jog_joint_move_by":
+            return inst.joint_move_by(args.get("q", []))
+        elif command_type == "jog_task_move_by":
             return inst.task_move_by(args.get("p", []))
         elif command_type == "go_home":
             return inst.go_home()
