@@ -20,5 +20,6 @@ if (-not $NoUi) {
     $env:ROBOT_CONTROL_MODE = "mqtt"
     $env:FACTORY_ORCHESTRATOR_AUTOSTART = "0"
     $env:FACTORY_ORCHESTRATOR_SIMULATION = "0"
+    $env:HMI_MQTT_AUTOCONNECT = "0"
     & ".\.venv\Scripts\python.exe" "frontend\run_ui_only.py"
 }

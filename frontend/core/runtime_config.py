@@ -116,7 +116,7 @@ def mqtt_config():
     return {
         "broker": env_first(("HMI_MQTT_BROKER", "MQTT_BROKER"), "127.0.0.1"),
         "port": env_first_int(("HMI_MQTT_PORT", "MQTT_PORT"), 1883),
-        "autoconnect": env_bool("HMI_MQTT_AUTOCONNECT", True),
+        "autoconnect": env_bool("HMI_MQTT_AUTOCONNECT", False),
     }
 
 

@@ -12,6 +12,7 @@ Set-Location $ProjectRoot
 
 $env:FACTORY_ORCHESTRATOR_AUTOSTART = "0"
 $env:FACTORY_ORCHESTRATOR_SIMULATION = "0"
+$env:HMI_MQTT_AUTOCONNECT = "0"
 if ([string]::IsNullOrWhiteSpace($env:ROBOT_CONTROL_MODE)) {
     $env:ROBOT_CONTROL_MODE = "mqtt"
 }
