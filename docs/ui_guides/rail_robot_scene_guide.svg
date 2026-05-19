@@ -62,6 +62,7 @@
       .sub { font: 650 14px Inter, Pretendard, Arial, sans-serif; fill: #4f5756; letter-spacing: 0; }
       .tiny { font: 750 12px Inter, Pretendard, Arial, sans-serif; fill: #5b6261; letter-spacing: 0; }
       .label { font: 800 14px Inter, Pretendard, Arial, sans-serif; fill: #242928; letter-spacing: 0; }
+      .tag-text { font: 850 15px Inter, Pretendard, Arial, sans-serif; fill: #202524; letter-spacing: 0; }
       .robot-link { fill: none; stroke: url(#robotWhite); stroke-linecap: round; stroke-linejoin: round; filter: url(#shadow); }
       .robot-link-hi { fill: none; stroke: #ffffff; stroke-linecap: round; stroke-linejoin: round; opacity: 0.55; }
       .link-body { fill: url(#robotWhite); stroke: #747c7a; stroke-width: 4; filter: url(#softShadow); }
@@ -86,13 +87,13 @@
     <text x="2" y="31" class="sub">Simple rail + robot preview, debug layers hidden</text>
   </g>
   <g transform="translate(1138 40)">
-    <rect x="0" y="0" width="376" height="52" rx="26" class="pill"/>
+    <rect x="0" y="0" width="392" height="52" rx="26" class="pill"/>
     <circle cx="34" cy="26" r="8" fill="#39c978"/>
     <text x="54" y="31" class="tiny">Rail</text>
     <circle cx="122" cy="26" r="8" fill="#39c978"/>
-    <text x="142" y="31" class="tiny">Robot</text>
-    <circle cx="226" cy="26" r="8" fill="#b9bdbc"/>
-    <text x="246" y="31" class="tiny">Trace off</text>
+    <text x="142" y="31" class="tiny">Robot A/B/C</text>
+    <circle cx="268" cy="26" r="8" fill="#b9bdbc"/>
+    <text x="288" y="31" class="tiny">Trace off</text>
   </g>
 
   <!-- tabletop / rail plane -->
@@ -141,8 +142,82 @@
     </g>
   </g>
 
+  <!-- secondary Robot B, visible but quieter than the selected Robot A -->
+  <g transform="translate(820 520) scale(0.58)" opacity="0.9" filter="url(#softShadow)">
+    <ellipse cx="0" cy="174" rx="138" ry="30" fill="#2b2f2e" opacity="0.18"/>
+    <path d="M-92 112 C-82 84 82 84 92 112 L70 182 C60 208 -60 208 -70 182 Z" fill="url(#robotSoft)" stroke="#707876" stroke-width="4"/>
+    <ellipse cx="0" cy="110" rx="92" ry="36" fill="url(#robotWhite)" stroke="#707876" stroke-width="4"/>
+    <g transform="translate(0 70) rotate(-90)">
+      <rect class="link-body" x="0" y="-34" width="152" height="68" rx="34"/>
+      <rect class="link-highlight" x="24" y="-24" width="94" height="11" rx="6"/>
+    </g>
+    <circle class="joint" cx="0" cy="70" r="40"/>
+    <circle class="joint" cx="0" cy="-82" r="48"/>
+    <circle class="joint-cap" cx="0" cy="-82" r="27"/>
+    <g transform="translate(0 -82) rotate(-142)">
+      <rect class="link-body" x="8" y="-30" width="230" height="60" rx="30"/>
+      <rect class="link-highlight" x="38" y="-21" width="132" height="10" rx="5"/>
+    </g>
+    <circle class="joint" cx="-181" cy="58" r="43"/>
+    <circle class="joint-cap" cx="-181" cy="58" r="24"/>
+    <g transform="translate(-181 58) rotate(-70)">
+      <rect class="link-body" x="8" y="-27" width="200" height="54" rx="27"/>
+      <rect class="link-highlight" x="34" y="-18" width="116" height="9" rx="5"/>
+    </g>
+    <circle class="joint" cx="-112" cy="-129" r="35"/>
+    <circle class="joint-cap" cx="-112" cy="-129" r="20"/>
+    <g transform="translate(-112 -129) rotate(-8)">
+      <rect class="link-body" x="-4" y="-17" width="88" height="34" rx="17"/>
+    </g>
+    <circle class="joint" cx="-28" cy="-141" r="24"/>
+    <g transform="translate(-28 -141) rotate(-12)">
+      <rect x="-15" y="14" width="30" height="44" rx="10" fill="url(#robotWhite)" stroke="#68706e" stroke-width="3"/>
+      <rect x="-30" y="52" width="60" height="20" rx="7" fill="#d7dcda" stroke="#626a68" stroke-width="3"/>
+      <path d="M-20 70 L-44 100 M20 70 L42 100" stroke="#3d4442" stroke-width="8" stroke-linecap="round"/>
+    </g>
+    <path d="M-42 66 C-78 -28 -36 -102 0 -135 C-62 -16 -118 28 -181 58" fill="none" stroke="#202524" stroke-width="6" stroke-linecap="round" opacity="0.24"/>
+    <text x="-72" y="238" class="label">Robot B</text>
+  </g>
+
+  <!-- secondary Robot C, same clean geometry on the right side of the rail -->
+  <g transform="translate(1288 430) scale(0.42)" opacity="0.88" filter="url(#softShadow)">
+    <ellipse cx="0" cy="174" rx="138" ry="30" fill="#2b2f2e" opacity="0.18"/>
+    <path d="M-92 112 C-82 84 82 84 92 112 L70 182 C60 208 -60 208 -70 182 Z" fill="url(#robotSoft)" stroke="#707876" stroke-width="4"/>
+    <ellipse cx="0" cy="110" rx="92" ry="36" fill="url(#robotWhite)" stroke="#707876" stroke-width="4"/>
+    <g transform="translate(0 70) rotate(-90)">
+      <rect class="link-body" x="0" y="-34" width="152" height="68" rx="34"/>
+      <rect class="link-highlight" x="24" y="-24" width="94" height="11" rx="6"/>
+    </g>
+    <circle class="joint" cx="0" cy="70" r="40"/>
+    <circle class="joint" cx="0" cy="-82" r="48"/>
+    <circle class="joint-cap" cx="0" cy="-82" r="27"/>
+    <g transform="translate(0 -82) rotate(-38)">
+      <rect class="link-body" x="8" y="-30" width="230" height="60" rx="30"/>
+      <rect class="link-highlight" x="38" y="-21" width="132" height="10" rx="5"/>
+    </g>
+    <circle class="joint" cx="184" cy="-222" r="43"/>
+    <circle class="joint-cap" cx="184" cy="-222" r="24"/>
+    <g transform="translate(184 -222) rotate(52)">
+      <rect class="link-body" x="8" y="-27" width="200" height="54" rx="27"/>
+      <rect class="link-highlight" x="34" y="-18" width="116" height="9" rx="5"/>
+    </g>
+    <circle class="joint" cx="310" cy="-66" r="35"/>
+    <circle class="joint-cap" cx="310" cy="-66" r="20"/>
+    <g transform="translate(310 -66) rotate(28)">
+      <rect class="link-body" x="-4" y="-17" width="88" height="34" rx="17"/>
+    </g>
+    <circle class="joint" cx="390" cy="-24" r="24"/>
+    <g transform="translate(390 -24) rotate(18)">
+      <rect x="-15" y="14" width="30" height="44" rx="10" fill="url(#robotWhite)" stroke="#68706e" stroke-width="3"/>
+      <rect x="-30" y="52" width="60" height="20" rx="7" fill="#d7dcda" stroke="#626a68" stroke-width="3"/>
+      <path d="M-20 70 L-44 100 M20 70 L42 100" stroke="#3d4442" stroke-width="8" stroke-linecap="round"/>
+    </g>
+    <path d="M-42 66 C-72 -26 -34 -110 0 -138 C70 -190 126 -216 184 -222" fill="none" stroke="#202524" stroke-width="6" stroke-linecap="round" opacity="0.22"/>
+    <text x="-72" y="238" class="label">Robot C</text>
+  </g>
+
   <!-- main white Indy7 robot, straight-link studio style -->
-  <g transform="translate(420 548)" filter="url(#shadow)">
+  <g transform="translate(292 608) scale(0.78)" filter="url(#shadow)">
     <!-- floor shadow and base -->
     <ellipse cx="0" cy="174" rx="145" ry="34" fill="#2b2f2e" opacity="0.2"/>
     <path d="M-96 112 C-86 82 86 82 96 112 L72 184 C61 213 -61 213 -72 184 Z" fill="url(#robotSoft)" stroke="#707876" stroke-width="4"/>
@@ -215,6 +290,28 @@
     <!-- subtle cable, visually secondary to the rigid links -->
     <path d="M-44 64 C-92 -28 -68 -132 4 -176 C72 -218 148 -232 220 -255" fill="none" stroke="#202524" stroke-width="7" stroke-linecap="round" opacity="0.36"/>
     <path d="M220 -255 C296 -270 378 -210 430 -127" fill="none" stroke="#202524" stroke-width="6" stroke-linecap="round" opacity="0.32"/>
+    <text x="-72" y="238" class="label">Robot A</text>
+  </g>
+
+  <!-- clear robot identity tags outside the scaled robot geometry -->
+  <g opacity="0.94">
+    <g transform="translate(324 760)">
+      <rect x="-44" y="-22" width="96" height="34" rx="17" fill="#ffffff" opacity="0.78" stroke="#ffffff" stroke-opacity="0.46"/>
+      <circle cx="-25" cy="-5" r="6" fill="#39c978"/>
+      <text x="-12" y="0" class="tag-text">Robot A</text>
+    </g>
+    <path d="M802 408 L1018 584" stroke="#39413f" stroke-width="2.4" opacity="0.52"/>
+    <g transform="translate(802 408)">
+      <rect x="-48" y="-23" width="106" height="36" rx="18" fill="#ffffff" opacity="0.92" stroke="#ffffff" stroke-opacity="0.62"/>
+      <circle cx="-28" cy="-5" r="6" fill="#39c978"/>
+      <text x="-14" y="0" class="tag-text">Robot B</text>
+    </g>
+    <path d="M1246 330 L1322 476" stroke="#39413f" stroke-width="2.4" opacity="0.52"/>
+    <g transform="translate(1246 330)">
+      <rect x="-48" y="-23" width="106" height="36" rx="18" fill="#ffffff" opacity="0.92" stroke="#ffffff" stroke-opacity="0.62"/>
+      <circle cx="-28" cy="-5" r="6" fill="#39c978"/>
+      <text x="-14" y="0" class="tag-text">Robot C</text>
+    </g>
   </g>
 
   <!-- TCP guide glow -->
