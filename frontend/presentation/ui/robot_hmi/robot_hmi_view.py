@@ -1248,8 +1248,9 @@ class ProgramTreeEditor:
         self.parent.grid_rowconfigure(0, weight=1)
         Theme.apply_window_style(self.parent)
         # Left Palette — 팬던트와 동일한 카테고리 구조
-        left = ctk.CTkScrollableFrame(self.parent, fg_color=Theme.BG_BASE, width=160, corner_radius=0)
-        left.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
+        left = ctk.CTkScrollableFrame(self.parent, fg_color=Theme.BG_SURFACE, width=160, corner_radius=12,
+                                      border_width=1, border_color=Theme.BORDER)
+        left.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
         ctk.CTkLabel(left, text="🛠 기본 명령", font=Theme.font(size=14, weight="bold", role="display"), text_color=Theme.TEXT_PRIMARY).pack(pady=10)
 
         def _add_category(label, color, cmds):
@@ -1292,8 +1293,8 @@ class ProgramTreeEditor:
                        command=self._open_auto_payload, **Theme.get_button_style("secondary")).pack(fill="x", padx=10, pady=1)
 
         # Center Tree
-        center = ctk.CTkFrame(self.parent, fg_color=Theme.BG_SURFACE)
-        center.grid(row=0, column=1, sticky="nsew", padx=2, pady=2)
+        center = ctk.CTkFrame(self.parent, corner_radius=12, **Theme.card_style())
+        center.grid(row=0, column=1, sticky="nsew", padx=6, pady=6)
 
         # ─── Row 1: 파일 작업 (로봇 선택 / 새파일 / 불러오기 / 저장 / 사본 내보내기) ───
         # 저장 자체가 이미 표준 Conty 포맷이라 펜던트에도 그대로 사용 가능.
@@ -1302,7 +1303,8 @@ class ProgramTreeEditor:
         h.pack(fill="x", padx=10, pady=(5, 2))
 
         self.robot_sel = ctk.CTkOptionMenu(h, values=["Robot A", "Robot B", "Robot C"], width=100, command=self._on_robot_changed,
-                                            fg_color=Theme.BG_BASE, button_color=Theme.ACCENT_PRIMARY)
+                                            fg_color=Theme.BG_PANEL, button_color=Theme.ACCENT_PRIMARY,
+                                            text_color=Theme.TEXT_PRIMARY)
         self.robot_sel.set(self.current_robot)
         self.robot_sel.pack(side="left", padx=5)
         self._sync_selected_robot()
@@ -1339,11 +1341,11 @@ class ProgramTreeEditor:
 
         style = ttk.Style()
         style.theme_use("default")
-        style.configure("Treeview", background=Theme.BG_BASE, foreground=Theme.TEXT_PRIMARY, fieldbackground=Theme.BG_BASE, borderwidth=0, font=("Inter", 11))
+        style.configure("Treeview", background=Theme.BG_PANEL, foreground=Theme.TEXT_PRIMARY, fieldbackground=Theme.BG_PANEL, borderwidth=0, font=("Inter", 11))
         style.configure("Treeview.Heading", background=Theme.BG_SURFACE, foreground=Theme.TEXT_PRIMARY, font=("Urbanist", 12, "bold"))
         style.map("Treeview", background=[("selected", Theme.ACCENT_PRIMARY)])
 
-        tree_frame = ctk.CTkFrame(center, fg_color=Theme.BG_BASE, corner_radius=0)
+        tree_frame = ctk.CTkFrame(center, fg_color=Theme.BG_PANEL, corner_radius=8, border_width=1, border_color=Theme.BORDER)
         tree_frame.pack(fill="both", expand=True, padx=10, pady=5)
         tree_frame.grid_rowconfigure(0, weight=1)
         tree_frame.grid_columnconfigure(0, weight=1)
@@ -1393,17 +1395,17 @@ class ProgramTreeEditor:
 
         # Right (Jog & PickPlace 통합) - 화면 크기 문제를 해결하기 위해 전체를 ScrollableFrame으로 감쌈
         right_container = ctk.CTkFrame(self.parent, fg_color="transparent")
-        right_container.grid(row=0, column=2, sticky="nsew", padx=2, pady=2)
+        right_container.grid(row=0, column=2, sticky="nsew", padx=6, pady=6)
         right_container.grid_columnconfigure(0, weight=1)
         right_container.grid_rowconfigure(0, weight=1)
 
-        right_scroll = ctk.CTkScrollableFrame(right_container, corner_radius=0)
+        right_scroll = ctk.CTkScrollableFrame(right_container, corner_radius=12, **Theme.card_style())
         right_scroll.grid(row=0, column=0, sticky="nsew", pady=2)
 
         self.pp_frame = ctk.CTkFrame(right_scroll, fg_color="transparent")
         self.pp_frame.pack(fill="x", pady=2)
 
-        self.apply_btn = ctk.CTkButton(right_scroll, text="💾 우측 설정창 값들 적용하기 (Apply)", fg_color=Theme.WARNING, hover_color="#F57C00", text_color="black", font=Theme.font(weight="bold", size=15), height=45, command=self.apply_current_editor)
+        self.apply_btn = ctk.CTkButton(right_scroll, text="우측 설정창 값들 적용하기 (Apply)", fg_color=Theme.WARNING, hover_color="#C78318", text_color="#202524", font=Theme.font(weight="bold", size=15), height=45, command=self.apply_current_editor)
         self.apply_btn.pack(fill="x", pady=5, padx=10)
 
         self.jog_frame = ctk.CTkFrame(right_scroll, fg_color="transparent")
@@ -4435,14 +4437,14 @@ class RobotHmiView:
         self.switch_view("프로그램")
 
     def setup_navbar(self):
-        nav_bar = ctk.CTkFrame(self.parent, fg_color=Theme.BG_BASE, height=45)
+        nav_bar = ctk.CTkFrame(self.parent, fg_color=Theme.BG_SURFACE, height=45, border_width=1, border_color=Theme.BORDER)
         nav_bar.grid(row=0, column=0, sticky="ew")
         nav_container = ctk.CTkFrame(nav_bar, fg_color="transparent")
         nav_container.pack(expand=True)
         items = ["이전으로", "옵션", "로봇설정", "프로그램", "통신체크", "리셋"]
         for item in items:
-            btn = ctk.CTkButton(nav_container, text=item, fg_color="transparent", text_color="#A0A0A0",
-                                font=Theme.font(size=12, weight="bold"), hover_color=Theme.BG_SURFACE, corner_radius=0,
+            btn = ctk.CTkButton(nav_container, text=item, fg_color="transparent", text_color=Theme.TEXT_SECONDARY,
+                                font=Theme.font(size=12, weight="bold"), hover_color="#E6EAE4", corner_radius=12,
                                 command=lambda x=item: self.switch_view(x))
             btn.pack(side="left", padx=5)
 

@@ -15,6 +15,7 @@
 - **Docker**는 MQTT, DB Worker, Digital Twin, Robot Controller 같은 백그라운드 서비스를 실행합니다.
 - Docker Desktop에서 봐야 하는 곳은 `Images`가 아니라 보통 **Containers** 화면입니다.
 - UI는 기본적으로 **무연결 모드**로 켜집니다. 로봇/PLC/MySQL은 사용자가 `연결` 버튼을 눌렀을 때만 붙습니다.
+- Page 1의 3D 화면은 흰색 6축 로봇 A/B/C, 100mm 이송 레일, 장난감 자동차 공정을 보여주는 작업자 기본 화면입니다.
 - Page 1/2의 3D 화면에는 초록/주황/빨강 위험 가이드와 rail/place 투명 존이 표시됩니다. 이 표시는 실제 JSON을 바꾸지 않는 확인용 안내입니다.
 - Robot A의 2026-05-18 테스트 분석과 다음날 테스트 순서는 [docs/robot_a_dry_run_analysis_20260518.md](/Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/docs/robot_a_dry_run_analysis_20260518.md)를 보세요.
 - Windows 작업자 기준 실행환경 점검 결과는 [docs/user_execution_environment_audit_20260519.md](/Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/docs/user_execution_environment_audit_20260519.md)를 보세요.
@@ -53,7 +54,7 @@ python -m pip install -r requirements.txt
 python frontend\run_ui_only.py
 ```
 
-정상이라면 `INDY7 COMMAND CENTER` 창이 뜹니다.
+정상이라면 `INDY7 Toy Car Process Twin` 창이 뜹니다.
 
 Windows 현장 PC에서는 더 쉽게 아래 파일을 더블클릭해도 됩니다.
 
@@ -358,7 +359,7 @@ UI를 실행한 뒤 Page 1 또는 Page 2의 `Play(가상)` 화면을 봅니다.
 
 ```text
 Robot A/B/C 간격: 185cm
-로봇과 rail 사이 거리: 50cm
+로봇과 rail 사이 거리: 55cm
 Robot A부터 rail 끝단까지: 약 100cm
 ```
 

@@ -1,4 +1,4 @@
-# Indy7 PC-HMI — Deep Space Command Center 🚀
+# Indy7 PC-HMI — Toy Car Process Twin
 
 Neuromeka(뉴로메카) **Indy7 협동 로봇**을 위한 PC 기반 HMI 소프트웨어 시스템입니다.
 
@@ -84,6 +84,17 @@ Indy7_HMI_Clean
 ├─ requirements-dev.txt                # 선택 개발/캡처 도구
 └─ README.md                           # 최종 운영 기준 문서
 ```
+
+### Page별 작업 화면 구조
+
+| Page | 이름 | 작업자 관점 역할 | 핵심 표시/기능 |
+|---|---|---|---|
+| Page 1 | Auto / Monitor Mode | 실제 생산 중 디지털 트윈 감시 | 흰색 6축 로봇 A/B/C, 100mm 레일, 장난감 자동차 공정, 실시간 TCP/Joint/Torque, Home/Zero/Error Reset, 저장 프로그램 실행 |
+| Page 2 | Setting / Teaching Mode | JSON 티칭과 로봇 세팅 | APK 호환 JSON 트리, Pick/Place/Loop/DI/DO 편집, Jog, TCP/Tool 설정, 가상 Play |
+| Page 3 | Dry Run Recording | 반복 검증과 데이터 수집 | 가상 DI 0~31 입력, 로컬 JSONL 저장, MySQL 기록, cycle 완료 기준 카운트 |
+| Page 4 | AI Teaching | 자연어 티칭 실험 | API Key 입력, 명령 초안 생성, JSON 변환 전 검토 |
+
+Page 1의 3D 화면은 문서용 시안이 아니라 실제 앱에 반영된 작업자 기본 화면입니다. 기존 Page 1의 로봇 선택, Home/Zero, 에러 리셋, 프로그램 실행, 실시간 동기화 기능은 그대로 유지하고, 중앙 3D 표시만 실제 레일/차량 공정이 먼저 보이도록 바꿨습니다.
 
 ### 시스템 구조
 
@@ -1212,7 +1223,7 @@ Page 1 Digital Twin과 Page 2 `Play(가상)` 3D Motion Viewer에는 기존 티�
 
 ```text
 Robot A/B/C 간격: 1850mm
-로봇 전면 rail 거리: 500mm
+로봇 전면 rail 거리: 550mm
 Robot A 기준 rail 끝단 여유: 약 1000mm
 Robot A 공통 Place 감시 좌표: X552 / Y-99 / Z220~420mm 주변
 ```

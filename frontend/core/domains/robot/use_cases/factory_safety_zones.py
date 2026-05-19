@@ -14,7 +14,8 @@ class FactorySafetyZones:
     COLOR_RAIL = "#90A4AE"
 
     ROBOT_SPACING_M = 1.85
-    RAIL_FRONT_DISTANCE_M = 0.50
+    RAIL_FRONT_DISTANCE_M = 0.55
+    RAIL_WIDTH_M = 0.10
     ROBOT_A_TO_RAIL_END_M = 1.00
 
     PLACE_WATCH_LOCAL_M = (0.552, -0.099, 0.315)
@@ -46,9 +47,9 @@ class FactorySafetyZones:
         zones = [
             {
                 "id": "rail_body",
-                "label": "Rail 500mm",
+                "label": "Rail 100mm",
                 "center": (self.RAIL_FRONT_DISTANCE_M, y_center, 0.045),
-                "size": (0.08, y_size, 0.09),
+                "size": (self.RAIL_WIDTH_M, y_size, 0.09),
                 "color": self.COLOR_RAIL,
                 "alpha": 0.22,
             },
@@ -185,16 +186,17 @@ class FactorySafetyZones:
         return base
 
     def _rail_score(self, x_m, z_m):
-        # The rail is 500mm in front of each robot. Low TCP motion near that
+        # The rail is about 550mm in front of each robot and roughly 100mm
+        # wide. Low TCP motion near that
         # line is advisory-warning because physical rail/object fixtures can
         # differ from the light HMI model.
         dx = abs(float(x_m) - self.RAIL_FRONT_DISTANCE_M)
         if z_m > 0.85:
             return 0.0
-        if dx <= 0.12:
+        if dx <= 0.07:
             return 90.0
-        if dx <= 0.25:
-            return 70.0 + (0.25 - dx) / 0.13 * 20.0
+        if dx <= 0.16:
+            return 70.0 + (0.16 - dx) / 0.09 * 20.0
         return 0.0
 
     def _place_watch_score_world(self, x_m, y_m, z_m, robot_name=None):

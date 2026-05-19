@@ -450,7 +450,7 @@ class VirtualTestView:
         self._poll_runner_status()
 
     def _build_ui(self):
-        left = ctk.CTkFrame(self.parent, fg_color=Theme.BG_SURFACE, corner_radius=10)
+        left = ctk.CTkFrame(self.parent, corner_radius=12, **Theme.card_style())
         left.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
         ctk.CTkLabel(left, text="Dry Run Recording", font=Theme.font(size=20, weight="bold", role="display"),
@@ -458,12 +458,12 @@ class VirtualTestView:
         ctk.CTkLabel(left, text="Robot diagnostic dry run + torque/position recorder", font=Theme.font(size=12),
                      text_color=Theme.TEXT_SECONDARY).pack(anchor="w", padx=16, pady=(0, 12))
 
-        settings = ctk.CTkFrame(left, fg_color=Theme.BG_BASE, corner_radius=8)
+        settings = ctk.CTkFrame(left, fg_color=Theme.BG_PANEL, corner_radius=8, border_width=1, border_color=Theme.BORDER)
         settings.pack(fill="x", padx=14, pady=8)
         self.target_entry = self._entry_row(settings, "목표 반복", "100")
         self.interval_entry = self._entry_row(settings, "샘플(ms)", "100")
 
-        di_box = ctk.CTkFrame(left, fg_color=Theme.BG_BASE, corner_radius=8)
+        di_box = ctk.CTkFrame(left, fg_color=Theme.BG_PANEL, corner_radius=8, border_width=1, border_color=Theme.BORDER)
         di_box.pack(fill="x", padx=14, pady=(4, 8))
         di_head = ctk.CTkFrame(di_box, fg_color="transparent")
         di_head.pack(fill="x", padx=10, pady=(10, 4))
@@ -500,7 +500,7 @@ class VirtualTestView:
         robot_box.pack(fill="x", padx=12, pady=8)
 
         for robot in ["Robot A", "Robot B", "Robot C"]:
-            row = ctk.CTkFrame(robot_box, fg_color=Theme.BG_BASE, corner_radius=8)
+            row = ctk.CTkFrame(robot_box, fg_color=Theme.BG_PANEL, corner_radius=8, border_width=1, border_color=Theme.BORDER)
             row.pack(fill="x", pady=5)
             ctk.CTkLabel(row, text=robot, width=72, anchor="w", font=Theme.font(size=13, weight="bold")).pack(side="left", padx=(10, 4), pady=9)
             status = ctk.CTkLabel(row, text="대기", width=64, text_color=Theme.TEXT_SECONDARY, font=Theme.font(size=11))
@@ -511,7 +511,7 @@ class VirtualTestView:
                           **Theme.get_button_style("danger")).pack(side="left", padx=3)
             self.status_labels[robot] = status
 
-        center = ctk.CTkFrame(self.parent, fg_color=Theme.BG_SURFACE, corner_radius=10)
+        center = ctk.CTkFrame(self.parent, corner_radius=12, **Theme.card_style())
         center.grid(row=0, column=1, sticky="nsew", padx=4, pady=10)
         ctk.CTkLabel(center, text="실시간 패턴 기록", font=Theme.font(size=18, weight="bold"),
                      text_color=Theme.INFO).pack(anchor="w", padx=16, pady=(16, 8))
@@ -521,7 +521,7 @@ class VirtualTestView:
         self.session_label.pack(fill="x", padx=16, pady=(0, 8))
 
         for robot in ["Robot A", "Robot B", "Robot C"]:
-            card = ctk.CTkFrame(center, fg_color=Theme.BG_BASE, corner_radius=8)
+            card = ctk.CTkFrame(center, fg_color=Theme.BG_PANEL, corner_radius=8, border_width=1, border_color=Theme.BORDER)
             card.pack(fill="x", padx=16, pady=7)
             top = ctk.CTkFrame(card, fg_color="transparent")
             top.pack(fill="x", padx=12, pady=(10, 3))
@@ -538,7 +538,7 @@ class VirtualTestView:
             self.sample_labels[robot] = sample
             self.snapshot_labels[robot] = snapshot
 
-        right = ctk.CTkScrollableFrame(self.parent, fg_color=Theme.BG_SURFACE, corner_radius=10)
+        right = ctk.CTkScrollableFrame(self.parent, corner_radius=12, **Theme.card_style())
         right.grid(row=0, column=2, sticky="nsew", padx=10, pady=10)
         ctk.CTkLabel(right, text="저장 설정", font=Theme.font(size=18, weight="bold"),
                      text_color=Theme.WARNING).pack(anchor="w", padx=16, pady=(16, 8))
@@ -548,7 +548,7 @@ class VirtualTestView:
                       progress_color=Theme.SUCCESS,
                       command=self._sync_local_recording_enabled).pack(anchor="w", padx=16, pady=(0, 6))
 
-        local_box = ctk.CTkFrame(right, fg_color=Theme.BG_BASE, corner_radius=8)
+        local_box = ctk.CTkFrame(right, fg_color=Theme.BG_PANEL, corner_radius=8, border_width=1, border_color=Theme.BORDER)
         local_box.pack(fill="x", padx=14, pady=(4, 12))
         ctk.CTkButton(local_box, text="저장 위치 선택", command=self.choose_local_dir,
                       **Theme.get_button_style("secondary")).pack(fill="x", padx=10, pady=(10, 6))
@@ -562,7 +562,7 @@ class VirtualTestView:
                       progress_color=Theme.SUCCESS,
                       command=self._sync_db_recording_enabled).pack(anchor="w", padx=16, pady=(0, 8))
 
-        form = ctk.CTkFrame(right, fg_color=Theme.BG_BASE, corner_radius=8)
+        form = ctk.CTkFrame(right, fg_color=Theme.BG_PANEL, corner_radius=8, border_width=1, border_color=Theme.BORDER)
         form.pack(fill="x", padx=14, pady=8)
         db_config = mysql_config()
         self.db_host_entry = self._entry_row(form, "Host", db_config["host"])

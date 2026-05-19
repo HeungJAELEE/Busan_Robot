@@ -1,4 +1,4 @@
-# 🖥️ Frontend — Indy7 HMI Desktop Application
+# Frontend — Indy7 Toy Car Process Twin Desktop Application
 
 이 폴더는 Indy7 로봇을 조종하는 **데스크톱 GUI(화면) 프로그램**입니다.
 Docker가 아닌, PC의 터미널에서 직접 실행합니다.
@@ -50,10 +50,10 @@ frontend/
 │
 ├── presentation/ui/                     # 🖥️ 사용자 화면 (GUI)
 │   ├── main_window.py                   # 메인 프레임 (네비게이션, 서비스 토글, 터미널 로그)
-│   ├── theme.py                         # Deep Space Command Center 컬러/글꼴 테마
+│   ├── theme.py                         # Factory studio 컬러/글꼴 테마
 │   │
-│   ├── digital_twin/                    # [Page 1] 
-│   │   └── digital_twin_view.py         # 3D 뷰어 화면 (그래프 및 모니터링)
+│   ├── digital_twin/                    # [Page 1]
+│   │   └── digital_twin_view.py         # 레일/차량 공정 3D 디지털 트윈과 실시간 모니터링
 │   │
 │   └── robot_hmi/                       # [Page 2]
 │       ├── robot_hmi_view.py            # 티칭 화면 전체 프레임 (JSON 파싱 및 트리 실행)

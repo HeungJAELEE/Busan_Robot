@@ -1,6 +1,6 @@
 # Indy7 Rail Robot View Guide
 
-이 문서는 실제 레일 설비 사진을 기준으로 만든 **결정용 UI 가이드**입니다. 현재 HMI의 동작 로직, JSON 실행 로직, 로봇 통신 코드는 변경하지 않습니다.
+이 문서는 실제 레일 설비 사진을 기준으로 만든 **Page 1 디지털 트윈 UI 가이드**입니다. 현재 HMI의 JSON 실행 로직, 로봇 통신 코드, 티칭 데이터 구조는 변경하지 않고 화면 표현만 작업자 중심으로 정리합니다.
 
 ## 목적
 
@@ -26,7 +26,7 @@ Robot C: 완성 장난감 자동차 픽업 및 양품 배출
 
 ```text
 Robot A/B/C 간격: 1850mm
-로봇 전면 rail 거리: 500mm
+로봇 전면 rail 거리: 550mm
 Robot A 기준 rail 끝단 여유: 약 1000mm
 실제 이송 레일 폭: 약 100mm
 ```
@@ -53,13 +53,15 @@ Robot A 기준 rail 끝단 여유: 약 1000mm
 - HTML 가이드: [rail_robot_scene_guide.html](./rail_robot_scene_guide.html)
 - SVG 미리보기: [rail_robot_scene_guide.svg](./rail_robot_scene_guide.svg)
 
-## 실제 앱 적용 방향
+## 실제 앱 반영 방향
 
-1. `Simple View`: 회색 스튜디오 배경에서 레일, 로봇, 작업물만 보여주는 작업자 기본 화면
-2. `Debug View`: 현재처럼 안전 박스, 궤적, 위험 점, 그리드를 모두 켜는 엔지니어 화면
+1. `Simple View`: 회색 스튜디오 배경에서 레일, 흰색 로봇, 장난감 자동차를 먼저 보여주는 작업자 기본 화면
+2. `Debug View`: 안전 박스, 궤적, 위험 점, 그리드를 필요한 순간에 켜는 엔지니어 화면
 3. `Mesh Layer`: Google Drive의 Indy7 모델 파일을 로컬에 받은 뒤 단순 링크 형상을 실제 mesh로 교체
 4. `Layer Toggle`: Page 1과 Page 2에서 `Rail`, `Robot`, `TCP`, `Zone`, `Grid` 토글 제공
 5. `Process Layer`: A/B/C 공정 라벨과 제품 상태를 함께 표시하여 실제 생산 동작과 맞춤
+
+2026-05-19 기준 실제 앱 Page 1에는 경량 Matplotlib 3D 형태로 먼저 반영했습니다. 실시간 동기화를 유지하기 위해 STL/mesh 직접 로딩 대신 흰색 로봇 외피 스타일, 좁은 레일, 차량 도형, 은은한 가이드 존을 사용합니다.
 
 ## HTML 시안 실행 메모
 

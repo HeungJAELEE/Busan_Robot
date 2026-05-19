@@ -1,33 +1,33 @@
-"""
-Deep Space Command Center Design Tokens
-FlutterFlow 스타일 기반의 테마 정의 파일
-"""
+"""Factory studio design tokens for the Indy7 HMI."""
 import customtkinter as ctk
 
 class Theme:
     # ─── Colors ───
     # Primary Backgrounds
-    BG_BASE = "#060311"        # Midnight Ink: Primary background, deep cards
-    BG_SURFACE = "#161320"     # Slate Deep: Secondary background, UI panels
+    BG_BASE = "#D0D0CB"        # Warm grey studio background
+    BG_SURFACE = "#F6F7F3"     # Raised panels
+    BG_PANEL = "#FFFFFF"       # Cards and tool surfaces
+    BG_CANVAS = "#ECEDE8"      # Plot/canvas surfaces
+    BORDER = "#D5D9D2"
     
     # Text
-    TEXT_PRIMARY = "#ffffff"   # White Star: Primary text, critical UI elements
-    TEXT_SECONDARY = "#9ba1ae" # Mist Gray: Secondary text, subtle descriptions
-    TEXT_TERTIARY = "#333333"  # Dark Star: Tertiary text
+    TEXT_PRIMARY = "#202524"
+    TEXT_SECONDARY = "#59615F"
+    TEXT_TERTIARY = "#7A8380"
     
-    # Accents (Violets)
-    ACCENT_PRIMARY = "#5800fd" # Deep Violet: Interactive elements, primary links, active states
-    ACCENT_HOVER = "#7066ed"   # Dawn Violet: Interactive hover states
-    ACCENT_SECONDARY = "#2415c6" # Cosmic Indigo: Muted violet for depth
-    ACCENT_FLARE = "#882fe8"   # Flare Violet: Minor illustrative accents
+    # Accents
+    ACCENT_PRIMARY = "#20A963"
+    ACCENT_HOVER = "#35BA76"
+    ACCENT_SECONDARY = "#DDF2E6"
+    ACCENT_FLARE = "#D79927"
     
-    # Semantic Colors (Added for Robot App context)
-    SUCCESS = "#4CAF50"        # Green for success, execution, ON
-    SUCCESS_HOVER = "#2E7D32"
-    DANGER = "#F44336"         # Red for stop, errors, OFF
-    DANGER_HOVER = "#B71C1C"
-    WARNING = "#FF9800"        # Orange for alerts, manual mode
-    INFO = "#00BCD4"           # Cyan for info, general active
+    # Semantic Colors
+    SUCCESS = "#20A963"
+    SUCCESS_HOVER = "#168A51"
+    DANGER = "#D8453E"
+    DANGER_HOVER = "#B9322D"
+    WARNING = "#D79927"
+    INFO = "#2B78D4"
     
     # ─── Fonts ───
     FONT_FAMILY_DISPLAY = "Urbanist"
@@ -52,19 +52,23 @@ class Theme:
     def apply_window_style(cls, window):
         """기본 윈도우 배경색 적용"""
         window.configure(fg_color=cls.BG_BASE)
+
+    @classmethod
+    def card_style(cls):
+        return {"fg_color": cls.BG_SURFACE, "border_color": cls.BORDER, "border_width": 1}
         
     @classmethod
     def get_button_style(cls, variant="primary"):
         """자주 쓰이는 버튼 스타일 프리셋 반환"""
         if variant == "primary":
-            return {"fg_color": cls.ACCENT_PRIMARY, "hover_color": cls.ACCENT_HOVER, "text_color": cls.TEXT_PRIMARY}
+            return {"fg_color": cls.ACCENT_PRIMARY, "hover_color": cls.ACCENT_HOVER, "text_color": "#FFFFFF"}
         elif variant == "danger":
-            return {"fg_color": cls.DANGER, "hover_color": cls.DANGER_HOVER, "text_color": cls.TEXT_PRIMARY}
+            return {"fg_color": cls.DANGER, "hover_color": cls.DANGER_HOVER, "text_color": "#FFFFFF"}
         elif variant == "success":
-            return {"fg_color": cls.SUCCESS, "hover_color": cls.SUCCESS_HOVER, "text_color": cls.TEXT_PRIMARY}
+            return {"fg_color": cls.SUCCESS, "hover_color": cls.SUCCESS_HOVER, "text_color": "#FFFFFF"}
         elif variant == "secondary":
-            return {"fg_color": cls.BG_SURFACE, "hover_color": cls.ACCENT_SECONDARY, "text_color": cls.TEXT_PRIMARY}
+            return {"fg_color": "#EEF1EC", "hover_color": "#E1E6DF", "text_color": cls.TEXT_PRIMARY}
         elif variant == "ghost":
-            return {"fg_color": "transparent", "hover_color": cls.BG_SURFACE, "text_color": cls.TEXT_SECONDARY}
+            return {"fg_color": "transparent", "hover_color": "#E6EAE4", "text_color": cls.TEXT_SECONDARY}
         else:
-            return {"fg_color": cls.BG_SURFACE, "hover_color": cls.TEXT_TERTIARY, "text_color": cls.TEXT_PRIMARY}
+            return {"fg_color": cls.BG_PANEL, "hover_color": "#E6EAE4", "text_color": cls.TEXT_PRIMARY}

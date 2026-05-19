@@ -16,7 +16,7 @@ from core.service_manager import service_mgr
 from core.runtime_config import mqtt_config, robot_defaults
 from presentation.ui.theme import Theme
 
-ctk.set_appearance_mode("dark")
+ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("dark-blue")
 
 class PrintLogger:
@@ -48,19 +48,20 @@ class ModernContyApp(ctk.CTk):
         Theme.apply_window_style(self)
         
         # 상단 네비게이션 (헤더)
-        self.header = ctk.CTkFrame(self, height=60, fg_color=Theme.BG_BASE, corner_radius=0)
+        self.header = ctk.CTkFrame(self, height=60, fg_color=Theme.BG_SURFACE, corner_radius=0,
+                                   border_width=1, border_color=Theme.BORDER)
         self.header.grid(row=0, column=0, sticky="ew")
         
         # 좌측 상단 로고
-        ctk.CTkLabel(self.header, text="⚡ INDY7 COMMAND CENTER", font=Theme.font(size=20, weight="bold", role="display"), text_color=Theme.TEXT_PRIMARY).pack(side="left", padx=20)
+        ctk.CTkLabel(self.header, text="INDY7 Toy Car Process Twin", font=Theme.font(size=21, weight="bold", role="display"), text_color=Theme.TEXT_PRIMARY).pack(side="left", padx=20)
         
         # 중앙 페이지 탭 버튼
         tab_container = ctk.CTkFrame(self.header, fg_color="transparent")
         tab_container.pack(side="left", expand=True)
         
         # 활성/비활성 스타일 정의
-        self.style_active = {"fg_color": Theme.ACCENT_PRIMARY, "text_color": Theme.TEXT_PRIMARY, "hover_color": Theme.ACCENT_HOVER}
-        self.style_inactive = {"fg_color": "transparent", "text_color": Theme.TEXT_SECONDARY, "hover_color": Theme.BG_SURFACE}
+        self.style_active = {"fg_color": Theme.ACCENT_PRIMARY, "text_color": "#FFFFFF", "hover_color": Theme.ACCENT_HOVER}
+        self.style_inactive = {"fg_color": "transparent", "text_color": Theme.TEXT_SECONDARY, "hover_color": "#E6EAE4"}
         
         self.btn_page1 = ctk.CTkButton(tab_container, text="[Page 1] Auto / Monitor Mode", corner_radius=15, command=lambda: self.switch_page(1), **self.style_inactive)
         self.btn_page1.pack(side="left", padx=5)
@@ -75,15 +76,15 @@ class ModernContyApp(ctk.CTk):
         self.btn_page4.pack(side="left", padx=5)
         
         # 우측 연결 버튼
-        self.conn_btn = ctk.CTkButton(self.header, text="로봇 통신 연결", fg_color=Theme.SUCCESS, command=self.toggle_connection)
+        self.conn_btn = ctk.CTkButton(self.header, text="로봇 통신 연결", command=self.toggle_connection, **Theme.get_button_style("success"))
         self.conn_btn.pack(side="right", padx=20)
         
         # 서비스 ON/OFF 토글 버튼
-        svc_btn = ctk.CTkButton(self.header, text="🔌 서비스 관리", fg_color=Theme.ACCENT_SECONDARY, hover_color=Theme.ACCENT_HOVER, command=self._toggle_service_panel, width=120)
+        svc_btn = ctk.CTkButton(self.header, text="서비스 관리", command=self._toggle_service_panel, width=120, **Theme.get_button_style("secondary"))
         svc_btn.pack(side="right", padx=5)
         
         # 하단 터미널
-        self.terminal = ctk.CTkTextbox(self, height=150, fg_color=Theme.BG_SURFACE, text_color=Theme.SUCCESS, font=ctk.CTkFont(family="Consolas", size=13))
+        self.terminal = ctk.CTkTextbox(self, height=150, fg_color="#202524", text_color="#7CE2A8", font=ctk.CTkFont(family="Consolas", size=13))
         self.terminal.grid(row=3, column=0, sticky="ew", padx=10, pady=10)
         sys.stdout = PrintLogger(self.log_queue)
         
