@@ -6,6 +6,9 @@
 #
 # Vision YOLO is intentionally separate because torch/ultralytics are heavy:
 #   python3 -m pip install -r backend/vision_yolo/requirements.txt
+#
+# Optional screenshot/debug helpers are separate:
+#   python3 -m pip install -r requirements-dev.txt
 
 -r frontend/requirements.txt
 -r backend/db_worker/requirements.txt

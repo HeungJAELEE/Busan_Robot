@@ -1,40 +1,102 @@
-# 시스템 요구사항 및 패키지 설치 가이드 📦
+# 시스템 요구사항 및 패키지 설치 가이드
 
-본 HMI 소프트웨어(`Indy7_HMI_Clean`)를 정상적으로 실행하기 위해 필요한 Python 외부 패키지 목록입니다.
+이 문서는 `Indy7_HMI_Clean` 최종 배포 기준의 Python 패키지 설치 기준입니다.
 
-## 🛠 1. 한 번에 설치하기
-프로젝트 루트 폴더에 있는 `requirements.txt` 파일을 통해 일괄 설치할 수 있습니다.
-터미널을 열고 다음 명령어를 입력하세요:
+## 1. 설치 묶음 구분
+
+| 파일 | 언제 설치하나 | 포함 범위 |
+|---|---|---|
+| `requirements.txt` | Robot Controller PC 기본 설치 | HMI UI, Page 3 Dry Run Recording, MySQL, MQTT, Robot Controller, PLC Bridge, Digital Twin |
+| `frontend/requirements.txt` | 프론트엔드만 따로 개발/실행할 때 | CustomTkinter UI, 3D 그래프, AI Teaching, MySQL/MQTT 클라이언트 |
+| `backend/vision_yolo/requirements.txt` | Vision/YOLO PC 또는 비전 컨테이너를 쓸 때만 | OpenCV, ultralytics, torch, torchvision |
+| `requirements-dev.txt` | 화면 캡처/디버그 보조 스크립트 실행 시만 | `tkcap` |
+
+## 2. Robot Controller PC 기본 설치
+
+프로젝트 루트에서 실행합니다.
 
 ```bash
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
----
+Windows에서 `python`이 안 되면 아래처럼 실행합니다.
 
-## 📚 2. 주요 패키지 상세 설명
+```powershell
+py -m pip install --upgrade pip
+py -m pip install -r requirements.txt
+```
 
-| 패키지명 (pip install) | 버전 | 역할 및 용도 |
-|----------------------|--------|----------------|
-| **`customtkinter`** | `>=5.2.0` | **화면(UI) 프레임워크.** 둥근 모서리와 다크/라이트 모드를 지원하는 예쁜 창을 띄워줍니다. |
-| **`numpy`**, **`scipy`** | `>=1.24.0` | **로봇 좌표 및 수학 계산.** 팔레타이징 궤적, 3D 공간 보간, 페이로드 계산 등 수학적 연산에 사용됩니다. |
-| **`PyMySQL`** | `>=1.0.2` | **MES DB(MySQL) 연동.** 로봇의 실시간 데이터와 작업 완료 이력을 외부 데이터베이스(192.168.3.141)에 전송합니다. |
-| **`paho-mqtt`** | `>=1.6.1` | **외부 장비(IoT) 통신.** 주변 기기나 로봇 간의 경량 메시징 통신에 사용됩니다. |
-| **`pyserial`** | `>=3.5` | **시리얼 통신.** 시리얼 포트(COM)를 이용한 하드웨어 스위치 및 로컬 센서 연결 시 사용됩니다. |
-| **`PyYAML`** | `>=6.0` | **설정 파일 읽기.** 환경 설정 파일(yaml/yml) 파싱. |
-| **`tkcap`** | `>=0.0.11` | 화면 캡처 및 도구용 보조 라이브러리. |
+## 3. Vision YOLO 설치
 
----
+Vision PC 담당자 또는 비전 컨테이너 개발자만 설치합니다.
 
-## ❓ 3. 설치 중 오류가 난다면?
+```bash
+python -m pip install -r backend/vision_yolo/requirements.txt
+```
 
-1. **`ModuleNotFoundError: No module named 'OOO'` 발생 시**
-   - 위 표를 보고 없는 패키지 이름만 수동으로 설치해주세요.
-   - 예: `pip install pymysql`
+YOLO 패키지는 `torch`, `ultralytics` 때문에 무겁습니다. Robot Controller PC에서 단순 HMI/로봇 제어만 할 때는 기본 설치에 포함하지 않습니다.
 
-2. **pip 명령어가 안 먹힐 때 (macOS)**
-   - `pip` 대신 `pip3`를 사용해보세요.
-   - 예: `pip3 install -r requirements.txt`
+## 4. 개발 보조 도구 설치
 
-3. **가상 환경(Anaconda) 사용 중일 때**
-   - 로봇 연결 오류나 권한 에러(Operation not permitted)가 발생하면, Anaconda 환경 밖의 터미널(기본 bash/zsh)에서 직접 실행해 보세요.
+화면 캡처 테스트(`frontend/presentation/ui/screenshot_test.py`)를 실행할 때만 설치합니다.
+
+```bash
+python -m pip install -r requirements-dev.txt
+```
+
+현재 확인한 `tkcap` 최신 배포 버전은 `0.0.4`입니다. `tkcap>=0.0.11` 같은 버전은 설치 실패합니다.
+
+## 5. 주요 패키지 역할
+
+| 패키지 | 설치 위치 | 역할 |
+|---|---|---|
+| `customtkinter` | frontend | HMI 데스크톱 UI |
+| `numpy` | frontend, robot_controller | 좌표, 관절, 로봇 수학 계산 |
+| `scipy` | frontend | 회전 행렬, 보간, motion math |
+| `matplotlib` | frontend | Page 1/2 3D 시각화, 오실로스코프 |
+| `paho-mqtt` | frontend, backend services | MQTT 통신 |
+| `PyMySQL` | frontend, db_worker | MySQL 연결 및 기록 |
+| `cryptography` | frontend, db_worker | MySQL 8 인증 지원 |
+| `pymcprotocol` | plc_bridge, frontend | Mitsubishi PLC MC Protocol |
+| `websockets` | digital_twin, frontend service helper | Digital Twin WebSocket |
+| `google-genai` | frontend | Page 4 Google AI Studio / Gemini Teaching |
+| `sounddevice` | frontend | Page 4 마이크 음성 입력 |
+| `pyserial` | frontend | 시리얼 장비 보조 |
+| `PyYAML` | frontend | 설정 파일 파싱 |
+| `Pillow` | frontend | 이미지/아이콘 처리 |
+| `opencv-python-headless` | vision_yolo | 카메라 프레임 처리 |
+| `ultralytics` | vision_yolo | YOLO 추론 |
+| `torch`, `torchvision` | vision_yolo | 딥러닝 런타임 |
+| `tkcap` | requirements-dev | 선택 화면 캡처 도구 |
+
+## 6. 설치 검증
+
+```bash
+python -m py_compile $(rg --files frontend backend/robot_controller/src backend/db_worker/src backend/plc_bridge/src backend/digital_twin/src -g '*.py')
+```
+
+Docker 설정 검증:
+
+```bash
+cd backend
+docker compose config
+```
+
+패키지 설치 가능성만 미리 확인:
+
+```bash
+python -m pip install --dry-run -r requirements.txt
+python -m pip install --dry-run -r requirements-dev.txt
+```
+
+## 7. 오류 대응
+
+| 증상 | 원인 | 조치 |
+|---|---|---|
+| `ModuleNotFoundError` | 패키지 미설치 | 현재 PC 역할에 맞는 requirements 파일 설치 |
+| `pymcprotocol 미설치` | PLC Bridge 패키지 누락 | `python -m pip install -r requirements.txt` |
+| `websockets 모듈 필요` | Digital Twin 패키지 누락 | `python -m pip install -r requirements.txt` |
+| `google genai 없음` | Page 4 AI 패키지 누락 | `python -m pip install -r frontend/requirements.txt` 또는 root requirements 설치 |
+| `tkcap 없음` | 선택 캡처 도구 미설치 | `python -m pip install -r requirements-dev.txt` |
+| YOLO 설치가 너무 오래 걸림 | torch/ultralytics가 무거움 | Robot Controller PC에는 기본 설치만 사용 |

@@ -44,6 +44,8 @@ py -m pip install -r requirements.txt
 py frontend\run_ui_only.py
 ```
 
+`requirements.txt`는 기본 HMI, Page 3 로컬/MySQL 저장, Docker 백엔드 연동 클라이언트에 필요한 묶음입니다. Vision YOLO와 화면 캡처 보조 도구는 기본 설치에 넣지 않았습니다.
+
 만약 `py` 명령이 안 되면 아래처럼 시도합니다.
 
 ```powershell
@@ -60,6 +62,12 @@ deployment\windows\start_hmi_ui.bat
 ```
 
 주의: `frontend` 폴더 안에서 `python main.py`를 직접 실행하지 마세요. 예전 로컬 파일이 남아 있으면 GUI 대신 공장 자동화 루프 로그만 계속 올라올 수 있습니다. GUI는 `frontend\run_ui_only.py` 또는 `deployment\windows\start_hmi_ui.bat`로 실행합니다.
+
+화면 캡처 테스트 스크립트가 필요할 때만 추가로 실행합니다.
+
+```powershell
+py -m pip install -r requirements-dev.txt
+```
 
 ### Mac에서 실행
 

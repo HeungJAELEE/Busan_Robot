@@ -6,12 +6,26 @@ Docker가 아닌, PC의 터미널에서 직접 실행합니다.
 처음 실행하는 사용자는 루트의 [`BEGINNER_RUN_GUIDE.md`](../BEGINNER_RUN_GUIDE.md)를 먼저 확인하세요.
 
 ## 🚀 실행 방법
-```bash
-# 패키지 설치 (최초 1회)
-pip install -r requirements.txt
 
-# 로봇 제어 + UI 실행
+프로젝트 루트에서 전체 기본 패키지를 설치할 때:
+
+```bash
+python -m pip install -r requirements.txt
+python frontend/run_ui_only.py
+```
+
+`frontend` 폴더 안에서 프론트엔드 패키지만 설치할 때:
+
+```bash
+cd frontend
+python -m pip install -r requirements.txt
 python run_ui_only.py
+```
+
+화면 캡처 보조 스크립트(`presentation/ui/screenshot_test.py`)는 기본 실행과 무관합니다. 필요할 때만 프로젝트 루트에서 아래를 추가 설치합니다.
+
+```bash
+python -m pip install -r requirements-dev.txt
 ```
 
 ## 🏗 내부 구조 (스켈레톤 트리)
@@ -21,7 +35,7 @@ python run_ui_only.py
 ```text
 frontend/
 ├── run_ui_only.py                       # [진입점] 로봇 제어 UI 전용 실행 파일
-├── main.py                              # [진입점] 통합 시스템 실행 파일 (더 방대한 세팅 시)
+├── main.py                              # [진입점] 기본 UI-only, FACTORY_ORCHESTRATOR_AUTOSTART=1일 때 legacy 루프 실행
 ├── requirements.txt                     # 프론트엔드 전용 파이썬 패키지 목록
 │
 ├── core/                                # 🧠 비즈니스 로직 (두뇌)

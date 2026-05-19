@@ -1,0 +1,6 @@
+# Indy7 HMI Clean - optional developer/test utilities
+#
+# Install only when running local UI screenshot/debug helper scripts:
+#   python -m pip install -r requirements-dev.txt
+
+tkcap==0.0.4

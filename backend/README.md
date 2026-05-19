@@ -12,12 +12,12 @@
 
 ## 🚀 실행 방법
 
-### 현재 방식 (도커 없이, UI에서 직접 제어)
+### UI 단독 실행 (도커 없이 화면만 확인)
 ```bash
-cd ../frontend
-python run_ui_only.py
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+python frontend/run_ui_only.py
 ```
-UI가 뜨면 우측 상단 **[🔌 서비스 관리]** 버튼을 눌러 각 백엔드 서비스를 ON/OFF 합니다.
+UI는 기본적으로 무연결 모드로 뜹니다. 실제 로봇/PLC/DB/MQTT 연결은 화면의 연결 버튼 또는 서비스 관리 버튼을 눌렀을 때만 시도합니다.
 
 ### Docker 실행
 ```bash

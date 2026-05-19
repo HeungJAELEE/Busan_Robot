@@ -20,6 +20,268 @@ Windows 현장 작업자 기준 실행환경 재검토 결과는 [docs/user_exec
 
 ---
 
+## 최종 배포 기준 요약
+
+이 README는 최종 배포 기준의 중심 문서입니다. 작업자는 이 문서만 보고도 설치, 실행, 업데이트, 통신 확인, JSON 이식, Dry Run Recording, MySQL 기록, 장애 원인 확인을 할 수 있어야 합니다.
+
+### 운영 PC 구성
+
+| PC | 담당 기능 | 필수 설치 | Docker |
+|---|---|---|---|
+| Robot Controller PC | HMI UI, Robot A/B/C 제어, MQTT, DB Worker, Digital Twin, PLC Bridge, MySQL 기록 | Git, Python 3.11+, Docker Desktop | 사용 |
+| Vision A PC | A 위치 카메라/QR/비전 공정 실행 | Git, Python, Vision 패키지 | 미사용 |
+| Vision B PC | B 위치 YOLO/비전 공정 실행 | Git, Python, Vision 패키지 | 미사용 |
+| Vision C PC | C 위치 YOLO/비전 공정 실행 | Git, Python, Vision 패키지 | 미사용 |
+
+권장 현장 PC 사양:
+
+```text
+Robot Controller PC: Intel i5-8500 / RAM 16GB 이상
+MySQL: 192.168.3.141:3306 / faictory_mes
+Robot A/B/C: 192.168.3.7 / 192.168.3.6 / 192.168.3.5
+PLC process/monitor: 192.168.3.150 / 192.168.3.160
+```
+
+### 프로그램 구조
+
+```text
+Indy7_HMI_Clean
+├─ frontend/
+│  ├─ run_ui_only.py                  # HMI UI 실행 진입점
+│  ├─ main.py                         # 기본 UI-only, legacy orchestrator는 명시 옵션일 때만 실행
+│  ├─ core/
+│  │  ├─ runtime_config.py             # .env / 환경변수 / 기본 IP 설정
+│  │  ├─ service_manager.py            # UI 내부 서비스 토글용 스레드 관리자
+│  │  └─ domains/
+│  │     ├─ robot/communication/        # direct / mqtt 로봇 연결 선택
+│  │     ├─ robot/use_cases/            # Pick/Place, 안전 존, 실행 유스케이스
+│  │     └─ plc/                        # PLC 직접 연결 보조 모듈
+│  ├─ infrastructure/
+│  │  ├─ mqtt/                         # HMI MQTT 클라이언트
+│  │  ├─ db/                           # MySQL 직접 연결 보조
+│  │  └─ robot_control/                # Conty 실행 보조
+│  ├─ indy_utils/                      # Neuromeka IndyDCP 클라이언트
+│  └─ presentation/ui/
+│     ├─ main_window.py                # Page 1~4 전체 화면 프레임
+│     ├─ digital_twin/                 # Page 1 Auto / Monitor
+│     ├─ robot_hmi/                    # Page 2 Setting / Teaching
+│     ├─ virtual_test/                 # Page 3 Dry Run Recording
+│     └─ ai_teaching/                  # Page 4 AI Teaching
+│
+├─ backend/
+│  ├─ docker-compose.yml               # 현장 소스 빌드용 Docker Compose
+│  ├─ docker-compose.registry.yml      # registry 이미지 실행용 Compose
+│  ├─ .env.example                     # 현장 IP/DB/PLC 기본 설정 템플릿
+│  ├─ robot_controller/                # 로봇 소켓 독점, 명령 실행, realtime 발행
+│  ├─ db_worker/                       # MQTT 데이터를 MySQL에 저장
+│  ├─ digital_twin/                    # robot/realtime을 WebSocket으로 중계
+│  ├─ plc_bridge/                      # PLC 신호 감시/기록
+│  └─ vision_yolo/                     # 선택 실행용 비전 서비스
+│
+├─ deployment/windows/                 # 현장 작업자용 .bat / .ps1 실행 파일
+├─ docs/                               # 점검 보고서, JSON 호환성, Dry Run 분석 문서
+├─ requirements.txt                    # 기본 실행 묶음
+├─ requirements-dev.txt                # 선택 개발/캡처 도구
+└─ README.md                           # 최종 운영 기준 문서
+```
+
+### 시스템 구조
+
+```mermaid
+flowchart LR
+    subgraph "Robot Controller PC"
+        UI["Frontend HMI UI\nPython / CustomTkinter"]
+        MQTT["MQTT Broker\nMosquitto"]
+        RC["Robot Controller\nIndyDCP socket owner"]
+        DBW["DB Worker"]
+        DT["Digital Twin"]
+        PLCB["PLC Bridge\nread/monitor"]
+        MYSQL[("MySQL\nfaictory_mes")]
+    end
+
+    subgraph "Robots"
+        RA["Robot A"]
+        RB["Robot B"]
+        RCROB["Robot C"]
+    end
+
+    subgraph "PLC / Vision"
+        PLC["PLC master"]
+        VA["Vision A PC"]
+        VB["Vision B PC"]
+        VC["Vision C PC"]
+    end
+
+    UI -->|"robot/command"| MQTT
+    MQTT --> RC
+    RC -->|"IndyDCP TCP socket"| RA
+    RC -->|"IndyDCP TCP socket"| RB
+    RC -->|"IndyDCP TCP socket"| RCROB
+    RC -->|"robot/realtime, robot/result, robot/connection"| MQTT
+    MQTT --> UI
+    MQTT --> DBW
+    MQTT --> DT
+    DBW --> MYSQL
+    PLCB -->|"plc/event topics"| MQTT
+    PLC -->|"X11/X12/X145/M1150..."| PLCB
+    VA --> PLC
+    VB --> PLC
+    VC --> PLC
+    PLC -->|"Y160 physical wire"| RA
+    PLC -->|"Y160 physical wire"| RB
+    PLC -->|"Y160 physical wire"| RCROB
+```
+
+운영 원칙:
+
+- UI 화면은 Docker 안에서 뜨지 않습니다. UI는 Python으로 실행합니다.
+- Docker는 MQTT, Robot Controller, DB Worker, Digital Twin, PLC Bridge 같은 백그라운드 서비스를 실행합니다.
+- 운영 모드에서는 Robot Controller가 Robot A/B/C 소켓 통신을 독점합니다.
+- DB Worker와 Digital Twin은 로봇을 직접 읽지 않고 `robot/realtime` JSON만 구독합니다.
+- PLC가 메인 공정 통제권을 가집니다. HMI/PLC Bridge는 감시와 기록 중심으로 동작합니다.
+
+### 통신 구조
+
+| 방향 | Topic / 신호 | 송신 | 수신 | 성격 |
+|---|---|---|---|---|
+| UI -> Robot Controller | `robot/command` | HMI UI | Robot Controller | 단방향 명령 요청 |
+| Robot Controller -> UI | `robot/result` | Robot Controller | HMI UI | 명령 결과 응답 |
+| Robot Controller -> UI/DB/DT | `robot/realtime` | Robot Controller | UI, DB Worker, Digital Twin | 반복 상태 스트림 |
+| Robot Controller -> UI | `robot/connection` | Robot Controller | HMI UI | 로봇별 연결 상태 |
+| Robot Controller -> UI/DB | `robot/error` | Robot Controller | UI, DB Worker | 에러/충돌/통신 실패 |
+| Page3 -> DB/로그 | `robot/virtual_test_sample` | HMI UI | DB Worker, local JSONL | Dry Run 샘플 스트림 |
+| Page3 -> DB/로그 | `robot/virtual_test_event` | HMI UI | DB Worker, local JSONL | cycle_start/cycle_done/session_done |
+| PLC Bridge -> DB/UI | `plc/event` 계열 | PLC Bridge | MQTT/DB/UI | PLC 감시 이벤트 |
+| Vision -> PLC | PLC MC Protocol / 기존 vision 코드 | Vision PC | PLC | 비전 결과 전달 |
+| PLC -> Robot | 물리 DI 배선 | PLC Y160 | Robot DI0 | 실제 공정 시작 신호 |
+
+읽기/쓰기 분리:
+
+```text
+쓰기 명령: UI -> robot/command -> Robot Controller -> Robot
+읽기 상태: Robot -> Robot Controller -> robot/realtime -> UI/DB/Digital Twin
+DB 저장: DB Worker가 MQTT JSON을 받아 MySQL에 저장
+Digital Twin: robot/realtime을 받아 3D 표시용으로 중계
+```
+
+반복 통신과 단방향 통신:
+
+- `robot/realtime`은 연결 중 계속 반복되는 상태 스트림입니다.
+- `robot/command`는 사용자가 버튼/프로그램 실행을 눌렀을 때 발생하는 단발성 명령입니다.
+- `robot/result`는 각 명령에 대한 단발성 결과입니다.
+- Page3 Dry Run Recording은 세션 실행 중 `sample_interval_ms`마다 샘플을 반복 기록합니다.
+
+### 실행 모드
+
+| 모드 | 설정 | 용도 |
+|---|---|---|
+| Offline UI | `HMI_MQTT_AUTOCONNECT=0` | Docker/로봇 없이 UI 먼저 확인 |
+| Direct | `ROBOT_CONTROL_MODE=direct` | UI가 로봇에 직접 연결, 랩 테스트용 |
+| MQTT Gateway | `ROBOT_CONTROL_MODE=mqtt` | UI가 Docker Robot Controller에 명령 위임, 현장 운영 권장 |
+| Auto | `ROBOT_CONTROL_MODE=auto` | MQTT가 있으면 gateway, 없으면 direct로 시도 |
+
+현장 기본값:
+
+```env
+ROBOT_AUTOCONNECT=0
+HMI_MQTT_AUTOCONNECT=0
+FACTORY_ORCHESTRATOR_AUTOSTART=0
+ROBOT_GATEWAY_CONNECT_TIMEOUT_SEC=8
+HMI_MQTT_CONNECT_WAIT_SEC=3
+```
+
+이 설정이면 프로그램을 켜는 것만으로 실제 로봇/PLC/MySQL에 붙지 않습니다. 작업자가 연결 버튼을 누를 때만 연결합니다.
+
+### 작업자 표준 작업 흐름
+
+```text
+1. Docker Desktop Engine running 확인
+2. deployment/windows/start_robot_controller.bat 실행
+3. UI 창 확인
+4. Page 2에서 Robot A/B/C와 JSON 파일명 확인
+5. Play(가상)로 JSON 순서, DI 조건, 위험 가이드 존 확인
+6. Page 3 Dry Run Recording에서 가상 DI와 저장 위치 설정
+7. DB 연결 확인 또는 로컬 JSONL 저장 확인
+8. 로봇 통신 연결 버튼 클릭
+9. Home / Zero 단일 명령으로 로봇별 연결 확인
+10. 낮은 속도와 짧은 Loop로 실제 동작 확인
+11. 완료 카운트와 실제 동작 횟수 일치 확인
+12. 정상일 때 실제 공정 반복 횟수로 확대
+```
+
+### 데이터 저장 구조
+
+MySQL 기본 DB:
+
+```text
+host: 192.168.3.141
+port: 3306
+user: guest
+password: guest1234
+db: faictory_mes
+```
+
+주요 테이블:
+
+| 테이블 | 내용 |
+|---|---|
+| `robot_realtime_status` | 로봇별 최신 관절/좌표/토크/상태 |
+| `robot_task_history` | 실제 작업 완료 이력 |
+| `robot_virtual_test_sessions` | Page3 Dry Run Recording 세션 |
+| `robot_virtual_test_samples` | Page3 q/p/torque/busy 샘플 |
+| `robot_virtual_test_events` | Page3 cycle_start/cycle_done/session_done 이벤트 |
+| PLC 이벤트 테이블 | PLC 시작/정지/완료/공정 종료 감시 기록 |
+
+로컬 저장:
+
+```text
+frontend/logs/robot_diagnostic_data/
+└─ RD_Robot_A_YYYYMMDD_HHMMSS/
+   ├─ metadata.json
+   ├─ samples.jsonl
+   ├─ events.jsonl
+   └─ finish.json
+```
+
+### JSON 이식 기준
+
+이 프로그램은 APK/Conty JSON을 기준으로 읽기, 편집, 가상 실행, 실제 실행, 저장을 수행합니다.
+
+필수 확인:
+
+- 좌표 `p`는 meter 단위입니다. UI 표시는 mm일 수 있습니다.
+- TCP `[0,0,0.21,0,0,0]`는 Z 210mm입니다.
+- `wpList` id와 `moveList.wpList[].id` 참조가 깨지면 안 됩니다.
+- `program`의 `id/pId` 트리 구조가 유지되어야 합니다.
+- `Loop`, `If DI`, `If Var`, `Variables`, `Var Assignment`는 카운트/분기 동작의 핵심입니다.
+- 모르는 제조사 전용 노드는 삭제하지 않고 원본 JSON을 보존해야 합니다.
+
+관련 상세 문서:
+
+- [Json Robot Design Pattern.md](./Json%20Robot%20Design%20Pattern.md)
+- [docs/conty_json_compatibility_spec.md](./docs/conty_json_compatibility_spec.md)
+- [docs/conty_node_reference.md](./docs/conty_node_reference.md)
+
+### 최종 배포 전 점검 명령
+
+```bash
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean
+python3 -m py_compile $(rg --files frontend backend/robot_controller/src backend/db_worker/src backend/plc_bridge/src backend/digital_twin/src -g '*.py')
+
+cd /Users/leejaeheung/Documents/Busan_Project/Indy7_HMI_Clean/backend
+docker compose config
+```
+
+작업자 PC에서 확인:
+
+```powershell
+cd C:\Busan_Project\Indy7_HMI_Clean
+git pull origin main
+deployment\windows\start_robot_controller.bat
+```
+
+---
+
 ## ✅ 왕초보 실행 가이드: 이것만 그대로 따라 하세요
 
 아래 명령어는 **Mac 기준**입니다. Windows에서 실행할 때도 원리는 같고, `cd` 경로만 본인 PC 경로에 맞추면 됩니다.
@@ -61,7 +323,6 @@ source .venv/bin/activate
 
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-pip install -r frontend/requirements.txt
 ```
 
 다음에 다시 실행할 때는 가상환경만 켜면 됩니다.
@@ -994,6 +1255,12 @@ Vision YOLO까지 사용할 때만 추가 설치:
 python3 -m pip install -r backend/vision_yolo/requirements.txt
 ```
 
+화면 캡처/디버그 보조 스크립트를 실행할 때만 추가 설치:
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+```
+
 주요 requirements 파일:
 
 | 파일 | 용도 |
@@ -1002,6 +1269,7 @@ python3 -m pip install -r backend/vision_yolo/requirements.txt
 | `frontend/requirements.txt` | CustomTkinter UI, 3D 그래프, MySQL, MQTT 클라이언트, Google AI Studio/Gemini, 마이크 녹음 |
 | `backend/db_worker/requirements.txt` | MQTT 수신 및 MySQL 저장 |
 | `backend/vision_yolo/requirements.txt` | OpenCV, ultralytics, torch 등 무거운 비전 패키지 |
+| `requirements-dev.txt` | 선택 설치. UI 화면 캡처/디버그 보조 도구인 `tkcap`을 포함합니다. |
 
 설치 확인:
 
