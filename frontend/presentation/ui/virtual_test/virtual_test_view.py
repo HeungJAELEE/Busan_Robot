@@ -537,13 +537,7 @@ class VirtualTestView:
         self.session_samples = {}
         self.local_recording_enabled = True
         self.db_recording_enabled = True
-        self.robot_names = ["Robot A", "Robot B", "Robot C"]
-        self.active_virtual_di_robot = tk.StringVar(value=self.robot_names[0])
-        self.robot_virtual_di_vars = {
-            robot: {idx: tk.IntVar(value=0) for idx in range(32)}
-            for robot in self.robot_names
-        }
-        self.virtual_di_vars = self.robot_virtual_di_vars[self.robot_names[0]]
+        self.virtual_di_vars = {idx: tk.IntVar(value=0) for idx in range(32)}
         self.virtual_di_buttons = {}
 
         self._build_ui()
@@ -579,21 +573,6 @@ class VirtualTestView:
                       command=self._apply_wait_di_from_programs,
                       **Theme.get_button_style("primary")).pack(side="right", padx=2)
 
-        di_target = ctk.CTkFrame(di_box, fg_color="transparent")
-        di_target.pack(fill="x", padx=10, pady=(0, 6))
-        ctk.CTkLabel(di_target, text="DI 적용 로봇", font=Theme.font(size=11, weight="bold"),
-                     text_color=Theme.TEXT_SECONDARY).pack(side="left")
-        self.di_robot_selector = ctk.CTkOptionMenu(
-            di_target,
-            values=self.robot_names,
-            variable=self.active_virtual_di_robot,
-            command=self._select_virtual_di_robot,
-            width=112,
-        )
-        self.di_robot_selector.pack(side="left", padx=(8, 6))
-        ctk.CTkLabel(di_target, text="선택값은 로봇별로 따로 저장됨", font=Theme.font(size=10),
-                     text_color=Theme.TEXT_SECONDARY).pack(side="left")
-
         grid = ctk.CTkFrame(di_box, fg_color="transparent")
         grid.pack(fill="x", padx=8, pady=(0, 10))
         for idx in range(32):
@@ -614,7 +593,7 @@ class VirtualTestView:
         robot_box = ctk.CTkFrame(left, fg_color="transparent")
         robot_box.pack(fill="x", padx=12, pady=8)
 
-        for robot in self.robot_names:
+        for robot in ["Robot A", "Robot B", "Robot C"]:
             row = ctk.CTkFrame(robot_box, fg_color=Theme.BG_PANEL, corner_radius=8, border_width=1, border_color=Theme.BORDER)
             row.pack(fill="x", pady=5)
             ctk.CTkLabel(row, text=robot, width=72, anchor="w", font=Theme.font(size=13, weight="bold")).pack(side="left", padx=(10, 4), pady=9)
@@ -626,13 +605,6 @@ class VirtualTestView:
                           **Theme.get_button_style("danger")).pack(side="left", padx=3)
             self.status_labels[robot] = status
 
-        batch = ctk.CTkFrame(robot_box, fg_color="transparent")
-        batch.pack(fill="x", pady=(6, 2))
-        ctk.CTkButton(batch, text="전체 시작", height=30, command=self.start_all_robot_tests,
-                      **Theme.get_button_style("success")).pack(side="left", expand=True, fill="x", padx=(0, 4))
-        ctk.CTkButton(batch, text="전체 정지", height=30, command=self.stop_all_robot_tests,
-                      **Theme.get_button_style("danger")).pack(side="left", expand=True, fill="x", padx=(4, 0))
-
         center = ctk.CTkFrame(self.parent, corner_radius=12, **Theme.card_style())
         center.grid(row=0, column=1, sticky="nsew", padx=4, pady=10)
         ctk.CTkLabel(center, text="실시간 패턴 기록", font=Theme.font(size=18, weight="bold"),
@@ -642,7 +614,7 @@ class VirtualTestView:
                                           font=Theme.font(size=12), text_color=Theme.TEXT_SECONDARY)
         self.session_label.pack(fill="x", padx=16, pady=(0, 8))
 
-        for robot in self.robot_names:
+        for robot in ["Robot A", "Robot B", "Robot C"]:
             card = ctk.CTkFrame(center, fg_color=Theme.BG_PANEL, corner_radius=8, border_width=1, border_color=Theme.BORDER)
             card.pack(fill="x", padx=16, pady=7)
             top = ctk.CTkFrame(card, fg_color="transparent")
@@ -779,28 +751,18 @@ class VirtualTestView:
         except (TypeError, ValueError):
             return 100
 
-    def _virtual_di_vars_for_robot(self, robot=None):
-        robot = robot or self.active_virtual_di_robot.get() or self.robot_names[0]
-        return self.robot_virtual_di_vars.get(robot, self.robot_virtual_di_vars[self.robot_names[0]])
-
-    def _virtual_di_payload(self, robot=None):
-        vars_map = self._virtual_di_vars_for_robot(robot)
-        return {str(idx): int(var.get() or 0) for idx, var in vars_map.items()}
-
-    def _select_virtual_di_robot(self, robot):
-        self.active_virtual_di_robot.set(robot)
-        self.virtual_di_vars = self._virtual_di_vars_for_robot(robot)
-        self._refresh_all_virtual_di_buttons()
+    def _virtual_di_payload(self):
+        return {str(idx): int(var.get() or 0) for idx, var in self.virtual_di_vars.items()}
 
     def _toggle_virtual_di(self, idx):
-        var = self._virtual_di_vars_for_robot()[idx]
+        var = self.virtual_di_vars[idx]
         var.set(0 if int(var.get() or 0) else 1)
         self._refresh_virtual_di_button(idx)
 
     def _set_all_virtual_di(self, value):
-        for idx, var in self._virtual_di_vars_for_robot().items():
+        for idx, var in self.virtual_di_vars.items():
             var.set(1 if value else 0)
-        self._refresh_all_virtual_di_buttons()
+            self._refresh_virtual_di_button(idx)
 
     def _frontend_root(self):
         return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -851,30 +813,28 @@ class VirtualTestView:
         return required
 
     def _apply_wait_di_from_programs(self):
+        for idx, var in self.virtual_di_vars.items():
+            var.set(0)
+        required = {}
         sources = []
-        for robot in self.robot_names:
-            vars_map = self._virtual_di_vars_for_robot(robot)
-            for var in vars_map.values():
-                var.set(0)
+        for robot in ["Robot A", "Robot B", "Robot C"]:
             path = self._program_path_for_robot(robot)
             robot_required = self._collect_wait_di_from_program(path)
             if robot_required:
                 sources.append(f"{robot}:{','.join(f'DI{k:02d}' for k in sorted(robot_required))}")
-            for idx, value in robot_required.items():
-                vars_map[idx].set(value)
-        self._refresh_all_virtual_di_buttons()
+            required.update(robot_required)
+        for idx, value in required.items():
+            self.virtual_di_vars[idx].set(value)
+        for idx in self.virtual_di_vars:
+            self._refresh_virtual_di_button(idx)
         msg = ", ".join(sources) if sources else "대기 DI 없음"
         print(f">> [Dry Run Recording] 대기 DI 프리셋 적용: {msg}")
-
-    def _refresh_all_virtual_di_buttons(self):
-        for idx in range(32):
-            self._refresh_virtual_di_button(idx)
 
     def _refresh_virtual_di_button(self, idx):
         btn = self.virtual_di_buttons.get(idx)
         if not btn:
             return
-        is_on = bool(self._virtual_di_vars_for_robot()[idx].get())
+        is_on = bool(self.virtual_di_vars[idx].get())
         btn.configure(
             text=f"DI{idx:02d}",
             fg_color=Theme.SUCCESS if is_on else "#555555",
@@ -911,14 +871,8 @@ class VirtualTestView:
             "sample_interval_ms": interval_ms,
             "program_path": program_path,
             "dry_run": True,
-            # Page 3 Dry Run means: run the full robot program on the real
-            # robot, but evaluate DI/DO from the selected virtual I/O state.
-            # The target count should override infinite/recipe loop counts
-            # for analysis runs.
-            "loop_count_override": target_cycles,
-            "dry_run_wrap_color_vars": True,
             "virtual_di_mode": "manual",
-            "virtual_di": self._virtual_di_payload(robot),
+            "virtual_di": self._virtual_di_payload(),
             "status": "running",
             "note": "Page3 Dry Run Recording",
         }
@@ -943,15 +897,6 @@ class VirtualTestView:
 
         print(f">> [Dry Run Recording] {robot} Dry Run 시작: {target_cycles}회, {interval_ms}ms")
         runner.run_program_for_robot(robot, dry_run=True, virtual_test=payload)
-
-    def start_all_robot_tests(self):
-        """Start Robot A/B/C dry-run recordings independently and nearly simultaneously."""
-        for robot in self.robot_names:
-            self.start_robot_test(robot)
-
-    def stop_all_robot_tests(self):
-        for robot in self.robot_names:
-            self.stop_robot_test(robot)
 
     def stop_robot_test(self, robot):
         print(f">> [Dry Run Recording] {robot} 정지 요청")
