@@ -814,30 +814,48 @@ class ProgramTreeEditor:
                         print(f">> [TCP] JSON TCP 자동 로드: {self.current_program_tcp}")
                     self.all_pallets = getattr(program, 'pallets', [])
                     node_map = {0: main_node}
-                    # Some APK exports attach an Elif node to the last motion
-                    # node of the preceding If branch instead of to the If
-                    # chain parent. Normalize that only for the HMI execution
-                    # tree so If/Elif branches are evaluated as one chain.
+                    # APK JSON can store sequential nodes under the previous motion node
+                    # even though the pendant displays them as siblings in the same block.
+                    # Normalize only the HMI/execution tree parent so Pick/FrameMove/Place/
+                    # SmartDO/Home keep the same order and indentation as the pendant.
+                    raw_nodes = list(getattr(program, "nodes", []))
                     normalized_pid = {}
-                    last_var_chain_parent = None
+                    effective_parent_by_id = {0: 0}
                     node_type_by_id = {
                         getattr(n, "id", 0): getattr(n, "type", None)
-                        for n in getattr(program, "nodes", [])
+                        for n in raw_nodes
                     }
-                    for n in getattr(program, "nodes", []):
+                    control_parent_types = (20, 24, 25, 26, 29, 30, 999)
+                    last_var_chain_parent = None
+                    last_di_chain_parent = None
+                    for n in raw_nodes:
+                        nid = getattr(n, "id", 0)
                         nt = getattr(n, "type", None)
-                        npid = getattr(n, "pId", 0)
-                        if nt == 24:
-                            last_var_chain_parent = npid
+                        raw_pid = getattr(n, "pId", 0)
+                        parent_type = node_type_by_id.get(raw_pid)
+                        parent_pid = raw_pid
+
+                        if parent_type is not None and parent_type not in control_parent_types:
+                            parent_pid = effective_parent_by_id.get(raw_pid, 0)
+
+                        if nt == 29:
+                            if last_di_chain_parent is not None and parent_type not in control_parent_types:
+                                parent_pid = last_di_chain_parent
+                            last_di_chain_parent = parent_pid
+                            last_var_chain_parent = None
+                        elif nt == 30:
+                            if last_di_chain_parent is not None:
+                                parent_pid = last_di_chain_parent
+                            last_var_chain_parent = None
+                        elif nt == 24:
+                            last_var_chain_parent = parent_pid
                         elif nt in (25, 26):
-                            parent_type = node_type_by_id.get(npid)
-                            if (
-                                last_var_chain_parent is not None
-                                and parent_type not in (20, 24, 25, 26, 29, 30, 999)
-                            ):
-                                normalized_pid[getattr(n, "id", 0)] = last_var_chain_parent
-                            else:
-                                last_var_chain_parent = npid
+                            if last_var_chain_parent is not None:
+                                parent_pid = last_var_chain_parent
+
+                        if parent_pid != raw_pid:
+                            normalized_pid[nid] = parent_pid
+                        effective_parent_by_id[nid] = parent_pid
 
                     if hasattr(program, 'nodes'):
                         for node in program.nodes:
@@ -970,7 +988,7 @@ class ProgramTreeEditor:
                                     conds = ", ".join(f"DI{d['idx']}={'ON' if d.get('value',1) else 'OFF'}" for d in di_list)
                                     node_str = f" If ({conds})"
                                 else:
-                                    node_str = " If (DI)"
+                                    node_str = " If (DI 기본)"
                             elif t == 30:  # Else (DI)
                                 di_list = getattr(node, "diList", getattr(node, "__raw__", {}).get("diList", []))
                                 if di_list:
@@ -2044,11 +2062,6 @@ class ProgramTreeEditor:
             virtual_sample_interval_ms = int(virtual_cfg.get("sample_interval_ms", 100))
         except (TypeError, ValueError):
             virtual_sample_interval_ms = 100
-        try:
-            dry_loop_override = int(virtual_cfg.get("loop_count_override", 0) or 0)
-        except (TypeError, ValueError):
-            dry_loop_override = 0
-        dry_wrap_color_vars = bool(virtual_cfg.get("dry_run_wrap_color_vars", False))
         if dry_run:
             print(">> [DRY RUN] DI 대기와 DO/툴 출력을 실제 I/O 없이 검증합니다.")
         if is_virtual_test:
@@ -2076,6 +2089,8 @@ class ProgramTreeEditor:
             on_pins = [f"DI{idx:02d}" for idx, val in sorted(virtual_di_map.items()) if val]
             print(f">> [DRY RUN] 가상 DI 수동 입력 사용: ON={', '.join(on_pins) if on_pins else '없음'}")
         loop_context = {"depth": 0}
+        di_latch_until = {}
+        DI_LATCH_HOLD_SEC = 0.8
 
         class _LoopBreakException(Exception):
             """loopBreak (type=21) 실행 시 가장 가까운 Loop를 탈출하기 위한 예외"""
@@ -2153,15 +2168,14 @@ class ProgramTreeEditor:
                 return
             RobotControlUseCase.set_do(idx, val, exec_robot)
 
-        def _di_condition_met(di_list, label="DI", dry_bypass=False):
+        def _clear_di_latch():
+            di_latch_until.clear()
+
+        def _di_condition_met(di_list, label="DI"):
             if not di_list:
                 return False
-            pins = ", ".join(f"DI{d.get('idx', 0)}={'HI' if d.get('value', 1) else 'LO'}" for d in di_list)
             if dry_run:
-                if dry_bypass:
-                    print(f">>   [DRY RUN] {label} 대기 조건 통과 처리: {pins}")
-                    _dry_event("di_bypass", label, {"diList": di_list})
-                    return True
+                pins = ", ".join(f"DI{d.get('idx', 0)}={'HI' if d.get('value', 1) else 'LO'}" for d in di_list)
                 if virtual_di_manual:
                     actuals = []
                     all_met = True
@@ -2179,15 +2193,34 @@ class ProgramTreeEditor:
                     print(f">>   [DRY RUN] {label} 가상 입력 확인: {state_msg} / 요구={pins} → {'TRUE' if all_met else 'FALSE'}")
                     _dry_event("di_manual_eval", label, {"diList": di_list, "actuals": actuals, "result": all_met})
                     return all_met
+                print(f">>   [DRY RUN] {label} 조건 통과 처리: {pins}")
+                _dry_event("di_bypass", label, {"diList": di_list})
+                return True
             current_di = RobotControlUseCase.get_di(exec_robot)
             if not current_di:
-                if dry_run:
-                    print(f">>   [DRY RUN] {label} 입력 미확인: {pins} → FALSE")
                 return False
+            now = time.time()
+            for idx, val in enumerate(current_di[:32]):
+                try:
+                    if int(val):
+                        di_latch_until[idx] = now + DI_LATCH_HOLD_SEC
+                except (TypeError, ValueError):
+                    pass
             for cond in di_list:
-                idx = cond.get("idx", 0)
-                expected = cond.get("value", 1)
-                if idx >= len(current_di) or current_di[idx] != expected:
+                try:
+                    idx = int(cond.get("idx", 0) or 0)
+                    expected = 1 if int(cond.get("value", 1) or 0) else 0
+                except (TypeError, ValueError):
+                    return False
+                live = 0
+                if 0 <= idx < len(current_di):
+                    try:
+                        live = 1 if int(current_di[idx]) else 0
+                    except (TypeError, ValueError):
+                        live = 0
+                latched = 1 if di_latch_until.get(idx, 0) >= now else 0
+                actual = 1 if live or latched else 0
+                if actual != expected:
                     return False
             return True
 
@@ -2203,6 +2236,7 @@ class ProgramTreeEditor:
                             payload["joint_pos"] = payload["q"]
                 except Exception:
                     pass
+            payload["pc_speed_scale"] = float(getattr(self, "pc_execution_speed_scale", 1.0) or 1.0)
             payload["completed_at"] = datetime.datetime.now().isoformat(timespec="milliseconds")
             payload["dry_run"] = dry_run
             payload["virtual_session_id"] = virtual_session_id
@@ -2443,8 +2477,6 @@ class ProgramTreeEditor:
                 except Exception as e:
                     print(f">> [변수 경고] {name}={raw_value} 계산 실패: {e}")
                     value = _get_variable_or_number(raw_value)
-                if dry_run and dry_wrap_color_vars and name in ("Red", "Blue", "Green"):
-                    value = value % 2
                 RobotControlUseCase.set_variable(name, value, exec_robot)
                 print(f">> [{label}] {name} = {value:g}")
 
@@ -2608,7 +2640,7 @@ class ProgramTreeEditor:
                 if not di_list:
                     if default_branch is None:
                         default_branch = branch
-                    print(f">>   🔀 {label} ({_di_condition_text(di_list)}) → DEFAULT 후보")
+                    print(f">>   🔀 {label} (기본 분기) → 후보")
                     continue
                 result = _di_condition_met(di_list, label)
                 print(f">>   🔀 {label} ({_di_condition_text(di_list)}) → {'TRUE' if result else 'FALSE'}")
@@ -2618,8 +2650,8 @@ class ProgramTreeEditor:
                     break
             else:
                 if default_branch is not None:
-                    print(f">>   🔀 If DI 기본 분기 실행")
                     _highlight(default_branch["id"])
+                    print(">>   🔀 If DI 기본 분기 실행")
                     _execute_node_list(default_branch["children"])
             return len(chain)
 
@@ -2689,28 +2721,21 @@ class ProgramTreeEditor:
                         count = None
                     if count is not None and count <= 0:
                         count = None  # 비정상값(0/음수)도 무한으로 안전 해석
-                    if dry_run and dry_loop_override > 0:
-                        count = dry_loop_override
 
                     # 자식 중 팔레트 Pick/Place가 있으면 Loop iter ↔ 팔레트 슬롯 1:1 매핑한다.
                     # 사용자 의도: Loop=9회 + 9-slot 팔레트 → 1번 슬롯, 2번 슬롯, ... 순서대로 진행.
-                    def _scan_pallet_size(children):
-                        max_size = 0
-                        for child in children:
-                            cdata = child["data"]
-                            craw = cdata.get("__raw__", {})
-                            if craw.get("type") in (201, 202):
-                                cpd = cdata.get("p_data")
-                                if cpd and isinstance(cpd, dict):
-                                    csz = cpd.get("size", [1, 1])
-                                    m_ = csz[0] if len(csz) > 0 else 1
-                                    n_ = csz[1] if len(csz) > 1 else 1
-                                    l_ = csz[2] if len(csz) > 2 else 1
-                                    max_size = max(max_size, m_ * n_ * l_)
-                            max_size = max(max_size, _scan_pallet_size(child.get("children", [])))
-                        return max_size
-
-                    pallet_size = _scan_pallet_size(node["children"])
+                    pallet_size = 0
+                    for child in node["children"]:
+                        cdata = child["data"]
+                        craw = cdata.get("__raw__", {})
+                        if craw.get("type") in (201, 202):
+                            cpd = cdata.get("p_data")
+                            if cpd and isinstance(cpd, dict):
+                                csz = cpd.get("size", [1, 1])
+                                m_ = csz[0] if len(csz) > 0 else 1
+                                n_ = csz[1] if len(csz) > 1 else 1
+                                l_ = csz[2] if len(csz) > 2 else 1
+                                pallet_size = max(pallet_size, m_ * n_ * l_)
                     if pallet_size > 0:
                         if count is None:
                             if is_virtual_test:
@@ -2727,8 +2752,6 @@ class ProgramTreeEditor:
                             print(">> 🔄 점검 수집 모드: 내부 무한 Loop를 이번 Cycle에서 1회전만 실행")
                         else:
                             effective = count  # None이면 무한
-                    if dry_run and dry_loop_override > 0:
-                        effective = dry_loop_override
 
                     iteration = 0
                     prev_slot = getattr(self, "_pallet_loop_idx", None)
@@ -2749,15 +2772,12 @@ class ProgramTreeEditor:
                                 self._pallet_loop_idx = None
                                 print(f">> 🔄 Loop #{iteration}" + (f"/{effective}" if effective else " (무한)"))
                             try:
-                                if dry_run and is_virtual_test and dry_loop_override > 0:
-                                    _notify_virtual("cycle_start", iteration, "running")
+                                _clear_di_latch()
                                 loop_context["depth"] = loop_context.get("depth", 0) + 1
                                 try:
                                     _execute_node_list(node["children"])
                                 finally:
                                     loop_context["depth"] = max(loop_context.get("depth", 1) - 1, 0)
-                                if dry_run and is_virtual_test and dry_loop_override > 0:
-                                    _notify_virtual("cycle_done", iteration, "running")
                             except _LoopBreakException:
                                 print(f">> ⏹️ Loop Break 실행 — 루프 탈출")
                                 break
@@ -2792,11 +2812,9 @@ class ProgramTreeEditor:
                     return
 
                 elif node_type in [102, 103]:  # JointMove / FrameMove
+                    _apply_node_tcp(data, raw, text, item_id)
                     _apply_motion_speed(data.get("boundary", raw.get("boundary", {})), is_joint=(node_type == 102), label=text)
                     waypoints = data.get("waypoints") or [{"q": q, "p": p}]
-                    inst = _exec_inst()
-                    if not inst:
-                        _abort_program("로봇 미연결", text, item_id, ng=True)
                     for wp in waypoints:
                         if self._exec_stop:
                             break
@@ -2805,15 +2823,13 @@ class ProgramTreeEditor:
                         if node_type == 102:
                             if wp_q and not all(v == 0.0 for v in wp_q):
                                 print(f">>   → Joint 이동: {[f'{v:.1f}' for v in wp_q]}")
-                                inst.joint_move_to(wp_q)
+                                RobotControlUseCase.move_to_joint(wp_q, exec_robot)
                                 _wait_for_move_or_ng(stage=text, item_id=item_id)
                         else:
                             if wp_p and not all(v == 0.0 for v in wp_p):
                                 print(f">>   → Task 이동: {[f'{v:.3f}' for v in wp_p]}")
-                                inst.task_move_to(wp_p)
+                                RobotControlUseCase.move_to_task(wp_p, exec_robot)
                                 _wait_for_move_or_ng(stage=text, item_id=item_id)
-                    if node["children"]:
-                        _execute_node_list(node["children"])
 
                 elif node_type in [104, 105, 106]:
                     print(f">>   ⚠️ {type_label(node_type)} 직접 실행은 아직 검증 전 — native JSON 실행 권장")
@@ -2908,7 +2924,6 @@ class ProgramTreeEditor:
                         _execute_node_list(node["children"])
 
                 elif node_type in (201, 202):  # Pick / Place
-                    from core.domains.robot.use_cases.motion_math import MotionMath
                     is_pick = (node_type == 201)   # 201=Pick(Hold), 202=Place(Release)
                     app_data = data.get("approach", raw.get("approach", {}))
                     ret_data = data.get("retract", raw.get("retract", {}))
@@ -3032,11 +3047,12 @@ class ProgramTreeEditor:
                         continue
 
                     action_label = "🫳 Pick(잡기)" if is_pick else "📦 Place(놓기)"
+                    _apply_node_tcp(data, raw, action_label, item_id)
                     _apply_motion_speed(app_data.get("boundary", target_boundary), is_joint=False, label=action_label)
 
                     if target_type == 1 and p_data and isinstance(p_data, dict):
                         # ═══ 팔레트 대상 ═══
-                        print(f">>   [TCP] {action_label}: 팔레트 좌표는 저장 좌표 기준으로 실행 (JSON TCP 재적용 안 함)")
+                        from core.domains.robot.use_cases.motion_math import MotionMath
                         size = p_data.get("size", [1,1,1])
                         m, n = size[0], size[1]
                         l_val = size[2] if len(size) > 2 else 1
@@ -3174,11 +3190,7 @@ class ProgramTreeEditor:
                                     # 3) 파트너(Place/Pick) 실행
                                     if partner_node:
                                         _highlight(partner_node["id"])
-                                        partner_uses_pallet = bool(partner_target_type == 1 and partner_p_data and isinstance(partner_p_data, dict))
-                                        if partner_uses_pallet:
-                                            print(f">>   [TCP] {partner_label}: 팔레트 좌표는 저장 좌표 기준으로 실행 (JSON TCP 재적용 안 함)")
-                                        else:
-                                            _apply_node_tcp(partner_data, partner_raw, partner_label, partner_node["id"])
+                                        _apply_node_tcp(partner_data, partner_raw, partner_label, partner_node["id"])
                                         # ★ 파트너도 팔레트이면 같은 슬롯 인덱스로 좌표를 다시 계산한다.
                                         #   (예: Pick 팔레트 1번 슬롯 ↔ Place 팔레트 1번 슬롯)
                                         if partner_p_data and isinstance(partner_p_data, dict):
@@ -3226,7 +3238,6 @@ class ProgramTreeEditor:
                                         _wait_for_move_or_ng(stage=text, item_id=item_id)
                     else:
                         # ═══ 싱글 포인트 대상 ═══
-                        _apply_node_tcp(data, raw, action_label, item_id)
                         target_p = p if p else [0.0]*6
                         app_p = _conty_offset(target_p, app_dist, app_data.get("direction", 0), "approach")
                         ret_p = _conty_offset(target_p, ret_dist, ret_data.get("direction", 1), "retract")
@@ -3369,21 +3380,21 @@ class ProgramTreeEditor:
                 _notify_virtual("session_start", 0, "running")
                 try:
                     _apply_pc_speed_limit()
-                    cycle_limit = 1 if (dry_run and dry_loop_override > 0) else (virtual_target_cycles if is_virtual_test else 1)
+                    cycle_limit = virtual_target_cycles if is_virtual_test else 1
                     cycle_index = 0
                     while not self._exec_stop:
                         if cycle_limit > 0 and cycle_index >= cycle_limit:
                             break
                         cycle_index += 1
                         self._virtual_cycle_index = cycle_index
-                        if is_virtual_test and not (dry_run and dry_loop_override > 0):
+                        if is_virtual_test:
                             print(f">> [Dry Run Recording] Cycle {cycle_index}/{cycle_limit if cycle_limit > 0 else '무한'} 시작")
                             _notify_virtual("cycle_start", cycle_index, "running")
                         _execute_node_list(all_nodes)
                         if self._exec_stop:
                             break
-                        completed_cycles = dry_loop_override if (dry_run and dry_loop_override > 0) else cycle_index
-                        if is_virtual_test and not (dry_run and dry_loop_override > 0):
+                        completed_cycles = cycle_index
+                        if is_virtual_test:
                             print(f">> [Dry Run Recording] Cycle {cycle_index} 완료")
                             _notify_virtual("cycle_done", cycle_index, "running")
                         if not is_virtual_test:
@@ -3395,7 +3406,6 @@ class ProgramTreeEditor:
                 except Exception as e:
                     print(f">> [실행 에러] {e}")
                     log_lines.append(f">> [실행 에러] {e}")
-                    self._exec_ng_reason = f"실행 에러: {e}"
                     import traceback
                     traceback.print_exc()
 

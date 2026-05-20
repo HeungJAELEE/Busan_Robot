@@ -37,23 +37,1750 @@
             "conveyorConfigInfo": {
                 "conveyorConfig": []
             },
-            "toolInfo": [],
+            "toolInfo": [
+                {
+                    "toolSensing": [
+                        {
+                            "senswait": 0,
+                            "diMap": [],
+                            "commType": 0,
+                            "name": "Hold",
+                            "maxwait": 1,
+                            "id": 0
+                        },
+                        {
+                            "senswait": 0,
+                            "diMap": [],
+                            "commType": 0,
+                            "name": "Release",
+                            "maxwait": 1,
+                            "id": 1
+                        },
+                        {
+                            "senswait": 0,
+                            "diMap": [],
+                            "commType": 0,
+                            "name": "Idle",
+                            "maxwait": 1,
+                            "id": 2
+                        }
+                    ],
+                    "appType": 1,
+                    "toolCommand": [
+                        {
+                            "postwait": 0,
+                            "commType": 0,
+                            "name": "Init",
+                            "id": 0
+                        },
+                        {
+                            "postwait": 0,
+                            "commType": 0,
+                            "name": "Reset",
+                            "id": 1
+                        },
+                        {
+                            "doMap": [
+                                {
+                                    "value": 1,
+                                    "idx": 2
+                                }
+                            ],
+                            "postwait": 0.5,
+                            "commType": 1,
+                            "name": "Hold",
+                            "id": 2
+                        },
+                        {
+                            "doMap": [
+                                {
+                                    "value": 0,
+                                    "idx": 2
+                                }
+                            ],
+                            "postwait": 0.5,
+                            "commType": 1,
+                            "name": "Release",
+                            "id": 3
+                        },
+                        {
+                            "postwait": 0,
+                            "commType": 0,
+                            "name": "Idle",
+                            "id": 4
+                        }
+                    ],
+                    "onTarget": true,
+                    "name": "pallet1",
+                    "id": 0
+                },
+                {
+                    "toolSensing": [
+                        {
+                            "senswait": 0,
+                            "diMap": [],
+                            "commType": 0,
+                            "name": "Hold",
+                            "maxwait": 1,
+                            "id": 0
+                        },
+                        {
+                            "senswait": 0,
+                            "diMap": [],
+                            "commType": 0,
+                            "name": "Release",
+                            "maxwait": 1,
+                            "id": 1
+                        },
+                        {
+                            "senswait": 0,
+                            "diMap": [],
+                            "commType": 0,
+                            "name": "Idle",
+                            "maxwait": 1,
+                            "id": 2
+                        }
+                    ],
+                    "appType": 1,
+                    "toolCommand": [
+                        {
+                            "postwait": 0,
+                            "commType": 0,
+                            "name": "Init",
+                            "id": 0
+                        },
+                        {
+                            "postwait": 0,
+                            "commType": 0,
+                            "name": "Reset",
+                            "id": 1
+                        },
+                        {
+                            "doMap": [
+                                {
+                                    "value": 1,
+                                    "idx": 2
+                                }
+                            ],
+                            "postwait": 1,
+                            "commType": 1,
+                            "name": "Hold",
+                            "id": 2
+                        },
+                        {
+                            "doMap": [
+                                {
+                                    "value": 0,
+                                    "idx": 2
+                                }
+                            ],
+                            "postwait": 1,
+                            "commType": 1,
+                            "name": "Release",
+                            "id": 3
+                        },
+                        {
+                            "postwait": 0,
+                            "commType": 0,
+                            "name": "Idle",
+                            "id": 4
+                        }
+                    ],
+                    "onTarget": true,
+                    "name": "pap",
+                    "id": 1
+                }
+            ],
             "visionInfo": {
                 "useVision": false
             },
             "collisionPolicy": {
-                "policy": 0,
+                "policy": 3,
                 "time": 2
             },
-            "palletInfo": [],
+            "palletInfo": [
+                {
+                    "palletizingOrder": 0,
+                    "points": [
+                        {
+                            "q": [
+                                -74.3245,
+                                -36.0792,
+                                -73.3599,
+                                -0.204226,
+                                -72.6425,
+                                -75.1176
+                            ],
+                            "p": [
+                                -0.024459,
+                                -0.608608,
+                                0.110117,
+                                -1.96251,
+                                -179.279,
+                                0.869955
+                            ]
+                        },
+                        {
+                            "q": [
+                                -54.6264,
+                                -42.7051,
+                                -60.7134,
+                                0.656134,
+                                -79.4353,
+                                -55.2867
+                            ],
+                            "p": [
+                                0.212826,
+                                -0.613389,
+                                0.109995,
+                                -2.71036,
+                                -178.9,
+                                0.549972
+                            ]
+                        },
+                        {
+                            "q": [
+                                -64.7817,
+                                -8.28628,
+                                -115.943,
+                                0.322247,
+                                -59.2139,
+                                -65.3911
+                            ],
+                            "p": [
+                                -0.022878,
+                                -0.386553,
+                                0.31999,
+                                -3.24195,
+                                -178.809,
+                                0.46981
+                            ]
+                        }
+                    ],
+                    "size": [
+                        2,
+                        3
+                    ],
+                    "name": "pallet1",
+                    "id": 0
+                }
+            ],
             "id": 1
         },
         {
-            "varList": [],
+            "varList": [
+                {
+                    "value": 0,
+                    "type": 1,
+                    "name": "0"
+                },
+                {
+                    "value": 1,
+                    "type": 1,
+                    "name": "1"
+                },
+                {
+                    "value": 0,
+                    "type": 1,
+                    "name": "Blue"
+                },
+                {
+                    "value": 0,
+                    "type": 1,
+                    "name": "Green"
+                },
+                {
+                    "value": 0,
+                    "type": 1,
+                    "name": "Red"
+                }
+            ],
             "enable": true,
             "type": 2,
             "pId": 0,
             "id": 2
+        },
+        {
+            "type": 20,
+            "enable": true,
+            "pId": 0,
+            "count": -1,
+            "id": 3
+        },
+        {
+            "type": 4,
+            "enable": true,
+            "pId": 3,
+            "doList": [
+                {
+                    "value": 0,
+                    "idx": 13
+                }
+            ],
+            "id": 4
+        },
+        {
+            "type": 28,
+            "enable": true,
+            "pId": 3,
+            "time": 1,
+            "diList": [
+                {
+                    "value": 1,
+                    "idx": 8
+                }
+            ],
+            "id": 5,
+            "endtoolDiList": []
+        },
+        {
+            "type": 29,
+            "enable": true,
+            "pId": 3,
+            "diList": [
+                {
+                    "value": 1,
+                    "idx": 11
+                }
+            ],
+            "id": 6,
+            "endtoolDiList": []
+        },
+        {
+            "type": 24,
+            "enable": true,
+            "pId": 6,
+            "cond": {
+                "right": {
+                    "value": "0",
+                    "type": 10
+                },
+                "left": {
+                    "value": "Red",
+                    "type": 10
+                },
+                "op": 0
+            },
+            "id": 7
+        },
+        {
+            "type": 201,
+            "enable": true,
+            "pId": 7,
+            "id": 8,
+            "toolId": 1,
+            "sensName": "",
+            "approach": {
+                "direction": 0,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "retract": {
+                "direction": 1,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "target": {
+                "type": 0,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "pallet": {},
+                "point": {
+                    "q": [
+                        -53.8903,
+                        -38.9033,
+                        -66.3332,
+                        0.084355,
+                        -75.3384,
+                        -54.0014
+                    ],
+                    "p": [
+                        0.212765,
+                        -0.60707,
+                        0.119974,
+                        -0.512967,
+                        -179.728,
+                        0.090557
+                    ]
+                },
+                "refFrame": {
+                    "type": 1,
+                    "tref": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                "tcp": [
+                    0,
+                    0,
+                    0.21,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "name": "Pick [X213 Y-607 Z120 TCP Z210]"
+        },
+        {
+            "type": 100,
+            "enable": true,
+            "pId": 8,
+            "id": 9,
+            "name": "Home"
+        },
+        {
+            "type": 202,
+            "enable": true,
+            "pId": 9,
+            "id": 10,
+            "toolId": 1,
+            "sensName": "",
+            "approach": {
+                "direction": 0,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 5,
+                    "accLevel": 5
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "retract": {
+                "direction": 1,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 5,
+                    "accLevel": 5
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "target": {
+                "type": 0,
+                "boundary": {
+                    "velLevel": 1,
+                    "accLevel": 1
+                },
+                "pallet": {},
+                "point": {
+                    "q": [
+                        8.23298,
+                        -30.6685,
+                        -78.8046,
+                        1.29388,
+                        -73.9782,
+                        10.3953
+                    ],
+                    "p": [
+                        0.551659,
+                        -0.09897,
+                        0.129382,
+                        179.422,
+                        -3.61884,
+                        177.461
+                    ]
+                },
+                "refFrame": {
+                    "type": 1,
+                    "tref": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                "tcp": [
+                    0,
+                    0,
+                    0.21,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "name": "Place [X552 Y-99 Z129 TCP Z210]"
+        },
+        {
+            "type": 100,
+            "enable": true,
+            "pId": 10,
+            "id": 11,
+            "name": "Home"
+        },
+        {
+            "type": 25,
+            "enable": true,
+            "pId": 11,
+            "cond": {
+                "right": {
+                    "value": "1",
+                    "type": 10
+                },
+                "left": {
+                    "value": "Red",
+                    "type": 10
+                },
+                "op": 0
+            },
+            "id": 12
+        },
+        {
+            "type": 201,
+            "enable": true,
+            "pId": 12,
+            "id": 13,
+            "toolId": 1,
+            "sensName": "",
+            "approach": {
+                "direction": 0,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "retract": {
+                "direction": 1,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "target": {
+                "type": 0,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "pallet": {},
+                "point": {
+                    "q": [
+                        -35.0287,
+                        -11.6862,
+                        -109.648,
+                        0.266119,
+                        -59.7418,
+                        -34.8983
+                    ],
+                    "p": [
+                        0.206305,
+                        -0.370216,
+                        0.120017,
+                        179.198,
+                        -0.752674,
+                        179.739
+                    ]
+                },
+                "refFrame": {
+                    "type": 1,
+                    "tref": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                "tcp": [
+                    0,
+                    0,
+                    0.21,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "name": "Pick [X206 Y-370 Z120 TCP Z210]"
+        },
+        {
+            "type": 100,
+            "enable": true,
+            "pId": 13,
+            "id": 14,
+            "name": "Home"
+        },
+        {
+            "type": 202,
+            "enable": true,
+            "pId": 13,
+            "id": 15,
+            "toolId": 1,
+            "sensName": "",
+            "approach": {
+                "direction": 0,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 5,
+                    "accLevel": 5
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "retract": {
+                "direction": 1,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 5,
+                    "accLevel": 5
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "target": {
+                "type": 0,
+                "boundary": {
+                    "velLevel": 1,
+                    "accLevel": 1
+                },
+                "pallet": {},
+                "point": {
+                    "q": [
+                        8.23298,
+                        -30.6685,
+                        -78.8046,
+                        1.29388,
+                        -73.9782,
+                        10.3953
+                    ],
+                    "p": [
+                        0.551659,
+                        -0.09897,
+                        0.129382,
+                        179.422,
+                        -3.6188,
+                        177.461
+                    ]
+                },
+                "refFrame": {
+                    "type": 1,
+                    "tref": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                "tcp": [
+                    0,
+                    0,
+                    0.21,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "name": "Place [X552 Y-99 Z129 TCP Z210]"
+        },
+        {
+            "type": 29,
+            "enable": true,
+            "pId": 15,
+            "diList": [
+                {
+                    "value": 1,
+                    "idx": 12
+                }
+            ],
+            "id": 16,
+            "endtoolDiList": []
+        },
+        {
+            "type": 24,
+            "enable": true,
+            "pId": 16,
+            "cond": {
+                "right": {
+                    "value": "0",
+                    "type": 10
+                },
+                "left": {
+                    "value": "Blue",
+                    "type": 10
+                },
+                "op": 0
+            },
+            "id": 17
+        },
+        {
+            "type": 201,
+            "enable": true,
+            "pId": 17,
+            "id": 18,
+            "toolId": 1,
+            "sensName": "",
+            "approach": {
+                "direction": 0,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "retract": {
+                "direction": 1,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "target": {
+                "type": 0,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "pallet": {},
+                "point": {
+                    "q": [
+                        -62.6479,
+                        -36.1089,
+                        -71.5228,
+                        -0.113616,
+                        -74.0846,
+                        -62.4248
+                    ],
+                    "p": [
+                        0.102733,
+                        -0.606331,
+                        0.120083,
+                        178.529,
+                        -0.890413,
+                        179.821
+                    ]
+                },
+                "refFrame": {
+                    "type": 1,
+                    "tref": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                "tcp": [
+                    0,
+                    0,
+                    0.21,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "name": "Pick [X103 Y-606 Z120 TCP Z210]"
+        },
+        {
+            "type": 100,
+            "enable": true,
+            "pId": 18,
+            "id": 19,
+            "name": "Home"
+        },
+        {
+            "type": 202,
+            "enable": true,
+            "pId": 19,
+            "id": 20,
+            "toolId": 1,
+            "sensName": "",
+            "approach": {
+                "direction": 0,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 5,
+                    "accLevel": 5
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "retract": {
+                "direction": 1,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 5,
+                    "accLevel": 5
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "target": {
+                "type": 0,
+                "boundary": {
+                    "velLevel": 1,
+                    "accLevel": 1
+                },
+                "pallet": {},
+                "point": {
+                    "q": [
+                        8.23298,
+                        -30.6685,
+                        -78.8046,
+                        1.29388,
+                        -73.9782,
+                        10.3953
+                    ],
+                    "p": [
+                        0.551659,
+                        -0.09897,
+                        0.129382,
+                        179.422,
+                        -3.6188,
+                        177.461
+                    ]
+                },
+                "refFrame": {
+                    "type": 1,
+                    "tref": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                "tcp": [
+                    0,
+                    0,
+                    0.21,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "name": "Place [X552 Y-99 Z129 TCP Z210]"
+        },
+        {
+            "type": 100,
+            "enable": true,
+            "pId": 20,
+            "id": 21,
+            "name": "Home"
+        },
+        {
+            "type": 3,
+            "enable": true,
+            "pId": 20,
+            "varList": [
+                {
+                    "value": "Blue+1",
+                    "type": 1,
+                    "name": "Blue"
+                }
+            ],
+            "id": 22
+        },
+        {
+            "type": 4,
+            "enable": true,
+            "pId": 20,
+            "doList": [
+                {
+                    "value": 1,
+                    "idx": 13
+                }
+            ],
+            "id": 23
+        },
+        {
+            "type": 22,
+            "enable": true,
+            "pId": 20,
+            "time": 2,
+            "id": 24
+        },
+        {
+            "type": 4,
+            "enable": true,
+            "pId": 20,
+            "doList": [
+                {
+                    "value": 0,
+                    "idx": 13
+                }
+            ],
+            "id": 25
+        },
+        {
+            "type": 25,
+            "enable": true,
+            "pId": 20,
+            "cond": {
+                "right": {
+                    "value": "1",
+                    "type": 10
+                },
+                "left": {
+                    "value": "Blue",
+                    "type": 10
+                },
+                "op": 0
+            },
+            "id": 26
+        },
+        {
+            "type": 201,
+            "enable": true,
+            "pId": 26,
+            "id": 27,
+            "toolId": 1,
+            "sensName": "",
+            "approach": {
+                "direction": 0,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "retract": {
+                "direction": 1,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "target": {
+                "type": 0,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "pallet": {},
+                "point": {
+                    "q": [
+                        -47.0975,
+                        -6.75686,
+                        -115.703,
+                        0.463493,
+                        -59.8475,
+                        -47.4381
+                    ],
+                    "p": [
+                        0.090173,
+                        -0.366482,
+                        0.120141,
+                        -1.96523,
+                        -178.727,
+                        0.121571
+                    ]
+                },
+                "refFrame": {
+                    "type": 1,
+                    "tref": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                "tcp": [
+                    0,
+                    0,
+                    0.21,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "name": "Pick [X90 Y-366 Z120 TCP Z210]"
+        },
+        {
+            "type": 100,
+            "enable": true,
+            "pId": 26,
+            "id": 28,
+            "name": "Home"
+        },
+        {
+            "type": 202,
+            "enable": true,
+            "pId": 26,
+            "id": 29,
+            "toolId": 1,
+            "sensName": "",
+            "approach": {
+                "direction": 0,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 5,
+                    "accLevel": 5
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "retract": {
+                "direction": 1,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 5,
+                    "accLevel": 5
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "target": {
+                "type": 0,
+                "boundary": {
+                    "velLevel": 1,
+                    "accLevel": 1
+                },
+                "pallet": {},
+                "point": {
+                    "q": [
+                        8.23298,
+                        -30.6685,
+                        -78.8046,
+                        1.29388,
+                        -73.9782,
+                        10.3953
+                    ],
+                    "p": [
+                        0.551659,
+                        -0.09897,
+                        0.129382,
+                        179.422,
+                        -3.6188,
+                        177.461
+                    ]
+                },
+                "refFrame": {
+                    "type": 1,
+                    "tref": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                "tcp": [
+                    0,
+                    0,
+                    0.21,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "name": "Place [X552 Y-99 Z129 TCP Z210]"
+        },
+        {
+            "type": 29,
+            "enable": true,
+            "pId": 29,
+            "diList": [
+                {
+                    "value": 1,
+                    "idx": 13
+                }
+            ],
+            "id": 30,
+            "endtoolDiList": []
+        },
+        {
+            "type": 24,
+            "enable": true,
+            "pId": 30,
+            "cond": {
+                "right": {
+                    "value": "0",
+                    "type": 10
+                },
+                "left": {
+                    "value": "Green",
+                    "type": 10
+                },
+                "op": 0
+            },
+            "id": 31
+        },
+        {
+            "type": 201,
+            "enable": true,
+            "pId": 31,
+            "id": 32,
+            "toolId": 1,
+            "sensName": "",
+            "approach": {
+                "direction": 0,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "retract": {
+                "direction": 1,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "target": {
+                "type": 0,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "pallet": {},
+                "point": {
+                    "q": [
+                        -74.1964,
+                        -33.4774,
+                        -76.4679,
+                        -0.668643,
+                        -70.4373,
+                        -73.7512
+                    ],
+                    "p": [
+                        -0.027465,
+                        -0.605407,
+                        0.119997,
+                        179.807,
+                        -0.710842,
+                        179.782
+                    ]
+                },
+                "refFrame": {
+                    "type": 1,
+                    "tref": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                "tcp": [
+                    0,
+                    0,
+                    0.21,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "name": "Pick [X-27 Y-605 Z120 TCP Z210]"
+        },
+        {
+            "type": 100,
+            "enable": true,
+            "pId": 32,
+            "id": 33,
+            "name": "Home"
+        },
+        {
+            "type": 202,
+            "enable": true,
+            "pId": 33,
+            "id": 34,
+            "toolId": 1,
+            "sensName": "",
+            "approach": {
+                "direction": 0,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 5,
+                    "accLevel": 5
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "retract": {
+                "direction": 1,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 5,
+                    "accLevel": 5
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "target": {
+                "type": 0,
+                "boundary": {
+                    "velLevel": 1,
+                    "accLevel": 1
+                },
+                "pallet": {},
+                "point": {
+                    "q": [
+                        8.23298,
+                        -30.6685,
+                        -78.8046,
+                        1.29388,
+                        -73.9782,
+                        10.3953
+                    ],
+                    "p": [
+                        0.551659,
+                        -0.09897,
+                        0.129382,
+                        179.422,
+                        -3.6188,
+                        177.461
+                    ]
+                },
+                "refFrame": {
+                    "type": 1,
+                    "tref": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                "tcp": [
+                    0,
+                    0,
+                    0.21,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "name": "Place [X552 Y-99 Z129 TCP Z210]"
+        },
+        {
+            "type": 100,
+            "enable": true,
+            "pId": 34,
+            "id": 35,
+            "name": "Home"
+        },
+        {
+            "type": 3,
+            "enable": true,
+            "pId": 34,
+            "varList": [
+                {
+                    "value": "Green+1",
+                    "type": 1,
+                    "name": "Green"
+                }
+            ],
+            "id": 36
+        },
+        {
+            "type": 4,
+            "enable": true,
+            "pId": 34,
+            "doList": [
+                {
+                    "value": 1,
+                    "idx": 13
+                }
+            ],
+            "id": 37
+        },
+        {
+            "type": 22,
+            "enable": true,
+            "pId": 34,
+            "time": 2,
+            "id": 38
+        },
+        {
+            "type": 4,
+            "enable": true,
+            "pId": 34,
+            "doList": [
+                {
+                    "value": 0,
+                    "idx": 13
+                }
+            ],
+            "id": 39
+        },
+        {
+            "type": 25,
+            "enable": true,
+            "pId": 34,
+            "cond": {
+                "right": {
+                    "value": "1",
+                    "type": 10
+                },
+                "left": {
+                    "value": "Green",
+                    "type": 10
+                },
+                "op": 0
+            },
+            "id": 40
+        },
+        {
+            "type": 201,
+            "enable": true,
+            "pId": 40,
+            "id": 41,
+            "toolId": 1,
+            "sensName": "",
+            "approach": {
+                "direction": 0,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "retract": {
+                "direction": 1,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "target": {
+                "type": 0,
+                "boundary": {
+                    "velLevel": 3,
+                    "accLevel": 3
+                },
+                "pallet": {},
+                "point": {
+                    "q": [
+                        -63.8153,
+                        -4.74727,
+                        -118.495,
+                        -0.495527,
+                        -57.4123,
+                        -63.3671
+                    ],
+                    "p": [
+                        -0.026439,
+                        -0.376098,
+                        0.119954,
+                        179.599,
+                        -0.664533,
+                        179.823
+                    ]
+                },
+                "refFrame": {
+                    "type": 1,
+                    "tref": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                "tcp": [
+                    0,
+                    0,
+                    0.21,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "name": "Pick [X-26 Y-376 Z120 TCP Z210]"
+        },
+        {
+            "type": 100,
+            "enable": true,
+            "pId": 40,
+            "id": 42,
+            "name": "Home"
+        },
+        {
+            "type": 202,
+            "enable": true,
+            "pId": 40,
+            "id": 43,
+            "toolId": 1,
+            "sensName": "",
+            "approach": {
+                "direction": 0,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 5,
+                    "accLevel": 5
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "retract": {
+                "direction": 1,
+                "distance": 0.15,
+                "boundary": {
+                    "velLevel": 5,
+                    "accLevel": 5
+                },
+                "waitTime": 0.0,
+                "waitFor": {
+                    "type": 0,
+                    "time": 0
+                }
+            },
+            "target": {
+                "type": 0,
+                "boundary": {
+                    "velLevel": 1,
+                    "accLevel": 1
+                },
+                "pallet": {},
+                "point": {
+                    "q": [
+                        8.23298,
+                        -30.6685,
+                        -78.8046,
+                        1.29388,
+                        -73.9782,
+                        10.3953
+                    ],
+                    "p": [
+                        0.551659,
+                        -0.09897,
+                        0.129382,
+                        179.422,
+                        -3.6188,
+                        177.461
+                    ]
+                },
+                "refFrame": {
+                    "type": 1,
+                    "tref": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                },
+                "tcp": [
+                    0,
+                    0,
+                    0.21,
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "name": "Place [X552 Y-99 Z129 TCP Z210]"
+        },
+        {
+            "type": 100,
+            "enable": true,
+            "pId": 40,
+            "id": 44,
+            "name": "Home"
+        },
+        {
+            "type": 3,
+            "enable": true,
+            "pId": 40,
+            "varList": [
+                {
+                    "value": "Green+1",
+                    "type": 1,
+                    "name": "Green"
+                }
+            ],
+            "id": 45
+        },
+        {
+            "type": 4,
+            "enable": true,
+            "pId": 40,
+            "doList": [
+                {
+                    "value": 1,
+                    "idx": 13
+                }
+            ],
+            "id": 46
+        },
+        {
+            "type": 22,
+            "enable": true,
+            "pId": 40,
+            "time": 2,
+            "id": 47
+        },
+        {
+            "type": 4,
+            "enable": true,
+            "pId": 47,
+            "doList": [
+                {
+                    "value": 0,
+                    "idx": 13
+                }
+            ],
+            "id": 48
+        },
+        {
+            "type": 100,
+            "enable": true,
+            "pId": 47,
+            "id": 49,
+            "name": "Home"
+        },
+        {
+            "type": 3,
+            "enable": true,
+            "pId": 47,
+            "varList": [
+                {
+                    "value": "Blue+1",
+                    "type": 1,
+                    "name": "Blue"
+                }
+            ],
+            "id": 50
+        },
+        {
+            "type": 4,
+            "enable": true,
+            "pId": 47,
+            "doList": [
+                {
+                    "value": 1,
+                    "idx": 13
+                }
+            ],
+            "id": 51
+        },
+        {
+            "type": 22,
+            "enable": true,
+            "pId": 47,
+            "time": 0,
+            "id": 52
+        },
+        {
+            "type": 4,
+            "enable": true,
+            "pId": 47,
+            "doList": [
+                {
+                    "value": 0,
+                    "idx": 13
+                }
+            ],
+            "id": 53
+        },
+        {
+            "type": 100,
+            "enable": true,
+            "pId": 47,
+            "id": 54,
+            "name": "Home"
+        },
+        {
+            "type": 3,
+            "enable": true,
+            "pId": 47,
+            "varList": [
+                {
+                    "value": "Red+1",
+                    "type": 1,
+                    "name": "Red"
+                }
+            ],
+            "id": 55
+        },
+        {
+            "type": 4,
+            "enable": true,
+            "pId": 47,
+            "doList": [
+                {
+                    "value": 1,
+                    "idx": 13
+                }
+            ],
+            "id": 56
+        },
+        {
+            "type": 22,
+            "enable": true,
+            "pId": 47,
+            "time": 2,
+            "id": 57
+        },
+        {
+            "type": 4,
+            "enable": true,
+            "pId": 47,
+            "doList": [
+                {
+                    "value": 0,
+                    "idx": 13
+                }
+            ],
+            "id": 58
+        },
+        {
+            "type": 3,
+            "enable": true,
+            "pId": 41,
+            "varList": [
+                {
+                    "value": "Red+1",
+                    "type": 1,
+                    "name": "Red"
+                }
+            ],
+            "id": 59
+        },
+        {
+            "type": 4,
+            "enable": true,
+            "pId": 41,
+            "doList": [
+                {
+                    "value": 1,
+                    "idx": 13
+                }
+            ],
+            "id": 60
+        },
+        {
+            "type": 22,
+            "enable": true,
+            "pId": 41,
+            "time": 2,
+            "id": 61
+        },
+        {
+            "type": 4,
+            "enable": true,
+            "pId": 41,
+            "doList": [
+                {
+                    "value": 0,
+                    "idx": 13
+                }
+            ],
+            "id": 62
         }
     ],
     "moveList": []
