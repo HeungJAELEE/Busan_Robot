@@ -42,6 +42,7 @@ class DatabaseRepository:
         self._plc_event_table_ready = False
         self._result_table_ready = False
         self._process_angle_table_ready = False
+        self._station_process_tables_ready = False
         self._dry_run_realtime_table_ready = False
         self._missing_db_host_warned = False
 
@@ -361,6 +362,144 @@ class DatabaseRepository:
         except Exception as exc:
             print(f">> [DB 에러] 공정 각도 테이블 준비 실패: {exc}")
 
+    @staticmethod
+    def _station_process_table(kind):
+        return {
+            "A": "a_process",
+            "B": "b_process",
+            "C": "c_process",
+        }.get(kind)
+
+    @staticmethod
+    def _station_machine_name(kind):
+        return {
+            "A": "RobotA_Indy7",
+            "B": "RobotB_Indy7",
+            "C": "RobotC_Indy7",
+        }.get(kind, "Robot_Indy7")
+
+    def _ensure_station_process_tables(self):
+        """현장 MES 공정 테이블(a_process/b_process/c_process)을 B 기준 스키마로 맞춥니다."""
+        if self._station_process_tables_ready:
+            return
+        conn = self._get_persistent_connection()
+        if not conn:
+            return
+        try:
+            with conn.cursor() as cursor:
+                for kind in ("A", "B", "C"):
+                    table = self._station_process_table(kind)
+                    machine_name = self._station_machine_name(kind)
+                    cursor.execute(
+                        f"""
+                        CREATE TABLE IF NOT EXISTS `{table}` (
+                            num INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                            product_sn VARCHAR(20) NOT NULL,
+                            machine_name VARCHAR(30) DEFAULT '{machine_name}',
+                            recorded_at DATETIME NOT NULL,
+                            tray_sn VARCHAR(10),
+                            a1 FLOAT NULL,
+                            a2 FLOAT NULL,
+                            a3 FLOAT NULL,
+                            a4 FLOAT NULL,
+                            a5 FLOAT NULL,
+                            a6 FLOAT NULL,
+                            x FLOAT NULL,
+                            y FLOAT NULL,
+                            z FLOAT NULL,
+                            rx FLOAT NULL,
+                            ry FLOAT NULL,
+                            rz FLOAT NULL,
+                            vision_result VARCHAR(5) NOT NULL,
+                            defect_type VARCHAR(30),
+                            INDEX idx_product_sn (product_sn),
+                            INDEX idx_tray_sn (tray_sn),
+                            INDEX idx_recorded_at (recorded_at)
+                        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci
+                        """
+                    )
+
+                    columns = self._columns(table)
+                    for column in ("a1", "a2", "a3", "a4", "a5", "a6", "x", "y", "z", "rx", "ry", "rz"):
+                        if column not in columns:
+                            cursor.execute(f"ALTER TABLE `{table}` ADD COLUMN `{column}` FLOAT NULL")
+                            self._columns_cache.pop(table, None)
+                            columns = self._columns(table)
+
+            self._station_process_tables_ready = True
+        except Exception as exc:
+            print(f">> [DB 에러] 현장 공정 테이블 준비 실패: {exc}")
+
+    def _product_sn(self, payload, kind):
+        payload = payload or {}
+        for key in ("product_sn", "productSn", "product_id", "productId"):
+            value = str(payload.get(key) or "").strip()
+            if value:
+                return value[:20]
+        now = self._now_kst()
+        return f"{now.strftime('%y%m%d')}-{kind}-{int(time.time() * 1000) % 1000000:06d}"[:20]
+
+    @staticmethod
+    def _tray_sn(payload):
+        payload = payload or {}
+        for key in ("tray_sn", "traySn", "tray_id", "trayId", "tray"):
+            value = str(payload.get(key) or "").strip()
+            if value:
+                return value[:10]
+        return "T-0001"
+
+    def _insert_station_process_row(self, robot_id, action_type, pos, payload):
+        """A/B/C 현장 공정 테이블에 완료 동작 기준 데이터를 저장합니다."""
+        kind = self._robot_kind(robot_id)
+        action = str(action_type or "").strip().lower()
+        if (kind, action) not in {("A", "place"), ("B", "place"), ("C", "pick")}:
+            return
+
+        table = self._station_process_table(kind)
+        if not table:
+            return
+
+        joints = self._payload_joints(payload)
+        if joints is None:
+            print(f">> [DB 경고] {robot_id} {action_type} 각도(q)가 없어 {table} 저장을 건너뜁니다.")
+            return
+        pose = self._six(pos or payload.get("pos") or payload.get("p") or payload.get("task_pos"))
+
+        self._ensure_station_process_tables()
+        conn = self._get_persistent_connection()
+        if not conn:
+            return
+
+        payload = payload or {}
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    INSERT INTO `{table}`
+                      (product_sn, machine_name, recorded_at, tray_sn,
+                       a1, a2, a3, a4, a5, a6,
+                       x, y, z, rx, ry, rz,
+                       vision_result, defect_type)
+                    VALUES
+                      (%s, %s, NOW(), %s,
+                       %s, %s, %s, %s, %s, %s,
+                       %s, %s, %s, %s, %s, %s,
+                       %s, %s)
+                    """,
+                    (
+                        self._product_sn(payload, kind),
+                        self._station_machine_name(kind),
+                        self._tray_sn(payload),
+                        *joints,
+                        *pose,
+                        str(payload.get("vision_result") or payload.get("visionResult") or "OK")[:5],
+                        payload.get("defect_type") or payload.get("defectType"),
+                    ),
+                )
+            print(f">> [DB] {table} 저장 완료: {kind} {action_type}")
+        except Exception as exc:
+            print(f">> [DB 에러] {table} 저장 실패: {exc}")
+
     def _ensure_dry_run_realtime_table(self):
         if self._dry_run_realtime_table_ready:
             return
@@ -537,6 +676,7 @@ class DatabaseRepository:
     def insert_task_completion(self, robot_id: str, action_type: str, pos: list, payload: dict = None):
         """Pick/Place 등 작업 완료 이력을 DB에 남깁니다."""
         payload = dict(payload or {})
+        self._insert_station_process_row(robot_id, action_type, pos, payload)
         self._insert_process_angle_log(robot_id, action_type, payload)
         self._ensure_operational_tables()
         cols = self._columns("robot_task_history")
