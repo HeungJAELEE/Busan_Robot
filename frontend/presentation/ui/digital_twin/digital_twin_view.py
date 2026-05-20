@@ -35,6 +35,7 @@ class DigitalTwinView:
         self.program_runner_hosts = {}
         self.program_status_labels = {}
         self.program_status_boxes = {}
+        self.program_toggle_buttons = {}
         self.executor = None
         
         self.history_x = {n: [] for n in ["Robot A", "Robot B", "Robot C"]}
@@ -94,13 +95,27 @@ class DigitalTwinView:
             status = ctk.CTkLabel(row, text="대기", width=48, font=Theme.font(size=11), text_color=Theme.TEXT_SECONDARY)
             status.pack(side="left", padx=4)
 
-            ctk.CTkButton(row, text="▶", width=32, height=26, fg_color="#2E7D32", hover_color="#388E3C",
-                          command=lambda n=name: self._run_saved_program(n)).pack(side="left", padx=2)
-            ctk.CTkButton(row, text="■", width=32, height=26, fg_color="#B71C1C", hover_color="#D32F2F",
-                          command=lambda n=name: self._stop_saved_program(n)).pack(side="left", padx=2)
+            toggle = ctk.CTkButton(
+                row,
+                text="동작",
+                width=58,
+                height=26,
+                command=lambda n=name: self._toggle_saved_program(n),
+                fg_color="#2E7D32",
+                hover_color="#388E3C",
+            )
+            toggle.pack(side="left", padx=2)
 
             self.program_status_boxes[name] = box
             self.program_status_labels[name] = status
+            self.program_toggle_buttons[name] = toggle
+
+        batch = ctk.CTkFrame(program_box, fg_color="transparent")
+        batch.pack(fill="x", padx=8, pady=(6, 10))
+        ctk.CTkButton(batch, text="3대 동시 동작", height=28, command=self._run_all_saved_programs,
+                      **Theme.get_button_style("success")).pack(side="left", expand=True, fill="x", padx=(0, 4))
+        ctk.CTkButton(batch, text="3대 동시 정지", height=28, command=self._stop_all_saved_programs,
+                      **Theme.get_button_style("danger")).pack(side="left", expand=True, fill="x", padx=(4, 0))
         
         self.right_panel = ctk.CTkFrame(self.parent, corner_radius=12, **Theme.card_style())
         self.right_panel.grid(row=0, column=2, sticky="nsew", padx=10, pady=10)
@@ -634,6 +649,21 @@ class DigitalTwinView:
         runner.run_program_for_robot(name)
         self._set_program_status(name, "실행중", "#00E676")
 
+    def _toggle_saved_program(self, name):
+        runner = self.program_runners.get(name)
+        if runner and runner.is_execution_running():
+            self._stop_saved_program(name)
+        else:
+            self._run_saved_program(name)
+
+    def _run_all_saved_programs(self):
+        for name in ["Robot A", "Robot B", "Robot C"]:
+            self._run_saved_program(name)
+
+    def _stop_all_saved_programs(self):
+        for name in ["Robot A", "Robot B", "Robot C"]:
+            self._stop_saved_program(name)
+
     def _stop_saved_program(self, name):
         print(f">> [Page 1] {name} 프로그램 정지 요청")
         RobotControlUseCase.request_stop(name)
@@ -648,10 +678,16 @@ class DigitalTwinView:
     def _set_program_status(self, name, text, color):
         label = self.program_status_labels.get(name)
         box = self.program_status_boxes.get(name)
+        button = self.program_toggle_buttons.get(name)
         if label:
             label.configure(text=text, text_color=color)
         if box:
             box.configure(fg_color=color)
+        if button:
+            if text == "실행중":
+                button.configure(text="정지", fg_color="#B71C1C", hover_color="#D32F2F")
+            else:
+                button.configure(text="동작", fg_color="#2E7D32", hover_color="#388E3C")
 
     def _poll_program_status(self):
         for name in ["Robot A", "Robot B", "Robot C"]:
