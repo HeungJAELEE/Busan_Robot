@@ -146,6 +146,12 @@ class GatewayRobotProxy:
         return self._publish("direct_teaching", {"enable": bool(mode)})
 
     def get_robot_status(self):
+        if self._publish("get_robot_status"):
+            result = self.wait_for_last_result(env_float("ROBOT_GATEWAY_QUERY_TIMEOUT_SEC", 2.0))
+            if result and result.get("ok"):
+                value = result.get("value")
+                if isinstance(value, dict):
+                    return value
         state = self.manager.get_robot_state(self.robot_name) or {}
         return state.get("status") or {}
 
@@ -162,10 +168,22 @@ class GatewayRobotProxy:
         return state.get("torque") or [0.0] * 6
 
     def get_di(self):
+        if self._publish("get_di"):
+            result = self.wait_for_last_result(env_float("ROBOT_GATEWAY_QUERY_TIMEOUT_SEC", 2.0))
+            if result and result.get("ok"):
+                value = result.get("value")
+                if isinstance(value, (list, tuple)):
+                    return list(value)
         state = self.manager.get_robot_state(self.robot_name) or {}
         return state.get("di") or []
 
     def get_do(self):
+        if self._publish("get_do"):
+            result = self.wait_for_last_result(env_float("ROBOT_GATEWAY_QUERY_TIMEOUT_SEC", 2.0))
+            if result and result.get("ok"):
+                value = result.get("value")
+                if isinstance(value, (list, tuple)):
+                    return list(value)
         state = self.manager.get_robot_state(self.robot_name) or {}
         return state.get("do") or []
 

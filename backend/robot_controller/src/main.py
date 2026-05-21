@@ -26,6 +26,9 @@ JOG_COMMANDS = {
 }
 QUERY_COMMANDS = {
     "get_default_tcp",
+    "get_robot_status",
+    "get_di",
+    "get_do",
 }
 TARGET_STATUS_KEY = {
     "go_home": "home",
@@ -393,7 +396,12 @@ class RobotHandle:
                 self.publish_result(command_id, command_type, True, "disconnected")
                 return
 
-            allow_fault = command_type in ("stop_motion", "stop_emergency", "reset_robot", "stop_current_program")
+            allow_fault = command_type in (
+                "stop_motion",
+                "stop_emergency",
+                "reset_robot",
+                "stop_current_program",
+            ) or command_type in QUERY_COMMANDS
             if not self._ensure_ready(command_id, allow_when_fault=allow_fault):
                 self.publish_result(command_id, command_type, False, "not ready")
                 return
@@ -477,6 +485,12 @@ class RobotHandle:
             return inst.set_default_tcp(args.get("tcp", [0, 0, 0, 0, 0, 0]))
         elif command_type == "get_default_tcp":
             return inst.get_default_tcp()
+        elif command_type == "get_robot_status":
+            return inst.get_robot_status()
+        elif command_type == "get_di":
+            return inst.get_di()
+        elif command_type == "get_do":
+            return inst.get_do()
         elif command_type == "reset_default_tcp":
             return inst.reset_default_tcp()
         elif command_type == "set_reference_frame":

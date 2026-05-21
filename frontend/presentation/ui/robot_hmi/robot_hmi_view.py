@@ -2198,20 +2198,25 @@ class ProgramTreeEditor:
                 return True
             current_di = RobotControlUseCase.get_di(exec_robot)
             if not current_di:
+                print(f">>   ⚠️ {label} DI 조회 실패/빈값")
                 return False
             now = time.time()
+            on_pins = []
             for idx, val in enumerate(current_di[:32]):
                 try:
                     if int(val):
                         di_latch_until[idx] = now + DI_LATCH_HOLD_SEC
+                        on_pins.append(idx)
                 except (TypeError, ValueError):
                     pass
+            required_pins = []
             for cond in di_list:
                 try:
                     idx = int(cond.get("idx", 0) or 0)
                     expected = 1 if int(cond.get("value", 1) or 0) else 0
                 except (TypeError, ValueError):
                     return False
+                required_pins.append(f"DI{idx:02d}={'ON' if expected else 'OFF'}")
                 live = 0
                 if 0 <= idx < len(current_di):
                     try:
@@ -2221,7 +2226,11 @@ class ProgramTreeEditor:
                 latched = 1 if di_latch_until.get(idx, 0) >= now else 0
                 actual = 1 if live or latched else 0
                 if actual != expected:
+                    print(
+                        f">>   🔎 {label} 현재 ON={on_pins} / 요구={', '.join(required_pins)} → FALSE"
+                    )
                     return False
+            print(f">>   🔎 {label} 현재 ON={on_pins} / 요구={', '.join(required_pins)} → TRUE")
             return True
 
         def _publish_task_done(payload):
@@ -2415,6 +2424,12 @@ class ProgramTreeEditor:
                 return float(value)
             except (TypeError, ValueError):
                 return default
+
+        def _is_pallet_target(target_type):
+            try:
+                return int(target_type or 0) == 1
+            except (TypeError, ValueError):
+                return False
 
         def _get_variable_or_number(token):
             name = str(token)
@@ -3047,7 +3062,8 @@ class ProgramTreeEditor:
                         continue
 
                     action_label = "🫳 Pick(잡기)" if is_pick else "📦 Place(놓기)"
-                    _apply_node_tcp(data, raw, action_label, item_id)
+                    if not _is_pallet_target(target_type):
+                        _apply_node_tcp(data, raw, action_label, item_id)
                     _apply_motion_speed(app_data.get("boundary", target_boundary), is_joint=False, label=action_label)
 
                     if target_type == 1 and p_data and isinstance(p_data, dict):
@@ -3190,7 +3206,8 @@ class ProgramTreeEditor:
                                     # 3) 파트너(Place/Pick) 실행
                                     if partner_node:
                                         _highlight(partner_node["id"])
-                                        _apply_node_tcp(partner_data, partner_raw, partner_label, partner_node["id"])
+                                        if not _is_pallet_target(partner_target_type):
+                                            _apply_node_tcp(partner_data, partner_raw, partner_label, partner_node["id"])
                                         # ★ 파트너도 팔레트이면 같은 슬롯 인덱스로 좌표를 다시 계산한다.
                                         #   (예: Pick 팔레트 1번 슬롯 ↔ Place 팔레트 1번 슬롯)
                                         if partner_p_data and isinstance(partner_p_data, dict):
